@@ -4,6 +4,7 @@ import { evaluateSource } from "../editor/evaluate-source";
 import { renderGraphChangeJournal } from "../editor/graph-change-journal";
 import { GraphEditHistory, formatGraphChangeValue } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
+import { graphNodeIdentityKeyForNode, sourceLinkForGraphNodeIdentityKey } from "../editor/graph-source-identity";
 import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";
 import {
@@ -69,6 +70,8 @@ export interface GraphRuntimeVerification {
     savedLayout: string;
     draftLayout: string;
     legacyLayout: string;
+    shiftedIdentityRestored: string;
+    shiftedLegacyRestored: string;
     draftCleared: boolean;
   };
   errors: string[];
@@ -545,14 +548,14 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
 
 function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["workspaceStorage"] {
   const storage = new MemoryStorage();
-  const normalizedHiddenKeys = ["box:call:20:26", "sphere:call:6:15"];
+  const normalizedHiddenKeys = ["box:0", "sphere:0"];
   const preview: SavedSourcePreview = {
     bounds: [[-1, -1, -1], [1, 1, 1]],
     meshGrid: 128,
     raySteps: 192,
     meshAlgorithm: "surface-net",
     layout: "quad",
-    hiddenNodeKeys: [" sphere:call:6:15 ", "box:call:20:26", "sphere:call:6:15", "", " "],
+    hiddenNodeKeys: [" sphere:0 ", "box:0", "sphere:0", "", " "],
   };
 
   const saved = saveSourceVersion("Visibility test", "return sphere(1)", null, preview, storage);
@@ -590,6 +593,27 @@ function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["wor
   const legacyLayout = legacy ? loadSavedSourceVersion(legacy.id, null, storage)?.version.preview?.layout ?? "" : "";
   if (legacyLayout !== "single") errors.push(`legacy layout normalized to ${legacyLayout || "nothing"}`);
 
+  const baseSource = "return union(sphere(1), box(1))";
+  const shiftedSource = "const pad = sphere(1.25)\nreturn union(sphere(1), box(1))";
+  const { sdf: baseSdf } = evaluateSource(baseSource);
+  const { sdf: shiftedSdf } = evaluateSource(shiftedSource);
+  const baseLinks = findGraphSourceLinks(baseSource, baseSdf);
+  const shiftedLinks = findGraphSourceLinks(shiftedSource, shiftedSdf);
+  const baseBox = baseLinks.find((link) => link.nodeKind === "box" && link.label === "call");
+  const shiftedBox = shiftedLinks.find((link) => link.nodeKind === "box" && link.label === "call");
+  const identityKey = baseBox ? graphNodeIdentityKeyForNode(baseLinks, baseBox.nodeId) : null;
+  const legacyKey = baseBox ? `box:call:${baseBox.start}:${baseBox.end}` : null;
+  const shiftedIdentityLink = identityKey ? sourceLinkForGraphNodeIdentityKey(shiftedLinks, identityKey) : null;
+  const shiftedLegacyLink = legacyKey ? sourceLinkForGraphNodeIdentityKey(shiftedLinks, legacyKey) : null;
+  const shiftedIdentityRestored = shiftedIdentityLink ? `${shiftedIdentityLink.nodeKind}:${shiftedIdentityLink.start}` : "";
+  const shiftedLegacyRestored = shiftedLegacyLink ? `${shiftedLegacyLink.nodeKind}:${shiftedLegacyLink.start}` : "";
+  if (!baseBox || !shiftedBox) errors.push("visibility identity fixture missing box link");
+  if (!identityKey) errors.push("visibility identity fixture could not create identity key");
+  if (shiftedIdentityLink?.nodeId !== shiftedBox?.nodeId) {
+    errors.push(`visibility identity restored ${shiftedIdentityRestored || "nothing"}`);
+  }
+  if (shiftedLegacyLink) errors.push("legacy offset visibility key unexpectedly survived shifted source");
+
   clearSourceDraft(storage);
   const draftCleared = loadSourceDraft(storage) == null;
   if (!draftCleared) errors.push("clearing source draft left saved visibility draft behind");
@@ -601,6 +625,8 @@ function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["wor
     savedLayout,
     draftLayout,
     legacyLayout,
+    shiftedIdentityRestored,
+    shiftedLegacyRestored,
     draftCleared,
   };
 }

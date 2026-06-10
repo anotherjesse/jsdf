@@ -8,7 +8,9 @@ import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./edit
 import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import {
+  graphNodeIdentityKeyForNode,
   graphNodeSourceIdentityForNode,
+  sourceLinkForGraphNodeIdentityKey,
   sourceLinkForGraphNodeIdentity,
   type GraphNodeSourceIdentity,
 } from "./editor/graph-source-identity";
@@ -1334,7 +1336,7 @@ function currentPreviewProfile(): PreviewProfile {
 function hiddenNodeKeysForCurrentGraph(): string[] {
   if (hiddenNodeIds.size === 0) return [...pendingHiddenNodeKeys].sort();
   const keys = [...hiddenNodeIds]
-    .map((nodeId) => sourceKeyForNodeId(nodeId))
+    .map((nodeId) => graphNodeIdentityKeyForNode(currentSourceLinks, nodeId))
     .filter((key): key is string => key != null);
   return [...new Set(keys)].sort();
 }
@@ -1347,22 +1349,11 @@ function hiddenNodeIdsFromKeys(
   if (keys.length === 0) return [];
   const wanted = new Set(keys);
   const ids: number[] = [];
-  for (const link of links) {
-    if (link.nodeId === sdf.node.id || link.label !== "call") continue;
-    if (wanted.has(sourceKeyForLink(link))) ids.push(link.nodeId);
+  for (const key of wanted) {
+    const link = sourceLinkForGraphNodeIdentityKey(links, key);
+    if (link && link.nodeId !== sdf.node.id) ids.push(link.nodeId);
   }
   return [...new Set(ids)];
-}
-
-function sourceKeyForNodeId(nodeId: number): string | null {
-  const link = currentSourceLinks.find((candidate) => {
-    return candidate.nodeId === nodeId && candidate.label === "call" && candidate.end > candidate.start;
-  });
-  return link ? sourceKeyForLink(link) : null;
-}
-
-function sourceKeyForLink(link: GraphSourceLink): string {
-  return `${link.nodeKind}:${link.label}:${link.start}:${link.end}`;
 }
 
 function previewSnapshot(profile: PreviewProfile): string {
