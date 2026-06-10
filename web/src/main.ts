@@ -5,6 +5,7 @@ import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
+import { sourceFromSdf } from "./editor/source-from-graph";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { type Bounds3 } from "./mesh/bounds";
@@ -249,15 +250,32 @@ function redoGraphEdit(): void {
 
 function resetGraphEdits(): void {
   if (!graphHistory.canUndo) return;
-  if (compileEditorSource({ status: "Reset graph" })) {
-    overlay.textContent = "";
+  let didReset = false;
+  while (graphHistory.canUndo) {
+    const entry = graphHistory.undo((candidate) => {
+      return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.previousValue));
+    });
+    if (!entry) break;
+    didReset = true;
+  }
+  graphHistory.clear();
+  updateGraphHistoryControls();
+  if (didReset) {
+    applyGraphMutationStatus("Reset graph");
   }
 }
 
 function applyGraphMutationStatus(message: string): void {
+  syncCodeFromGraph();
   setEditorStatus(message, "ok");
   invalidateMeshForActiveSdf();
   schedulePreview(0);
+}
+
+function syncCodeFromGraph(): void {
+  if (!activeSdf || !codeEditor) return;
+  codeEditor.setValue(sourceFromSdf(activeSdf));
+  codeEditor.setError(null);
 }
 
 function clearGraphHistory(): void {
