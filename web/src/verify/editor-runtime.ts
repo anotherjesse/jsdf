@@ -1,7 +1,7 @@
 import { apiCompletionEntriesForScope, apiReferenceForWord } from "../editor/api-reference";
 import { apiSignatureHelpAt } from "../editor/api-signature-help";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
-import { createCodeEditor, sourceLinkHoverMessage } from "../editor/code-editor";
+import { createCodeEditor, sourceLinkHoverMessage, sourceLinkStatusText } from "../editor/code-editor";
 import { loadEditorPreferences, saveEditorPreferences } from "../editor/editor-preferences";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
@@ -78,6 +78,12 @@ export interface EditorRuntimeVerification {
   sourceLinkTooltips: {
     call: string;
     number: string;
+  };
+  sourceLinkStatus: {
+    radius: string;
+    graphReveal: string;
+    hiddenAfterClear: boolean;
+    box: string;
   };
   sourceNavigation: {
     nextLink: string;
@@ -198,6 +204,12 @@ export async function runEditorRuntimeVerification(
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const sourceInlayHints = verifySourceInlayHints(fixtureSource, links, errors);
   const sourceLinkTooltips = verifySourceLinkTooltips(links, errors);
+  const sourceLinkStatus: EditorRuntimeVerification["sourceLinkStatus"] = {
+    radius: "",
+    graphReveal: "",
+    hiddenAfterClear: false,
+    box: "",
+  };
   let codeEditor: ReturnType<typeof createCodeEditor> | null = null;
   const graphInspector = new GraphInspector(graphRoot, {
     onSelect(node) {
@@ -253,6 +265,10 @@ export async function runEditorRuntimeVerification(
       errors.push("fixture has no sphere radius source link");
     } else {
       await revealAndSettle(codeEditor, radiusLink);
+      sourceLinkStatus.radius = visibleSourceLinkStatus(codeRoot);
+      if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink)) {
+        errors.push(`source link status rendered ${sourceLinkStatus.radius || "nothing"} for radius`);
+      }
       if (cursorEvents.at(-1) !== "sphere:radius") {
         errors.push(`cursor over radius emitted ${cursorEvents.at(-1) || "nothing"}`);
       }
@@ -285,6 +301,10 @@ export async function runEditorRuntimeVerification(
         }
         paramCodeButton.click();
         await nextFrame();
+        sourceLinkStatus.graphReveal = visibleSourceLinkStatus(codeRoot);
+        if (sourceLinkStatus.graphReveal !== sourceLinkStatusText(radiusLink)) {
+          errors.push(`source link status after graph reveal rendered ${sourceLinkStatus.graphReveal || "nothing"}`);
+        }
         if (graphRevealEvents.at(-1) !== "sphere:radius") {
           errors.push(`graph param reveal emitted ${graphRevealEvents.at(-1) || "nothing"}`);
         }
@@ -367,6 +387,18 @@ export async function runEditorRuntimeVerification(
       errors.push("fixture has no box call source link");
     } else {
       await revealAndSettle(codeEditor, boxCallLink);
+      sourceLinkStatus.box = visibleSourceLinkStatus(codeRoot);
+      if (sourceLinkStatus.box !== sourceLinkStatusText(boxCallLink)) {
+        errors.push(`source link status rendered ${sourceLinkStatus.box || "nothing"} for box`);
+      }
+      codeEditor.markSelectedSourceLink(null);
+      await nextFrame();
+      sourceLinkStatus.hiddenAfterClear = !codeRoot.querySelector(".source-link-status:not([hidden])");
+      if (!sourceLinkStatus.hiddenAfterClear) {
+        errors.push(`source link status stayed visible after clear as ${visibleSourceLinkStatus(codeRoot) || "nothing"}`);
+      }
+      codeEditor.markSelectedSourceLink(boxCallLink);
+      await nextFrame();
       if (cursorEvents.at(-1) !== "box:call") {
         errors.push(`cursor over box call emitted ${cursorEvents.at(-1) || "nothing"}`);
       }
@@ -407,6 +439,7 @@ export async function runEditorRuntimeVerification(
       sourceLinkHitTest,
       sourceInlayHints,
       sourceLinkTooltips,
+      sourceLinkStatus,
       sourceNavigation,
       editorPreferences,
       apiHints,
@@ -1101,6 +1134,10 @@ function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["se
 
 function formatLink(link: GraphSourceLink | null): string {
   return link ? `${link.nodeKind}:${link.label}` : "";
+}
+
+function visibleSourceLinkStatus(root: HTMLElement): string {
+  return root.querySelector<HTMLElement>(".source-link-status:not([hidden])")?.textContent?.trim() ?? "";
 }
 
 function verifySourceScrubPath(

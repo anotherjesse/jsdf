@@ -317,7 +317,12 @@ export function createCodeEditor(
   const scrubReadout = document.createElement("div");
   scrubReadout.className = "source-scrub-readout";
   scrubReadout.setAttribute("aria-hidden", "true");
-  editor.getDomNode()?.append(scrubReadout);
+  const sourceLinkStatus = document.createElement("div");
+  sourceLinkStatus.className = "source-link-status";
+  sourceLinkStatus.hidden = true;
+  sourceLinkStatus.setAttribute("aria-label", "Selected graph source link");
+  sourceLinkStatus.setAttribute("aria-live", "polite");
+  editor.getDomNode()?.append(scrubReadout, sourceLinkStatus);
 
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
@@ -483,6 +488,7 @@ export function createCodeEditor(
 
   const markSelectedSourceLink = (link: GraphSourceLink | null, options: { reveal?: boolean } = {}) => {
     selectedSourceLink = link;
+    updateSourceLinkStatus(link);
     const range = link ? rangeForSourceLink(link) : null;
     if (!range) {
       selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
@@ -640,6 +646,20 @@ export function createCodeEditor(
     onSourceLinkSelect(link, { revealGraph: options.revealGraph });
     editor.focus();
     return true;
+  };
+
+  const updateSourceLinkStatus = (link: GraphSourceLink | null) => {
+    const range = link ? rangeForSourceLink(link) : null;
+    if (!link || !range) {
+      sourceLinkStatus.hidden = true;
+      sourceLinkStatus.textContent = "";
+      sourceLinkStatus.removeAttribute("title");
+      return;
+    }
+    const isNumber = isScrubbableSourceLink(link) && readSourceLinkNumber(editor.getValue(), link) != null;
+    sourceLinkStatus.hidden = false;
+    sourceLinkStatus.textContent = sourceLinkStatusText(link);
+    sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
   };
 
   const currentSourceLinkForNavigation = (): GraphSourceLink | null => {
@@ -990,6 +1010,7 @@ export function createCodeEditor(
       const range = rangeForSourceLink(link);
       if (!range) return;
       selectedSourceLink = link;
+      updateSourceLinkStatus(link);
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{
         range,
         options: {
@@ -1121,6 +1142,10 @@ export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean)
   return isNumber
     ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak. Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens this node in Graph; Shift makes keyboard nudges finer.`
     : `Graph: ${target}. Click to select this node; Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens it in Graph.`;
+}
+
+export function sourceLinkStatusText(link: GraphSourceLink): string {
+  return `${link.nodeKind} #${link.nodeId} · ${link.label}`;
 }
 
 function formatScrubReadoutValue(value: number): string {
