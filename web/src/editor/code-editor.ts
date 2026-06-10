@@ -18,7 +18,7 @@ import {
   SDF_API_TYPO_MARKER_CODE,
   titleForSuggestionTarget,
 } from "./source-diagnostic-fixes";
-import { sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
+import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
@@ -32,8 +32,14 @@ interface MonacoEnvironment {
 
 const SOURCE_HOVER_CLEAR_GRACE_MS = 140;
 const SOURCE_HOVER_STICKY_COLUMNS = 2;
-const sourceInlayHintLinksByModel = new WeakMap<monaco.editor.ITextModel, readonly GraphSourceLink[]>();
+const SOURCE_INLAY_HINT_SELECT_COMMAND = "sdf.selectGraphSourceLink";
+const sourceInlayHintStateByUri = new Map<string, SourceInlayHintModelState>();
 const sourceInlayHintsChanged = new monaco.Emitter<void>();
+
+interface SourceInlayHintModelState {
+  links: readonly GraphSourceLink[];
+  onSelect(link: GraphSourceLink): void;
+}
 
 monaco.languages.registerCompletionItemProvider("javascript", {
   triggerCharacters: ["."],
@@ -152,7 +158,8 @@ monaco.languages.registerInlayHintsProvider("javascript", {
   displayName: "SDF graph source links",
   onDidChangeInlayHints: sourceInlayHintsChanged.event,
   provideInlayHints(model, range) {
-    const links = sourceInlayHintLinksByModel.get(model) ?? [];
+    const uri = model.uri.toString();
+    const links = sourceInlayHintStateByUri.get(uri)?.links ?? [];
     const startOffset = model.getOffsetAt({
       lineNumber: range.startLineNumber,
       column: range.startColumn,
@@ -163,7 +170,15 @@ monaco.languages.registerInlayHintsProvider("javascript", {
     });
     return {
       hints: sourceInlayHintsForOffsetRange(links, startOffset, endOffset).map((hint) => ({
-        label: hint.label,
+        label: [{
+          label: hint.label,
+          tooltip: hint.tooltip,
+          command: {
+            id: SOURCE_INLAY_HINT_SELECT_COMMAND,
+            title: `Select ${hint.tooltip} in graph`,
+            arguments: [uri, hint.key],
+          },
+        }],
         tooltip: hint.tooltip,
         position: model.getPositionAt(hint.offset),
         kind: hint.kind === "param" ? monaco.languages.InlayHintKind.Parameter : monaco.languages.InlayHintKind.Type,
@@ -172,6 +187,16 @@ monaco.languages.registerInlayHintsProvider("javascript", {
       })),
       dispose() {},
     };
+  },
+});
+
+monaco.editor.addCommand({
+  id: SOURCE_INLAY_HINT_SELECT_COMMAND,
+  run(_accessor, uri: string, key: string) {
+    const state = sourceInlayHintStateByUri.get(uri);
+    const link = state?.links.find((candidate) => sourceInlayHintKeyForLink(candidate) === key);
+    if (!link) return;
+    state?.onSelect(link);
   },
 });
 
@@ -361,6 +386,40 @@ export function createCodeEditor(
     }
   };
 
+  const selectSourceLinkFromInlayHint = (link: GraphSourceLink) => {
+    cursorLinkKey = sourceLinkKey(link);
+    markSelectedSourceLink(link);
+    onSourceLinkSelect(link);
+    editor.focus();
+  };
+
+  const updateSourceInlayHintState = (links: readonly GraphSourceLink[]) => {
+    const model = editor.getModel();
+    if (!model) return;
+    sourceInlayHintStateByUri.set(model.uri.toString(), {
+      links: [...links],
+      onSelect: selectSourceLinkFromInlayHint,
+    });
+    sourceInlayHintsChanged.fire();
+  };
+
+  const clearSourceInlayHintState = () => {
+    const model = editor.getModel();
+    if (!model) return;
+    sourceInlayHintStateByUri.set(model.uri.toString(), {
+      links: [],
+      onSelect: selectSourceLinkFromInlayHint,
+    });
+    sourceInlayHintsChanged.fire();
+  };
+
+  const deleteSourceInlayHintState = () => {
+    const model = editor.getModel();
+    if (!model) return;
+    sourceInlayHintStateByUri.delete(model.uri.toString());
+    sourceInlayHintsChanged.fire();
+  };
+
   const updateHoveredSourceDecorations = (decorations: string[], link: GraphSourceLink | null): string[] => {
     const range = link ? rangeForSourceLink(link) : null;
     if (!range) {
@@ -511,9 +570,7 @@ export function createCodeEditor(
       suppress = true;
       editor.setValue(value);
       suppress = false;
-      const model = editor.getModel();
-      if (model) sourceInlayHintLinksByModel.delete(model);
-      sourceInlayHintsChanged.fire();
+      clearSourceInlayHintState();
     },
     getValue() {
       return editor.getValue();
@@ -531,8 +588,7 @@ export function createCodeEditor(
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
-      sourceInlayHintLinksByModel.set(model, sourceLinks);
-      sourceInlayHintsChanged.fire();
+      updateSourceInlayHintState(sourceLinks);
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
       selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
       localHoveredSourceDecorations = editor.deltaDecorations(localHoveredSourceDecorations, []);
@@ -614,9 +670,7 @@ export function createCodeEditor(
       cursorSubscription.dispose();
       prettifyAction.dispose();
       leaveSubscription.dispose();
-      const model = editor.getModel();
-      if (model) sourceInlayHintLinksByModel.delete(model);
-      sourceInlayHintsChanged.fire();
+      deleteSourceInlayHintState();
       editor.dispose();
     },
   };

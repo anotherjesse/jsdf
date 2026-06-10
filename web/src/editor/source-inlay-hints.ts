@@ -1,6 +1,7 @@
 import type { GraphSourceLink } from "./clean-source-patch";
 
 export interface SourceInlayHint {
+  key: string;
   label: string;
   offset: number;
   tooltip: string;
@@ -29,6 +30,7 @@ export function sourceInlayHintsForOffsetRange(
 function sourceInlayHintForLink(link: GraphSourceLink): SourceInlayHint | null {
   if (link.label === "call") {
     return {
+      key: sourceInlayHintKeyForLink(link),
       label: `#${link.nodeId}`,
       offset: link.end,
       tooltip: `${link.nodeKind} #${link.nodeId}`,
@@ -37,11 +39,16 @@ function sourceInlayHintForLink(link: GraphSourceLink): SourceInlayHint | null {
   }
 
   return {
+    key: sourceInlayHintKeyForLink(link),
     label: readableParamLabel(link.label),
     offset: link.end,
     tooltip: `${link.nodeKind} #${link.nodeId} ${link.label}`,
     kind: "param",
   };
+}
+
+export function sourceInlayHintKeyForLink(link: GraphSourceLink): string {
+  return `${link.nodeId}:${link.label}:${link.start}:${link.end}`;
 }
 
 function readableParamLabel(label: string): string {

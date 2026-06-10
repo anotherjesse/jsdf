@@ -11,7 +11,7 @@ import {
   titleForSuggestionTarget,
 } from "../editor/source-diagnostic-fixes";
 import { sourceDiagnosticFromError } from "../editor/source-diagnostics";
-import { sourceInlayHintsForOffsetRange } from "../editor/source-inlay-hints";
+import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "../editor/source-inlay-hints";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
@@ -58,7 +58,9 @@ export interface EditorRuntimeVerification {
   sourceInlayHints: {
     count: number;
     sphereCall: string;
+    sphereCallKey: string;
     sphereRadius: string;
+    sphereRadiusKey: string;
     translateOffset: string;
   };
   apiHints: {
@@ -465,15 +467,25 @@ function verifySourceInlayHints(
   const sphereCall = hints.find((hint) => hint.tooltip.startsWith("sphere #") && hint.label.startsWith("#"));
   const sphereRadius = hints.find((hint) => hint.tooltip.includes("sphere #") && hint.label === "radius");
   const translateOffset = hints.find((hint) => hint.tooltip.includes("translate #") && hint.label === "offset.x");
+  const sphereCallLink = links.find((link) => link.nodeKind === "sphere" && link.label === "call");
+  const sphereRadiusLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
 
   if (!sphereCall) errors.push("source inlay hints missing sphere node id");
   if (!sphereRadius) errors.push("source inlay hints missing sphere radius label");
   if (!translateOffset) errors.push("source inlay hints missing translate offset axis label");
+  if (sphereCall && sphereCallLink && sphereCall.key !== sourceInlayHintKeyForLink(sphereCallLink)) {
+    errors.push("source inlay hint sphere call key does not match link");
+  }
+  if (sphereRadius && sphereRadiusLink && sphereRadius.key !== sourceInlayHintKeyForLink(sphereRadiusLink)) {
+    errors.push("source inlay hint sphere radius key does not match link");
+  }
 
   return {
     count: hints.length,
     sphereCall: sphereCall?.label ?? "",
+    sphereCallKey: sphereCall?.key ?? "",
     sphereRadius: sphereRadius?.label ?? "",
+    sphereRadiusKey: sphereRadius?.key ?? "",
     translateOffset: translateOffset?.label ?? "",
   };
 }
