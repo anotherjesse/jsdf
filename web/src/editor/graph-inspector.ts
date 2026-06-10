@@ -934,6 +934,7 @@ export class GraphInspector {
       button.type = "button";
       button.textContent = `${crumb.kind} #${crumb.id}`;
       button.title = `${crumb.kind} #${crumb.id}`;
+      this.attachSoloHover(button, path.slice(0, index + 1));
       if (crumb.id === node.id) {
         button.setAttribute("aria-current", "page");
       } else {

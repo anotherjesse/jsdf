@@ -140,6 +140,22 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       return;
     }
 
+    const currentCrumb = graphRoot.querySelector<HTMLElement>(".param-breadcrumb button[aria-current='page']");
+    if (!currentCrumb) {
+      verifyErrors.push("selected sphere has no current breadcrumb crumb");
+    } else {
+      currentCrumb.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:call") {
+        verifyErrors.push(`breadcrumb hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+      }
+      currentCrumb.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb leave did not clear source hover");
+      currentCrumb.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:call") verifyErrors.push("breadcrumb focus did not emit source hover");
+      currentCrumb.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb blur did not clear source hover");
+    }
+
     const nodeCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-code-link");
     if (!nodeCodeButton) {
       verifyErrors.push("selected node has no code icon button");
