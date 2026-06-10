@@ -95,6 +95,7 @@ type PreviewProfile = SavedSourcePreview;
 const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
 const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
+const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -195,7 +196,7 @@ documentNameInput.addEventListener("input", updateSaveState);
 loadSourceButton.addEventListener("click", openSourceDialog);
 saveSourceButton.addEventListener("click", saveCurrentSource);
 prettifySourceButton.addEventListener("click", prettifyCurrentSource);
-sourceHintsButton.addEventListener("click", () => setGraphHintsEnabled(!graphHintsEnabled));
+sourceHintsButton.addEventListener("click", toggleGraphHints);
 closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
 sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
@@ -273,9 +274,15 @@ function setGraphHintsEnabled(enabled: boolean): void {
   saveEditorPreferences({ graphHintsEnabled });
 }
 
+function toggleGraphHints(): void {
+  setGraphHintsEnabled(!graphHintsEnabled);
+  setEditorStatus(graphHintsEnabled ? "Graph hints shown" : "Graph hints hidden", "idle");
+}
+
 function updateSourceHintsButton(): void {
   sourceHintsButton.setAttribute("aria-pressed", String(graphHintsEnabled));
-  sourceHintsButton.title = graphHintsEnabled ? "Hide graph hints" : "Show graph hints";
+  sourceHintsButton.setAttribute("aria-keyshortcuts", SOURCE_HINTS_SHORTCUT);
+  sourceHintsButton.title = `${graphHintsEnabled ? "Hide" : "Show"} graph hints (${SOURCE_HINTS_SHORTCUT})`;
 }
 
 function loadExample(id: string): void {
@@ -790,6 +797,12 @@ function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
     return;
   }
 
+  if (isSourceHintsShortcut(event)) {
+    event.preventDefault();
+    if (!event.repeat) toggleGraphHints();
+    return;
+  }
+
   if (isLoadShortcut(event)) {
     event.preventDefault();
     if (!event.repeat) openSourceDialog();
@@ -824,6 +837,11 @@ function editorModeShortcut(event: KeyboardEvent): EditorView | null {
   if (key === "1") return "code";
   if (key === "2") return "graph";
   return null;
+}
+
+function isSourceHintsShortcut(event: KeyboardEvent): boolean {
+  if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
+  return event.code === "KeyH" || event.key.toLowerCase() === "h";
 }
 
 function isCommandShortcut(event: KeyboardEvent, key: string): boolean {
@@ -1131,6 +1149,7 @@ function setEditorView(mode: EditorView): void {
       }
     });
   } else if (previousMode === "code") {
+    codeEditor?.blur();
     window.requestAnimationFrame(() => {
       graphInspector?.revealSelected({ focus: true });
     });
@@ -1364,6 +1383,7 @@ function appHealthDiagnostics() {
     hasLoadButton: Boolean(loadSourceButton),
     hasSaveButton: Boolean(saveSourceButton),
     workspaceButtons: workspaceButtonLabels(),
+    workspaceButtonShortcuts: workspaceButtonShortcuts(),
     editorModeShortcuts: editorModeButtonShortcuts(),
     graphActionButtons: graphActionButtonLabels(),
     graphActionShortcuts: graphActionButtonShortcuts(),
@@ -1375,6 +1395,11 @@ function appHealthDiagnostics() {
 function workspaceButtonLabels(): string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
     .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
+}
+
+function workspaceButtonShortcuts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
+    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
 }
 
 function editorModeButtonShortcuts(): string[] {

@@ -260,6 +260,7 @@ export interface CodeEditor {
   selectAdjacentSourceLink(direction: -1 | 1): boolean;
   revealCurrentSourceLinkInGraph(): boolean;
   nudgeCurrentSourceLink(direction: -1 | 1, modifiers?: ScrubModifiers, options?: { editSessionId?: string }): boolean;
+  blur(): void;
   layout(): void;
   dispose(): void;
 }
@@ -1007,6 +1008,15 @@ export function createCodeEditor(
     },
     revealCurrentSourceLinkInGraph() {
       return revealCurrentSourceLinkInGraph();
+    },
+    blur() {
+      const domNode = editor.getDomNode();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && domNode?.contains(active)) {
+        active.blur();
+        return;
+      }
+      domNode?.blur();
     },
     layout() {
       editor.layout();

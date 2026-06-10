@@ -8,6 +8,7 @@ export interface AppHealthRuntimeVerification {
     title: string;
     canvasMode: string;
     workspaceButtons: readonly string[];
+    workspaceButtonShortcuts: readonly string[];
     editorModeShortcuts: readonly string[];
     graphActionButtons: readonly string[];
     graphActionShortcuts: readonly string[];
@@ -26,6 +27,15 @@ export interface AppHealthRuntimeVerification {
     shortcutPreventedDefault: boolean;
     onOpen: string;
     afterClose: string;
+  };
+  sourceHintsShortcutSwitch: {
+    shortcut: string;
+    beforePressed: string;
+    afterPressed: string;
+    restoredPressed: string;
+    preventedDefault: boolean;
+    restoredDefault: boolean;
+    status: string;
   };
   editorModeShortcutSwitch: {
     codeShortcut: string;
@@ -66,13 +76,15 @@ export async function runAppHealthRuntimeVerification(
 ): Promise<AppHealthRuntimeVerification> {
   const errors: string[] = [];
   const start = performance.now();
+  const frameLoad = waitForFrameLoad(frame, APP_HEALTH_TIMEOUT_MS);
   frame.src = `./?app-health-check=${Date.now()}`;
-  await waitForFrameLoad(frame, APP_HEALTH_TIMEOUT_MS);
+  await frameLoad;
   const health = await waitForAppHealth(frame, APP_HEALTH_TIMEOUT_MS);
   const loadMs = performance.now() - start;
   const dom = summarizeFrameDom(frame);
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
+  const sourceHintsShortcutSwitch = await verifySourceHintsShortcutSwitch(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
   const editorModeShortcutSwitch = await verifyEditorModeShortcutSwitch(frame, errors);
@@ -91,6 +103,7 @@ export async function runAppHealthRuntimeVerification(
     dom,
     graphHoverStatus,
     sourceDialogFocus,
+    sourceHintsShortcutSwitch,
     editorModeShortcutSwitch,
     graphCodeReveal,
     codeGraphReveal,
@@ -114,6 +127,7 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Save")) errors.push("workspace health missing Save button");
   if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
+  verifyWorkspaceButtonShortcuts("health", health.workspaceButtonShortcuts, errors);
   verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
   if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
   if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
@@ -134,6 +148,7 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
   if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
   if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
+  verifyWorkspaceButtonShortcuts("DOM", dom.workspaceButtonShortcuts, errors);
   verifyEditorModeShortcuts("DOM", dom.editorModeShortcuts, errors);
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
@@ -153,6 +168,21 @@ function verifyGraphActionShortcuts(label: string, shortcuts: readonly string[],
   }
 }
 
+function verifyWorkspaceButtonShortcuts(label: string, shortcuts: readonly string[], errors: string[]): void {
+  if (!shortcuts.includes("Control+O Meta+O")) {
+    errors.push(`${label} workspace shortcuts missing Load binding`);
+  }
+  if (!shortcuts.includes("Control+S Meta+S")) {
+    errors.push(`${label} workspace shortcuts missing Save binding`);
+  }
+  if (!shortcuts.includes("Alt+Shift+F")) {
+    errors.push(`${label} workspace shortcuts missing Prettify binding`);
+  }
+  if (!shortcuts.includes("Alt+Shift+H")) {
+    errors.push(`${label} workspace shortcuts missing Hints binding`);
+  }
+}
+
 function verifyEditorModeShortcuts(label: string, shortcuts: readonly string[], errors: string[]): void {
   if (!shortcuts.includes("Control+Alt+1 Meta+Alt+1")) {
     errors.push(`${label} editor mode shortcuts missing Code binding`);
@@ -164,18 +194,19 @@ function verifyEditorModeShortcuts(label: string, shortcuts: readonly string[], 
 
 function waitForFrameLoad(frame: HTMLIFrameElement, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const startedAt = performance.now();
-    const timer = window.setInterval(() => {
-      const documentReady = safeFrameDocument(frame)?.readyState;
-      if (documentReady === "complete") {
-        cleanup();
-        resolve();
-      } else if (performance.now() - startedAt > timeoutMs) {
-        cleanup();
-        reject(new Error("Timed out waiting for app frame load."));
-      }
-    }, 50);
-    const cleanup = () => window.clearInterval(timer);
+    const finish = (outcome: "loaded" | "timeout") => {
+      cleanup();
+      if (outcome === "loaded") resolve();
+      else reject(new Error("Timed out waiting for app frame load."));
+    };
+    const timer = window.setTimeout(() => finish("timeout"), timeoutMs);
+    const onLoad = () => finish("loaded");
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      frame.removeEventListener("load", onLoad);
+    };
+    frame.addEventListener("load", onLoad);
+    if (safeFrameDocument(frame)?.readyState === "complete") finish("loaded");
   });
 }
 
@@ -211,6 +242,8 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     canvasMode: frameDocument?.querySelector<HTMLCanvasElement>("#canvas")?.dataset.previewMode ?? "",
     workspaceButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    workspaceButtonShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
+      .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     editorModeShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-toggle button") ?? [])
       .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     graphActionButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
@@ -322,6 +355,83 @@ async function verifySourceDialogFocus(
   }
 
   return { loadShortcut, shortcutPreventedDefault, onOpen, afterClose };
+}
+
+async function verifySourceHintsShortcutSwitch(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["sourceHintsShortcutSwitch"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    shortcut: "",
+    beforePressed: "",
+    afterPressed: "",
+    restoredPressed: "",
+    preventedDefault: false,
+    restoredDefault: false,
+    status: "",
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for graph hints shortcut verification");
+    return empty;
+  }
+
+  const hintsButton = frameDocument.querySelector<HTMLButtonElement>("#sourceHintsButton");
+  const status = frameDocument.querySelector<HTMLElement>("#editorStatus");
+  if (!hintsButton || !status) {
+    errors.push("app frame missing graph hints shortcut controls");
+    return empty;
+  }
+
+  const shortcut = hintsButton.getAttribute("aria-keyshortcuts") ?? "";
+  const beforePressed = hintsButton.getAttribute("aria-pressed") ?? "";
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const preventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "h",
+    code: "KeyH",
+    altKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await nextFrame(frameWindow);
+  const afterPressed = hintsButton.getAttribute("aria-pressed") ?? "";
+  const statusText = status.textContent ?? "";
+
+  const restoredDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "h",
+    code: "KeyH",
+    altKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await nextFrame(frameWindow);
+  const restoredPressed = hintsButton.getAttribute("aria-pressed") ?? "";
+
+  if (shortcut !== "Alt+Shift+H") errors.push(`graph hints button advertised shortcut as ${shortcut || "nothing"}`);
+  if (!preventedDefault) errors.push("graph hints shortcut did not prevent the browser default");
+  if (!restoredDefault) errors.push("graph hints restore shortcut did not prevent the browser default");
+  if (afterPressed === beforePressed) {
+    errors.push(`graph hints shortcut left aria-pressed at ${afterPressed || "nothing"}`);
+  }
+  if (restoredPressed !== beforePressed) {
+    errors.push(`graph hints shortcut restored aria-pressed to ${restoredPressed || "nothing"} instead of ${beforePressed || "nothing"}`);
+  }
+  if (!statusText.includes("Graph hints")) {
+    errors.push(`graph hints shortcut status rendered ${statusText || "nothing"}`);
+  }
+
+  return {
+    shortcut,
+    beforePressed,
+    afterPressed,
+    restoredPressed,
+    preventedDefault,
+    restoredDefault,
+    status: statusText,
+  };
 }
 
 async function verifyEditorModeShortcutSwitch(

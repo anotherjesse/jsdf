@@ -715,12 +715,14 @@ export class GraphInspector {
     const focus = this.focusSelectedAfterRender;
     this.focusSelectedAfterRender = false;
     const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
-    if (focus) target?.focus({ preventScroll: true });
+    const focusTarget = () => target?.focus({ preventScroll: true });
+    if (focus) focusTarget();
     window.requestAnimationFrame(() => {
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
       if (!focus) return;
-      target?.focus({ preventScroll: true });
-      window.setTimeout(() => target?.focus({ preventScroll: true }), 0);
+      focusTarget();
+      window.setTimeout(focusTarget, 0);
+      window.setTimeout(focusTarget, 40);
     });
   }
 
