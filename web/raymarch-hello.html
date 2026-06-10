@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sdf raymarch hello</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: #15191f;
+        color: #eef2f6;
+        font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      canvas:active {
+        cursor: grabbing;
+      }
+
+      .badge {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        border: 1px solid #343b45;
+        border-radius: 8px;
+        background: rgb(17 19 22 / 82%);
+        color: #aeb9c5;
+        padding: 9px 11px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <div id="badge" class="badge">WebGL2 raymarch cube</div>
+    <script type="module" src="./src/hello-raymarch.ts"></script>
+  </body>
+</html>

@@ -1,4 +1,10 @@
 import type { Triangle } from "./polygonize";
+import type { MeshResult } from "./generate";
+
+export interface WriteBinarySTLOptions {
+  download?: boolean;
+  name?: string;
+}
 
 function normal(triangle: Triangle): number[] {
   const [a, b, c] = triangle;
@@ -44,3 +50,13 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export function write_binary_stl(
+  filename: string,
+  mesh: Triangle[] | MeshResult,
+  options: WriteBinarySTLOptions = {},
+): Blob {
+  const triangles = Array.isArray(mesh) ? mesh : mesh.triangles;
+  const blob = binarySTL(triangles, options.name ?? filename);
+  if (options.download !== false) downloadBlob(blob, filename);
+  return blob;
+}

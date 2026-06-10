@@ -148,7 +148,7 @@ class Compiler {
       case "roundedCylinder": return `  let d = vec2f(length(p.xy) - ${f(par.ra as number)} + ${f(par.rb as number)}, abs(p.z) - ${f((par.h as number) / 2)} + ${f(par.rb as number)});\n  return min(max(d.x, d.y), 0.0) + length(max(d, vec2f(0.0))) - ${f(par.rb as number)};`;
       case "cappedCone": return this.cappedConeBody(par);
       case "roundedCone": return this.roundedConeBody(par);
-      case "ellipsoid": return `  let size = ${v3(par.size as number[])};\n  let k0 = length(p / size);\n  let k1 = length(p / (size * size));\n  return k0 * (k0 - 1.0) / k1;`;
+      case "ellipsoid": return `  let size = ${v3(par.size as number[])};\n  let k0 = length(p / size);\n  let k1 = length(p / (size * size));\n  if (k1 == 0.0) { return -min(size.x, min(size.y, size.z)); }\n  return k0 * (k0 - 1.0) / k1;`;
       case "pyramid": return this.pyramidBody(par);
       case "tetrahedron": return `  return (max(abs(p.x + p.y) - p.z, abs(p.x - p.y) + p.z) - ${f(par.r as number)}) / sqrt(3.0);`;
       case "octahedron": return `  return (abs(p.x) + abs(p.y) + abs(p.z) - ${f(par.r as number)}) * tan(SDF_PI / 6.0);`;

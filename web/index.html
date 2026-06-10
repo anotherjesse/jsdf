@@ -22,23 +22,36 @@
           <select id="exampleSelect"></select>
         </label>
 
-        <div class="toolbar" aria-label="Actions">
-          <button id="meshButton" type="button" title="Build STL mesh">Build STL</button>
-          <button id="downloadButton" type="button" title="Download STL" disabled>Download</button>
-        </div>
+        <section class="panel compact">
+          <h2>View</h2>
+          <div class="segmented view-toggle" aria-label="Render view">
+            <button id="shaderViewButton" type="button" aria-pressed="true">Shader</button>
+            <button id="meshViewButton" type="button" aria-pressed="false">Mesh</button>
+            <button id="downloadButton" class="icon-button" type="button" title="Download STL" aria-label="Download STL" disabled>
+              <span class="download-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </section>
 
         <section class="panel">
           <h2>Resolution</h2>
           <label class="range">
-            <span>Preview grid</span>
-            <input id="stepsInput" type="range" min="28" max="96" value="44" step="4">
-            <output id="stepsOutput">44</output>
+            <span>Ray steps</span>
+            <input id="stepsInput" type="range" min="64" max="320" value="180" step="16">
+            <output id="stepsOutput">180</output>
           </label>
           <label class="range">
             <span>Mesh grid</span>
-            <input id="gridInput" type="range" min="24" max="96" value="52" step="4">
+            <input id="gridInput" type="range" min="24" max="256" value="52" step="4">
             <output id="gridOutput">52</output>
           </label>
+          <div class="field">
+            <span>Mesh style</span>
+            <div class="segmented" aria-label="Mesh style">
+              <button id="surfaceNetButton" type="button" aria-pressed="true">Surface net</button>
+              <button id="tetraMeshButton" type="button" aria-pressed="false">Tetra</button>
+            </div>
+          </div>
         </section>
 
         <section class="panel">

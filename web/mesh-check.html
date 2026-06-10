@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sdf mesh check</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111316;
+        --panel: #1c2026;
+        --line: #343b45;
+        --text: #eef2f6;
+        --muted: #9ca8b5;
+        --ok: #2fb7a8;
+        --fail: #dd6a5c;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        display: grid;
+        gap: 14px;
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      #status {
+        color: var(--muted);
+      }
+
+      [data-status="pass"] #status {
+        color: var(--ok);
+      }
+
+      [data-status="fail"] #status {
+        color: var(--fail);
+      }
+
+      pre {
+        overflow: auto;
+        min-height: 320px;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>sdf mesh check</h1>
+      <div id="status">Running mesh runtime verification...</div>
+      <pre id="report"></pre>
+    </main>
+    <script type="module" src="./src/mesh-check.ts"></script>
+  </body>
+</html>

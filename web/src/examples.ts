@@ -20,6 +20,7 @@ import {
   union,
   type SDF3,
 } from "./api";
+import { intentionallyUnsupported } from "./api/completeness";
 import { add, mul } from "./core/math";
 
 export interface Example {
@@ -134,12 +135,10 @@ export function currentExample(id: string): Example {
   return examples.find((example) => example.id === id) ?? examples[0];
 }
 
-export const unsupportedPythonApi = ["text", "image", "measure_text", "measure_image", "Mesh.from_file", "Mesh.sdf"];
+export const unsupportedPythonApi = intentionallyUnsupported;
 
 export const supportedSummary = {
-  primitives3: 18,
-  primitives2: 8,
-  commonOps: 8,
-  transformsAndDeforms: 16,
-  easing: 31,
+  moduleExports: 47,
+  sdf2Methods: 17,
+  sdf3Methods: 27,
 };

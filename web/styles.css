@@ -112,12 +112,6 @@ select {
   padding: 9px 10px;
 }
 
-.toolbar {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
 button {
   min-height: 38px;
   border: 1px solid var(--line);
@@ -141,6 +135,74 @@ button:disabled {
   gap: 12px;
   border-top: 1px solid var(--line);
   padding-top: 16px;
+}
+
+.panel.compact {
+  gap: 8px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented.view-toggle {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 46px;
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.download-icon {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.download-icon::before {
+  position: absolute;
+  left: 8px;
+  top: 2px;
+  width: 2px;
+  height: 10px;
+  background: currentColor;
+  content: "";
+}
+
+.download-icon::after {
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: rotate(45deg);
 }
 
 .range {

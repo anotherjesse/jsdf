@@ -1,0 +1,16 @@
+import { resolve } from "node:path";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        apiCheck: resolve(__dirname, "api-check.html"),
+        main: resolve(__dirname, "index.html"),
+        meshCheck: resolve(__dirname, "mesh-check.html"),
+        previewCheck: resolve(__dirname, "preview-check.html"),
+        raymarchHello: resolve(__dirname, "raymarch-hello.html"),
+      },
+    },
+  },
+});

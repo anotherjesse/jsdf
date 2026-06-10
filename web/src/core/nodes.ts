@@ -11,6 +11,14 @@ import {
   rotateToMatrix,
   rotationMatrix3,
 } from "./math";
+import type { MeshOptions, MeshResult } from "../mesh/generate";
+import type { SaveOptions, ShowSliceOptions, SliceOptions, SliceSample } from "../workflow";
+import {
+  generate as generateWorkflow,
+  sample_slice as sampleSliceWorkflow,
+  save as saveWorkflow,
+  show_slice as showSliceWorkflow,
+} from "../workflow";
 
 export type Dim = 2 | 3;
 
@@ -123,6 +131,18 @@ export class SDF3 {
     return this.wrap_around(x0, x1, r, e);
   }
   slice(): SDF2 { return op2("slice", {}, [this]); }
+  async generate(options: MeshOptions = {}): Promise<MeshResult> {
+    return generateWorkflow(this, options);
+  }
+  async save(filename: string, options: SaveOptions = {}): Promise<Blob> {
+    return saveWorkflow(filename, this, options);
+  }
+  sample_slice(options: SliceOptions = {}): SliceSample {
+    return sampleSliceWorkflow(this, options);
+  }
+  show_slice(options: ShowSliceOptions = {}): HTMLCanvasElement {
+    return showSliceWorkflow(this, options);
+  }
 }
 
 export class SDF2 {

@@ -11,9 +11,11 @@ The browser package is split by responsibility:
 - `src/api`: 2D/3D primitive builders and API completeness fixtures
 - `src/evaluate`: CPU reference evaluators
 - `src/wgsl`: WGSL code generation for SDF evaluation
-- `src/gpu`: WebGPU compute sampling and experimental raymarch renderer
+- `src/gpu`: WebGPU compute sampling and experimental WGSL renderer
+- `src/glsl`: GLSL code generation for shader previews
 - `src/mesh`: bounds, polygonization, and STL export
-- `src/preview`: WebGL mesh preview renderer
+- `src/preview`: WebGL raymarch and mesh preview renderers
+- `src/workflow.ts`: Python-style `generate`, `save`, `sample_slice`, and `show_slice` helpers for browser workflows
 
 ## Run
 
@@ -25,6 +27,12 @@ npm run dev -- --port 4173
 
 Open `http://127.0.0.1:4173/`.
 
+Open `http://127.0.0.1:4173/api-check.html` to run the browser API verifier. It exercises the completeness fixtures through CPU evaluation plus GLSL and WGSL code generation, and verifies the browser workflow helpers for mesh generation, STL Blob export, and SDF slice rendering.
+
+Open `http://127.0.0.1:4173/mesh-check.html` to run the browser mesh verifier. It builds surface-net and tetra meshes through the worker path and validates binary STL output.
+
+Open `http://127.0.0.1:4173/preview-check.html` to run the browser preview verifier. It renders both the GLSL raymarch preview and the WebGL mesh preview, then validates nonblank canvas diagnostics.
+
 ## Notes
 
-The visible preview uses WebGL2 to render a preview mesh. WebGPU is used to sample SDF volumes for preview and STL export when available, with a CPU sampler fallback. The current polygonizer is TypeScript marching tetrahedra over the sampled field; it is isolated in `src/mesh/polygonize.ts` so a fully GPU-compacted marching-cubes pass can replace it later without changing the public API.
+The default visible preview compiles the SDF graph to GLSL and raymarches it directly in WebGL2. Clicking Mesh builds the STL surface on demand and switches to a WebGL preview of the generated triangles; the download icon then exports those same triangles. Shader and Mesh share one orbit camera, so rotation and zoom carry across views. WebGPU is used to sample SDF volumes for STL export when available, with a CPU sampler fallback. Polygonization runs in a Web Worker when available, so high grid sizes do not monopolize the UI thread. Mesh style can switch between surface nets, which places one vertex per active cell by averaging SDF edge zero-crossings, and the earlier marching tetrahedra extractor.

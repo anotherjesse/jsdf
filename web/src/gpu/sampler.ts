@@ -13,9 +13,18 @@ export interface VolumeSample {
 export async function sampleFieldWebGPU(sdf: SDF3, dims: [number, number, number], bounds: [number[], number[]]): Promise<VolumeSample> {
   const { device } = await getGPU();
   const total = dims[0] * dims[1] * dims[2];
+  const invocationsPerWorkgroup = 64;
+  const totalWorkgroups = Math.ceil(total / invocationsPerWorkgroup);
+  const maxWorkgroupsPerDimension = device.limits.maxComputeWorkgroupsPerDimension;
+  const workgroupsX = Math.min(totalWorkgroups, maxWorkgroupsPerDimension);
+  const workgroupsY = Math.ceil(totalWorkgroups / workgroupsX);
+  if (workgroupsY > maxWorkgroupsPerDimension) {
+    throw new Error(`Mesh grid requires ${workgroupsY} compute dispatch rows; this GPU supports ${maxWorkgroupsPerDimension}.`);
+  }
+  const dispatchRowSize = workgroupsX * invocationsPerWorkgroup;
   const values = device.createBuffer({ size: total * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
   const readback = device.createBuffer({ size: total * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-  const params = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const params = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const min = bounds[0];
   const max = bounds[1];
   const step: [number, number, number] = [
@@ -24,12 +33,13 @@ export async function sampleFieldWebGPU(sdf: SDF3, dims: [number, number, number
     (max[2] - min[2]) / (dims[2] - 1),
   ];
 
-  const uniform = new ArrayBuffer(48);
-  const u32 = new Uint32Array(uniform, 0, 4);
+  const uniform = new ArrayBuffer(64);
+  const u32 = new Uint32Array(uniform);
   const f32 = new Float32Array(uniform);
   u32.set([dims[0], dims[1], dims[2], total], 0);
   f32.set([min[0], min[1], min[2], 0], 4);
   f32.set([step[0], step[1], step[2], 0], 8);
+  u32.set([dispatchRowSize, 0, 0, 0], 12);
   writeBuffer(device, params, uniform);
 
   const shader = computeShader(compileScene(sdf).source);
@@ -48,7 +58,7 @@ export async function sampleFieldWebGPU(sdf: SDF3, dims: [number, number, number
   const pass = encoder.beginComputePass();
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindGroup);
-  pass.dispatchWorkgroups(Math.ceil(total / 64));
+  pass.dispatchWorkgroups(workgroupsX, workgroupsY);
   pass.end();
   encoder.copyBufferToBuffer(values, 0, readback, 0, total * 4);
   device.queue.submit([encoder.finish()]);
@@ -66,6 +76,7 @@ struct SampleParams {
   dims: vec4u,
   minPoint: vec4f,
   step: vec4f,
+  dispatch: vec4u,
 };
 
 @group(0) @binding(0) var<storage, read_write> values: array<f32>;
@@ -73,7 +84,7 @@ struct SampleParams {
 
 @compute @workgroup_size(64)
 fn cs_main(@builtin(global_invocation_id) gid: vec3u) {
-  let idx = gid.x;
+  let idx = gid.x + gid.y * params.dispatch.x;
   let total = params.dims.w;
   if (idx >= total) { return; }
   let nx = params.dims.x;

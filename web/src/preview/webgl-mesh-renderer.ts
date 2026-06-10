@@ -1,5 +1,6 @@
 import type { Bounds3 } from "../mesh/bounds";
 import type { Triangle } from "../mesh/polygonize";
+import type { OrbitCamera } from "./orbit-camera";
 
 export class WebGLMeshRenderer {
   private readonly gl: WebGL2RenderingContext;
@@ -12,13 +13,12 @@ export class WebGLMeshRenderer {
   private bounds: Bounds3 | null = null;
   private center = [0, 0, 0];
   private radius = 1;
-  private azimuth = 0.83;
-  private elevation = 0.47;
-  private distance = 3.65;
-  private dragging = false;
-  private lastPointer = [0, 0];
+  private active = false;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly camera: OrbitCamera,
+  ) {
     const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
     if (!gl) throw new Error("WebGL2 is not available in this browser.");
     this.gl = gl;
@@ -35,32 +35,28 @@ export class WebGLMeshRenderer {
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
     gl.bindVertexArray(null);
-    this.attachControls();
+  }
+
+  setActive(active: boolean): void {
+    this.active = active;
+    if (active) this.redraw();
   }
 
   render(triangles: Triangle[], bounds: Bounds3): void {
     this.upload(triangles);
     this.setBounds(bounds);
-    this.redraw();
+    if (this.active) this.redraw();
   }
 
   redraw(): void {
+    if (!this.active) return;
     if (!this.bounds || this.vertexCount === 0) return;
     this.resize();
     const gl = this.gl;
     const aspect = this.canvas.width / this.canvas.height;
-    const orbit = [
-      Math.cos(this.elevation) * Math.cos(this.azimuth),
-      Math.cos(this.elevation) * Math.sin(this.azimuth),
-      Math.sin(this.elevation),
-    ];
-    const eye = [
-      this.center[0] + orbit[0] * this.radius * this.distance,
-      this.center[1] + orbit[1] * this.radius * this.distance,
-      this.center[2] + orbit[2] * this.radius * this.distance,
-    ];
+    const eye = this.camera.eye(this.center, this.radius);
     const view = lookAt(eye, this.center, [0, 0, 1]);
-    const projection = perspective(Math.PI / 5, aspect, 0.01, this.radius * this.distance * 6 + 10);
+    const projection = perspective(Math.PI / 5, aspect, 0.01, this.radius * 60 + 10);
     const mvp = multiplyMat4(projection, view);
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -74,11 +70,12 @@ export class WebGLMeshRenderer {
     gl.uniform3f(this.lightLocation, 0.45, 0.7, 0.9);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    this.recordPixelDiagnostics();
     gl.bindVertexArray(null);
   }
 
   private resize(): void {
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const dpr = Math.min(1.25, Math.max(1, window.devicePixelRatio || 1));
     const width = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
     const height = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== width || this.canvas.height !== height) {
@@ -117,33 +114,36 @@ export class WebGLMeshRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.STATIC_DRAW);
   }
 
-  private attachControls(): void {
-    this.canvas.addEventListener("pointerdown", (event) => {
-      this.dragging = true;
-      this.lastPointer = [event.clientX, event.clientY];
-      this.canvas.setPointerCapture(event.pointerId);
-    });
-    this.canvas.addEventListener("pointermove", (event) => {
-      if (!this.dragging) return;
-      const dx = event.clientX - this.lastPointer[0];
-      const dy = event.clientY - this.lastPointer[1];
-      this.lastPointer = [event.clientX, event.clientY];
-      this.azimuth -= dx * 0.007;
-      this.elevation = clamp(this.elevation + dy * 0.007, -1.35, 1.35);
-      this.redraw();
-    });
-    this.canvas.addEventListener("pointerup", (event) => {
-      this.dragging = false;
-      this.canvas.releasePointerCapture(event.pointerId);
-    });
-    this.canvas.addEventListener("pointercancel", () => {
-      this.dragging = false;
-    });
-    this.canvas.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      this.distance = clamp(this.distance * Math.exp(event.deltaY * 0.001), 1.45, 9);
-      this.redraw();
-    }, { passive: false });
+  private recordPixelDiagnostics(): void {
+    const pixel = new Uint8Array(4);
+    const points = [
+      [0.5, 0.5],
+      [0.35, 0.5],
+      [0.65, 0.5],
+      [0.5, 0.35],
+      [0.5, 0.65],
+    ];
+    let sum = 0;
+    let min = 255;
+    let max = 0;
+    const distinct = new Set<string>();
+    for (const [px, py] of points) {
+      const x = Math.max(0, Math.min(this.canvas.width - 1, Math.floor(px * this.canvas.width)));
+      const y = Math.max(0, Math.min(this.canvas.height - 1, Math.floor(py * this.canvas.height)));
+      this.gl.readPixels(x, y, 1, 1, this.gl.RGBA, this.gl.UNSIGNED_BYTE, pixel);
+      sum += pixel[0] + pixel[1] + pixel[2];
+      min = Math.min(min, pixel[0], pixel[1], pixel[2]);
+      max = Math.max(max, pixel[0], pixel[1], pixel[2]);
+      distinct.add(`${pixel[0]},${pixel[1]},${pixel[2]}`);
+    }
+    this.canvas.dataset.previewMode = "mesh";
+    this.canvas.dataset.previewWidth = String(this.canvas.width);
+    this.canvas.dataset.previewHeight = String(this.canvas.height);
+    this.canvas.dataset.previewSum = String(sum);
+    this.canvas.dataset.previewMin = String(min);
+    this.canvas.dataset.previewMax = String(max);
+    this.canvas.dataset.previewDistinct = String(distinct.size);
+    delete this.canvas.dataset.previewSteps;
   }
 }
 
@@ -233,10 +233,6 @@ function cross(a: number[], b: number[]): number[] {
 
 function dot(a: number[], b: number[]): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function clamp(value: number, lo: number, hi: number): number {
-  return Math.min(Math.max(value, lo), hi);
 }
 
 const vertexShader = `#version 300 es

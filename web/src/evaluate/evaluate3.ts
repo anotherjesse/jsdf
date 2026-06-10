@@ -119,6 +119,7 @@ export function eval3Node(node: Node, p: number[]): number {
       const par = params<{ size: number[] }>(node);
       const k0 = length(div(p, par.size));
       const k1 = length(div(p, mul(par.size, par.size)));
+      if (k1 === 0) return -Math.min(...par.size);
       return k0 * (k0 - 1) / k1;
     }
     case "pyramid": {

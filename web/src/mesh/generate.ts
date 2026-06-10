@@ -3,25 +3,42 @@ import { evaluate3 } from "../evaluate";
 import { sampleFieldWebGPU, type VolumeSample } from "../gpu/sampler";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./bounds";
 import { polygonizeVolume, type Triangle } from "./polygonize";
+import { surfaceNetVolume } from "./surface-net";
+
+export type MeshAlgorithm = "surface-net" | "tetra";
+export type MeshDims = [number, number, number];
 
 export interface MeshResult {
   triangles: Triangle[];
   bounds: Bounds3;
+  dims: MeshDims;
   sampleTimeMs: number;
   polygonizeTimeMs: number;
   usedGPU: boolean;
+  usedWorker: boolean;
+  algorithm: MeshAlgorithm;
 }
 
 export interface MeshOptions {
   grid?: number;
+  dims?: MeshDims;
+  step?: number | ArrayLike<number>;
+  samples?: number;
   bounds?: Bounds3;
   preferGPU?: boolean;
+  preferWorker?: boolean;
+  workers?: number;
+  batch_size?: number;
+  batchSize?: number;
+  verbose?: boolean;
+  sparse?: boolean;
+  algorithm?: MeshAlgorithm;
 }
 
 export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promise<MeshResult> {
-  const grid = options.grid ?? 52;
-  const dims: [number, number, number] = [grid, grid, grid];
+  const algorithm = options.algorithm ?? "surface-net";
   const bounds = options.bounds ?? paddedBounds(estimateBounds(sdf));
+  const dims = resolveDims(options, bounds);
   let volume: VolumeSample;
   let usedGPU = false;
 
@@ -36,18 +53,126 @@ export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promis
     volume = sampleFieldCPU(sdf, dims, bounds);
   }
 
-  const start = performance.now();
-  const triangles = polygonizeVolume(volume);
+  const polygonized = await polygonize(volume, algorithm, options.preferWorker !== false && options.workers !== 1);
   return {
-    triangles,
+    triangles: polygonized.triangles,
     bounds,
+    dims,
     sampleTimeMs: volume.gpuTimeMs,
-    polygonizeTimeMs: performance.now() - start,
+    polygonizeTimeMs: polygonized.polygonizeTimeMs,
     usedGPU,
+    usedWorker: polygonized.usedWorker,
+    algorithm,
   };
 }
 
-function sampleFieldCPU(sdf: SDF3, dims: [number, number, number], bounds: Bounds3): VolumeSample {
+async function polygonize(volume: VolumeSample, algorithm: MeshAlgorithm, preferWorker: boolean): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+  if (preferWorker && typeof Worker !== "undefined") {
+    try {
+      return await polygonizeInWorker(volume, algorithm);
+    } catch {
+      // Fall back to the synchronous implementation if the worker cannot start.
+    }
+  }
+
+  const start = performance.now();
+  return {
+    triangles: polygonizeSync(volume, algorithm),
+    polygonizeTimeMs: performance.now() - start,
+    usedWorker: false,
+  };
+}
+
+function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./polygonize-worker.ts", import.meta.url), { type: "module" });
+    const cleanup = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<{ triangles?: Triangle[]; polygonizeTimeMs?: number; error?: string }>) => {
+      cleanup();
+      if (event.data.error) {
+        reject(new Error(event.data.error));
+        return;
+      }
+      resolve({
+        triangles: event.data.triangles ?? [],
+        polygonizeTimeMs: event.data.polygonizeTimeMs ?? 0,
+        usedWorker: true,
+      });
+    };
+    worker.onerror = (event) => {
+      cleanup();
+      reject(new Error(event.message || "Mesh worker failed."));
+    };
+
+    const values = transferableBuffer(volume.values);
+    worker.postMessage({
+      algorithm,
+      values,
+      dims: volume.dims,
+      bounds: volume.bounds,
+      step: volume.step,
+    }, [values]);
+  });
+}
+
+function polygonizeSync(volume: VolumeSample, algorithm: MeshAlgorithm): Triangle[] {
+  return algorithm === "surface-net" ? surfaceNetVolume(volume) : polygonizeVolume(volume);
+}
+
+function transferableBuffer(values: Float32Array): ArrayBuffer {
+  if (values.byteOffset === 0 && values.byteLength === values.buffer.byteLength) {
+    return values.buffer as ArrayBuffer;
+  }
+  return values.slice().buffer;
+}
+
+function resolveDims(options: MeshOptions, bounds: Bounds3): MeshDims {
+  if (options.dims) return sanitizeDims(options.dims);
+  if (options.step != null) return dimsFromStep(bounds, stepVector(options.step));
+  if (options.samples != null) {
+    const span = [
+      bounds[1][0] - bounds[0][0],
+      bounds[1][1] - bounds[0][1],
+      bounds[1][2] - bounds[0][2],
+    ];
+    const volume = Math.max(span[0] * span[1] * span[2], Number.EPSILON);
+    const step = Math.cbrt(volume / options.samples);
+    return dimsFromStep(bounds, [step, step, step]);
+  }
+  const grid = options.grid ?? 52;
+  return sanitizeDims([grid, grid, grid]);
+}
+
+function sanitizeDims(dims: ArrayLike<number>): MeshDims {
+  const out = [dims[0], dims[1], dims[2]].map((value) => {
+    if (!Number.isFinite(value) || value < 2) throw new Error(`invalid mesh dimension: ${value}`);
+    return Math.max(2, Math.floor(value));
+  });
+  return [out[0], out[1], out[2]];
+}
+
+function stepVector(step: number | ArrayLike<number>): MeshDims {
+  if (typeof step === "number") return sanitizeStep([step, step, step]);
+  return sanitizeStep([step[0], step[1], step[2]]);
+}
+
+function sanitizeStep(step: ArrayLike<number>): MeshDims {
+  const out = [step[0], step[1], step[2]].map((value) => {
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`invalid mesh step: ${value}`);
+    return value;
+  });
+  return [out[0], out[1], out[2]];
+}
+
+function dimsFromStep(bounds: Bounds3, step: MeshDims): MeshDims {
+  return sanitizeDims([
+    Math.ceil((bounds[1][0] - bounds[0][0]) / step[0]) + 1,
+    Math.ceil((bounds[1][1] - bounds[0][1]) / step[1]) + 1,
+    Math.ceil((bounds[1][2] - bounds[0][2]) / step[2]) + 1,
+  ]);
+}
+
+function sampleFieldCPU(sdf: SDF3, dims: MeshDims, bounds: Bounds3): VolumeSample {
   const start = performance.now();
   const [nx, ny, nz] = dims;
   const min = bounds[0];
@@ -72,4 +197,5 @@ function sampleFieldCPU(sdf: SDF3, dims: [number, number, number], bounds: Bound
 
 export * from "./bounds";
 export * from "./polygonize";
+export * from "./surface-net";
 export * from "./stl";
