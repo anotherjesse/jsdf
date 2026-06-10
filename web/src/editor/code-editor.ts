@@ -37,6 +37,7 @@ interface MonacoEnvironment {
 const SOURCE_HOVER_CLEAR_GRACE_MS = 140;
 const SOURCE_HOVER_STICKY_COLUMNS = 2;
 const SOURCE_INLAY_HINT_SELECT_COMMAND = "sdf.selectGraphSourceLink";
+const SDF_RUNTIME_MARKER_OWNER = "sdf-runtime";
 const sourceInlayHintStateByUri = new Map<string, SourceInlayHintModelState>();
 const sourceInlayHintsChanged = new monaco.Emitter<void>();
 
@@ -218,6 +219,7 @@ export interface CodeEditor {
   markHoveredSourceLink(link: GraphSourceLink | null): void;
   markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
+  applyPreferredQuickFix(): boolean;
   nudgeCurrentSourceLink(direction: -1 | 1, modifiers?: ScrubModifiers, options?: { editSessionId?: string }): boolean;
   layout(): void;
   dispose(): void;
@@ -574,6 +576,64 @@ export function createCodeEditor(
     return true;
   };
 
+  const markerRange = (marker: monaco.editor.IMarker): monaco.Range => {
+    return new monaco.Range(
+      marker.startLineNumber,
+      marker.startColumn,
+      marker.endLineNumber,
+      marker.endColumn,
+    );
+  };
+
+  const preferredQuickFixMarker = (): monaco.editor.IMarker | null => {
+    const model = editor.getModel();
+    if (!model) return null;
+    const markers = monaco.editor.getModelMarkers({
+      owner: SDF_RUNTIME_MARKER_OWNER,
+      resource: model.uri,
+    }).filter((marker) => {
+      return markerCodeValue(marker.code) === SDF_API_TYPO_MARKER_CODE
+        && Boolean(apiSuggestionTargetFromDiagnosticMessage(marker.message));
+    });
+    if (markers.length === 0) return null;
+
+    const selection = editor.getSelection();
+    if (!selection) return markers[0] ?? null;
+    const selectionRange = new monaco.Range(
+      selection.startLineNumber,
+      selection.startColumn,
+      selection.endLineNumber,
+      selection.endColumn,
+    );
+    return markers.find((marker) => {
+      return monaco.Range.areIntersectingOrTouching(markerRange(marker), selectionRange);
+    }) ?? markers[0] ?? null;
+  };
+
+  const applyPreferredQuickFix = (): boolean => {
+    const model = editor.getModel();
+    const marker = preferredQuickFixMarker();
+    if (!model || !marker) return false;
+    const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
+    const replacement = target ? replacementTextForSuggestionTarget(target) : "";
+    if (!replacement) return false;
+
+    const range = markerRange(marker);
+    if (model.getValueInRange(range) === replacement) return false;
+    const startOffset = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn });
+    editor.executeEdits("sdf.quickFix", [{
+      range,
+      text: replacement,
+      forceMoveMarkers: true,
+    }]);
+    const endPosition = model.getPositionAt(startOffset + replacement.length);
+    const selection = new monaco.Range(range.startLineNumber, range.startColumn, endPosition.lineNumber, endPosition.column);
+    editor.setSelection(selection);
+    editor.revealRangeInCenterIfOutsideViewport(selection);
+    editor.focus();
+    return true;
+  };
+
   const scheduleCursorSourceLinkSync = (position: monaco.Position | null | undefined) => {
     if (suppress || activeScrub) return;
     pendingCursorPosition = position ?? null;
@@ -669,6 +729,16 @@ export function createCodeEditor(
       onPrettify();
     },
   });
+  const quickFixAction = editor.addAction({
+    id: "sdf.applyPreferredQuickFix",
+    label: "Apply SDF Quick Fix",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Period],
+    contextMenuGroupId: "sdf",
+    contextMenuOrder: 0,
+    run() {
+      applyPreferredQuickFix();
+    },
+  });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
     pointerLink = null;
@@ -709,7 +779,7 @@ export function createCodeEditor(
     setError(error: CodeEditorError | null) {
       const model = editor.getModel();
       if (!model) return;
-      monaco.editor.setModelMarkers(model, "sdf-runtime", error
+      monaco.editor.setModelMarkers(model, SDF_RUNTIME_MARKER_OWNER, error
         ? [markerForEditorError(error, model)]
         : []);
     },
@@ -800,6 +870,9 @@ export function createCodeEditor(
     nudgeCurrentSourceLink(direction, modifiers, options) {
       return nudgeCurrentSourceLink(direction, modifiers, options);
     },
+    applyPreferredQuickFix() {
+      return applyPreferredQuickFix();
+    },
     layout() {
       editor.layout();
     },
@@ -818,6 +891,7 @@ export function createCodeEditor(
       cursorSubscription.dispose();
       sourceNudgeSubscription.dispose();
       prettifyAction.dispose();
+      quickFixAction.dispose();
       leaveSubscription.dispose();
       deleteSourceInlayHintState();
       editor.dispose();

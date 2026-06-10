@@ -113,6 +113,8 @@ export interface EditorRuntimeVerification {
     quickFixTitle: string;
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
+    quickFixAppliedSource: string;
+    quickFixChangeEvents: number;
     syntaxErrorLine: number;
     syntaxErrorColumn: number;
   };
@@ -140,6 +142,7 @@ export async function runEditorRuntimeVerification(
   const graphSelections: string[] = [];
   const graphRevealEvents: string[] = [];
   const graphSourceHoverEvents: string[] = [];
+  const sourceChangeEvents: string[] = [];
   const recursiveDecorationMessages: string[] = [];
   const restoreConsole = captureRecursiveDecorationMessages(recursiveDecorationMessages);
   const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
@@ -187,7 +190,7 @@ export async function runEditorRuntimeVerification(
   codeEditor = createCodeEditor(
     codeRoot,
     fixtureSource,
-    () => {},
+    (value) => sourceChangeEvents.push(value),
     (link) => selectFromSource(link),
     (link, value, options) => {
       if (link.nodeKind !== "sphere" || link.label !== "radius") return;
@@ -304,6 +307,12 @@ export async function runEditorRuntimeVerification(
         graphInspector.setSourceLinks(links);
       }
     }
+
+    verifyCodeEditorQuickFix(codeEditor, editorTools, sourceChangeEvents, errors);
+    codeEditor.setValue(fixtureSource);
+    codeEditor.setError(null);
+    codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
+    graphInspector.setSourceLinks(links);
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
     if (!boxCallLink) {
@@ -574,9 +583,35 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,
+    quickFixAppliedSource: "",
+    quickFixChangeEvents: 0,
     syntaxErrorLine: syntaxDiagnostic.lineNumber,
     syntaxErrorColumn: syntaxDiagnostic.column,
   };
+}
+
+function verifyCodeEditorQuickFix(
+  codeEditor: ReturnType<typeof createCodeEditor>,
+  editorTools: EditorRuntimeVerification["editorTools"],
+  sourceChangeEvents: string[],
+  errors: string[],
+): void {
+  const source = "return sphere(1).diffe(sphere(2))";
+  const beforeChangeEvents = sourceChangeEvents.length;
+  const diagnostic = diagnosticForSource(source, errors, "editor quick fix typo");
+  codeEditor.setValue(source);
+  codeEditor.setError(diagnostic);
+  if (!codeEditor.applyPreferredQuickFix()) {
+    errors.push("editor quick fix did not apply");
+  }
+  editorTools.quickFixAppliedSource = codeEditor.getValue();
+  editorTools.quickFixChangeEvents = sourceChangeEvents.length - beforeChangeEvents;
+  if (!editorTools.quickFixAppliedSource.includes(".difference(sphere(2))")) {
+    errors.push(`editor quick fix source was ${editorTools.quickFixAppliedSource}`);
+  }
+  if (editorTools.quickFixChangeEvents !== 1) {
+    errors.push(`editor quick fix emitted ${editorTools.quickFixChangeEvents} change events`);
+  }
 }
 
 function verifySourceInlayHints(
