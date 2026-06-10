@@ -84,14 +84,16 @@ export class GraphInspector {
     this.previousMatchButton.type = "button";
     this.previousMatchButton.className = "graph-match-nav";
     this.previousMatchButton.textContent = "Prev";
-    this.previousMatchButton.title = "Previous matching node";
+    this.previousMatchButton.title = "Previous matching node (Shift+Enter or ArrowUp)";
     this.previousMatchButton.setAttribute("aria-label", "Previous matching graph node");
+    this.previousMatchButton.setAttribute("aria-keyshortcuts", "Shift+Enter ArrowUp");
     this.previousMatchButton.hidden = true;
     this.nextMatchButton.type = "button";
     this.nextMatchButton.className = "graph-match-nav";
     this.nextMatchButton.textContent = "Next";
-    this.nextMatchButton.title = "Next matching node";
+    this.nextMatchButton.title = "Next matching node (Enter or ArrowDown)";
     this.nextMatchButton.setAttribute("aria-label", "Next matching graph node");
+    this.nextMatchButton.setAttribute("aria-keyshortcuts", "Enter ArrowDown");
     this.nextMatchButton.hidden = true;
     this.mapButton.type = "button";
     this.mapButton.className = "graph-map-toggle";
@@ -114,9 +116,11 @@ export class GraphInspector {
       this.render();
     });
     this.filterInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
+      const matchDirection = filterMatchDirectionForKey(event);
+      if (matchDirection) {
         event.preventDefault();
-        this.selectFilterMatch(event.shiftKey ? -1 : 1);
+        this.selectFilterMatch(matchDirection);
+        return;
       }
       if (event.key === "Escape" && this.filter) {
         event.preventDefault();
@@ -1676,6 +1680,15 @@ function clamp(value: number, min: number, max: number): number {
 function nudgeDirectionForKey(key: string): -1 | 1 | null {
   if (key === "ArrowLeft" || key === "ArrowDown") return -1;
   if (key === "ArrowRight" || key === "ArrowUp") return 1;
+  return null;
+}
+
+function filterMatchDirectionForKey(event: KeyboardEvent): -1 | 1 | null {
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (event.key === "Enter") return event.shiftKey ? -1 : 1;
+  if (event.shiftKey) return null;
+  if (event.key === "ArrowDown") return 1;
+  if (event.key === "ArrowUp") return -1;
   return null;
 }
 

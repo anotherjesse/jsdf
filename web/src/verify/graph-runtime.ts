@@ -252,16 +252,44 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!filterInput) {
       verifyErrors.push("graph filter input did not render");
     } else {
+      if (filterInput.getAttribute("aria-keyshortcuts") !== "Control+F Meta+F /") {
+        verifyErrors.push(`graph filter shortcut rendered ${filterInput.getAttribute("aria-keyshortcuts") || "nothing"}`);
+      }
       filterInput.value = "radius";
       filterInput.dispatchEvent(new Event("input", { bubbles: true }));
       if (!graphRoot.querySelector(".param-row.matched")) {
         verifyErrors.push("filter did not mark matching radius param row");
+      }
+      filterInput.value = "translate";
+      filterInput.dispatchEvent(new Event("input", { bubbles: true }));
+      const previousMatch = graphRoot.querySelector<HTMLButtonElement>(".graph-match-nav[aria-label='Previous matching graph node']");
+      const nextMatch = graphRoot.querySelector<HTMLButtonElement>(".graph-match-nav[aria-label='Next matching graph node']");
+      if (previousMatch?.getAttribute("aria-keyshortcuts") !== "Shift+Enter ArrowUp") {
+        verifyErrors.push(`previous match shortcut rendered ${previousMatch?.getAttribute("aria-keyshortcuts") || "nothing"}`);
+      }
+      if (nextMatch?.getAttribute("aria-keyshortcuts") !== "Enter ArrowDown") {
+        verifyErrors.push(`next match shortcut rendered ${nextMatch?.getAttribute("aria-keyshortcuts") || "nothing"}`);
+      }
+      filterInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      const firstSearchSelection = selectedNode;
+      if (!firstSearchSelection.includes("translate")) {
+        verifyErrors.push(`filter ArrowDown selected ${firstSearchSelection || "nothing"}`);
+      }
+      filterInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      const secondSearchSelection = selectedNode;
+      if (!secondSearchSelection.includes("translate") || secondSearchSelection === firstSearchSelection) {
+        verifyErrors.push(`filter ArrowDown did not advance: ${firstSearchSelection || "nothing"} -> ${secondSearchSelection || "nothing"}`);
+      }
+      filterInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+      if (selectedNode !== firstSearchSelection) {
+        verifyErrors.push(`filter ArrowUp returned to ${selectedNode || "nothing"} instead of ${firstSearchSelection || "nothing"}`);
       }
       filterInput.value = "";
       filterInput.dispatchEvent(new Event("input", { bubbles: true }));
       if (graphRoot.querySelector(".param-row.matched")) {
         verifyErrors.push("clearing filter left matched param row marked");
       }
+      graphInspector.selectNodeById(sphere.id);
     }
 
     const currentCrumb = graphRoot.querySelector<HTMLElement>(".param-breadcrumb button[aria-current='page']");
