@@ -46,6 +46,7 @@ export interface EditorRuntimeVerification {
   graphSelections: string[];
   graphRevealEvents: string[];
   graphSourceHoverEvents: string[];
+  sourceSelectionEvents: string[];
   graphSourceHoverDecorations: number;
   recursiveDecorationWarnings: number;
   sourceScrub: {
@@ -72,6 +73,11 @@ export interface EditorRuntimeVerification {
     sphereRadius: string;
     sphereRadiusKey: string;
     translateOffset: string;
+  };
+  sourceNavigation: {
+    nextLink: string;
+    previousLink: string;
+    selectionEvents: number;
   };
   editorPreferences: {
     defaultGraphHints: boolean;
@@ -144,6 +150,7 @@ export async function runEditorRuntimeVerification(
   const graphSelections: string[] = [];
   const graphRevealEvents: string[] = [];
   const graphSourceHoverEvents: string[] = [];
+  const sourceSelectionEvents: string[] = [];
   const sourceChangeEvents: string[] = [];
   const recursiveDecorationMessages: string[] = [];
   const restoreConsole = captureRecursiveDecorationMessages(recursiveDecorationMessages);
@@ -193,7 +200,10 @@ export async function runEditorRuntimeVerification(
     codeRoot,
     fixtureSource,
     (value) => sourceChangeEvents.push(value),
-    (link) => selectFromSource(link),
+    (link) => {
+      sourceSelectionEvents.push(formatLink(link));
+      selectFromSource(link);
+    },
     (link, value, options) => {
       if (link.nodeKind !== "sphere" || link.label !== "radius") return;
       sourceScrub.keyboardNextValue = value;
@@ -315,6 +325,7 @@ export async function runEditorRuntimeVerification(
     codeEditor.setError(null);
     codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
     graphInspector.setSourceLinks(links);
+    const sourceNavigation = await verifySourceNavigation(codeEditor, links, sourceSelectionEvents, errors);
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
     if (!boxCallLink) {
@@ -354,11 +365,13 @@ export async function runEditorRuntimeVerification(
       graphSelections,
       graphRevealEvents,
       graphSourceHoverEvents,
+      sourceSelectionEvents,
       graphSourceHoverDecorations,
       recursiveDecorationWarnings: recursiveDecorationMessages.length,
       sourceScrub,
       sourceLinkHitTest,
       sourceInlayHints,
+      sourceNavigation,
       editorPreferences,
       apiHints,
       editorTools,
@@ -624,6 +637,46 @@ function verifyCodeEditorQuickFix(
   if (editorTools.quickFixMarkersAfterApply !== 0) {
     errors.push(`editor quick fix left ${editorTools.quickFixMarkersAfterApply} markers`);
   }
+}
+
+async function verifySourceNavigation(
+  codeEditor: ReturnType<typeof createCodeEditor>,
+  links: readonly GraphSourceLink[],
+  sourceSelectionEvents: string[],
+  errors: string[],
+): Promise<EditorRuntimeVerification["sourceNavigation"]> {
+  const radiusLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
+  if (!radiusLink) {
+    errors.push("source navigation fixture has no sphere radius link");
+    return { nextLink: "", previousLink: "", selectionEvents: 0 };
+  }
+
+  codeEditor.revealSourceLink(radiusLink);
+  await nextFrame();
+  const beforeEvents = sourceSelectionEvents.length;
+  if (!codeEditor.selectAdjacentSourceLink(1)) {
+    errors.push("source navigation did not select next link");
+  }
+  await nextFrame();
+  const nextLink = sourceSelectionEvents.at(-1) ?? "";
+  if (!nextLink || nextLink === "sphere:radius") {
+    errors.push(`source navigation next selected ${nextLink || "nothing"}`);
+  }
+
+  if (!codeEditor.selectAdjacentSourceLink(-1)) {
+    errors.push("source navigation did not select previous link");
+  }
+  await nextFrame();
+  const previousLink = sourceSelectionEvents.at(-1) ?? "";
+  if (previousLink !== "sphere:radius") {
+    errors.push(`source navigation previous selected ${previousLink || "nothing"}`);
+  }
+
+  return {
+    nextLink,
+    previousLink,
+    selectionEvents: sourceSelectionEvents.length - beforeEvents,
+  };
 }
 
 function verifySourceInlayHints(

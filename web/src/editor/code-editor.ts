@@ -23,6 +23,7 @@ import {
 } from "./source-diagnostic-fixes";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
+import { adjacentSourceLink } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 import type { ScrubModifiers } from "./scrub-values";
 
@@ -221,6 +222,7 @@ export interface CodeEditor {
   markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
   applyPreferredQuickFix(): boolean;
+  selectAdjacentSourceLink(direction: -1 | 1): boolean;
   nudgeCurrentSourceLink(direction: -1 | 1, modifiers?: ScrubModifiers, options?: { editSessionId?: string }): boolean;
   layout(): void;
   dispose(): void;
@@ -518,7 +520,7 @@ export function createCodeEditor(
     onSourceLinkCursor(link);
   };
 
-  const liveSourceLinkForNudge = (candidate: GraphSourceLink | null): GraphSourceLink | null => {
+  const liveSourceLinkFor = (candidate: GraphSourceLink | null): GraphSourceLink | null => {
     if (!candidate) return null;
     const exact = sourceLinks.find((link) => sourceLinkKey(link) === sourceLinkKey(candidate));
     if (exact) return exact;
@@ -531,9 +533,9 @@ export function createCodeEditor(
   };
 
   const currentSourceLinkForNudge = (): GraphSourceLink | null => {
-    return liveSourceLinkForNudge(linkAtPosition(editor.getPosition(), { sticky: true }))
-      ?? liveSourceLinkForNudge(selectedSourceLink)
-      ?? liveSourceLinkForNudge(hoveredLink);
+    return liveSourceLinkFor(linkAtPosition(editor.getPosition(), { sticky: true }))
+      ?? liveSourceLinkFor(selectedSourceLink)
+      ?? liveSourceLinkFor(hoveredLink);
   };
 
   const clearKeyboardNudgeSession = () => {
@@ -575,6 +577,33 @@ export function createCodeEditor(
       editSessionId: options.editSessionId ?? keyboardNudgeSessionFor(link),
     });
     return true;
+  };
+
+  const selectSourceLink = (link: GraphSourceLink, options: { reveal?: boolean; selectRange?: boolean } = {}): boolean => {
+    const range = rangeForSourceLink(link);
+    if (!range) return false;
+    cursorLinkKey = sourceLinkKey(link);
+    markSelectedSourceLink(link, { reveal: options.reveal });
+    if (options.selectRange) {
+      editor.setSelection(range);
+    }
+    if (options.reveal) {
+      editor.revealRangeInCenterIfOutsideViewport(range);
+    }
+    onSourceLinkSelect(link);
+    editor.focus();
+    return true;
+  };
+
+  const currentSourceLinkForNavigation = (): GraphSourceLink | null => {
+    return liveSourceLinkFor(linkAtPosition(editor.getPosition(), { sticky: true }))
+      ?? liveSourceLinkFor(selectedSourceLink)
+      ?? liveSourceLinkFor(hoveredLink);
+  };
+
+  const selectAdjacentSourceLink = (direction: -1 | 1): boolean => {
+    const nextLink = adjacentSourceLink(sourceLinks, currentSourceLinkForNavigation(), direction);
+    return nextLink ? selectSourceLink(nextLink, { reveal: true, selectRange: true }) : false;
   };
 
   const markerRange = (marker: monaco.editor.IMarker): monaco.Range => {
@@ -750,6 +779,26 @@ export function createCodeEditor(
       applyPreferredQuickFix();
     },
   });
+  const nextSourceLinkAction = editor.addAction({
+    id: "sdf.nextSourceLink",
+    label: "Next SDF Source Link",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.DownArrow],
+    contextMenuGroupId: "sdf",
+    contextMenuOrder: 2,
+    run() {
+      selectAdjacentSourceLink(1);
+    },
+  });
+  const previousSourceLinkAction = editor.addAction({
+    id: "sdf.previousSourceLink",
+    label: "Previous SDF Source Link",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.UpArrow],
+    contextMenuGroupId: "sdf",
+    contextMenuOrder: 3,
+    run() {
+      selectAdjacentSourceLink(-1);
+    },
+  });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
     pointerLink = null;
@@ -825,7 +874,7 @@ export function createCodeEditor(
           };
         }));
       applyFocusedNodeDecorations(false);
-      selectedSourceLink = liveSourceLinkForNudge(selectedSourceLink);
+      selectedSourceLink = liveSourceLinkFor(selectedSourceLink);
       markSelectedSourceLink(selectedSourceLink);
       cursorLinkKey = null;
       scheduleCursorSourceLinkSync(editor.getPosition());
@@ -887,6 +936,9 @@ export function createCodeEditor(
     applyPreferredQuickFix() {
       return applyPreferredQuickFix();
     },
+    selectAdjacentSourceLink(direction) {
+      return selectAdjacentSourceLink(direction);
+    },
     layout() {
       editor.layout();
     },
@@ -906,6 +958,8 @@ export function createCodeEditor(
       sourceNudgeSubscription.dispose();
       prettifyAction.dispose();
       quickFixAction.dispose();
+      nextSourceLinkAction.dispose();
+      previousSourceLinkAction.dispose();
       leaveSubscription.dispose();
       deleteSourceInlayHintState();
       editor.dispose();
