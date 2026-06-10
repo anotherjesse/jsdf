@@ -226,6 +226,19 @@ const CALL_PATCHES: Record<string, Record<string, CallPatch>> = {
   revolve: { offset: patch("revolve", 0) },
 };
 
+const EXTRA_NODE_CALLS: Record<string, string[]> = {
+  blend: ["blend"],
+  difference: ["difference", "subtract"],
+  equilateralTriangle: ["equilateral_triangle", "equilateralTriangle"],
+  intersection: ["intersection"],
+  negate: ["negate"],
+  polygon: ["polygon"],
+  rotate2: ["rotate"],
+  rotate3: ["rotate", "rotate_to", "rotateTo", "orient"],
+  slice: ["slice"],
+  union: ["union"],
+};
+
 export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
   if (edit.nodeKind === "rotate3" && edit.label === "axis") {
     return patchOrientSource(source, sdf, edit, value);
@@ -241,6 +254,8 @@ export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourc
 
 export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink[] {
   const links: GraphSourceLink[] = [];
+  links.push(...findGraphCallLinks(source, sdf));
+
   const scalarVectorLinks = new Set<string>();
   for (const [nodeKind, labels] of Object.entries(CALL_PATCHES)) {
     for (const [label, patch] of Object.entries(labels)) {
@@ -288,6 +303,41 @@ export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink
   });
 
   return links.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function findGraphCallLinks(source: string, sdf: SDF3): GraphSourceLink[] {
+  const links: GraphSourceLink[] = [];
+  const nodeKinds = new Set([...Object.keys(CALL_PATCHES), ...Object.keys(EXTRA_NODE_CALLS)]);
+  for (const nodeKind of nodeKinds) {
+    const fns = callFnsForNodeKind(nodeKind);
+    if (fns.length === 0) continue;
+    const nodes = collectNodes(sdf.node)
+      .filter((node) => node.kind === nodeKind)
+      .sort((a, b) => a.id - b.id);
+    const calls = findCalls(source, fns);
+    nodes.forEach((node, ordinal) => {
+      const call = calls[ordinal];
+      if (!call) return;
+      links.push({
+        nodeId: node.id,
+        nodeKind,
+        path: [],
+        label: "call",
+        start: call.nameStart,
+        end: call.nameEnd,
+        scrubbable: false,
+      });
+    });
+  }
+  return links;
+}
+
+function callFnsForNodeKind(nodeKind: string): string[] {
+  const fns = new Set(EXTRA_NODE_CALLS[nodeKind] ?? []);
+  for (const patch of Object.values(CALL_PATCHES[nodeKind] ?? {})) {
+    for (const fn of patch.fns) fns.add(fn);
+  }
+  return [...fns];
 }
 
 function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
@@ -428,6 +478,8 @@ interface CallArg {
 
 interface CallMatch {
   start: number;
+  nameStart: number;
+  nameEnd: number;
   args: CallArg[];
 }
 
@@ -439,7 +491,12 @@ function findCalls(source: string, fns: string | string[]): CallMatch[] {
       const open = source.indexOf("(", match.index);
       const close = findMatchingParen(source, open);
       if (close < 0) continue;
-      calls.push({ start: match.index, args: splitArgs(source, open + 1, close) });
+      calls.push({
+        start: match.index,
+        nameStart: match.index,
+        nameEnd: match.index + fn.length,
+        args: splitArgs(source, open + 1, close),
+      });
       pattern.lastIndex = close + 1;
     }
   }
