@@ -64,41 +64,49 @@ function rangeFromRuntimeMessage(
 ): RuntimeTokenRange | null {
   const token = runtimeTokenFromMessage(message);
   if (!token) return null;
-  const range = rangeForToken(source, token, position);
-  return range ? { token, range } : null;
+  const range = rangeForToken(source, token.token, position, token.access);
+  return range ? { token: token.token, range } : null;
 }
 
-function runtimeTokenFromMessage(message: string): string | null {
-  const token = [
-    message.match(/^([$A-Z_a-z][$\w]*) is not defined$/)?.[1],
-    message.match(/(?:^|\.)([$A-Z_a-z][$\w]*) is not a function$/)?.[1],
-    message.match(/(?:^|\.)([$A-Z_a-z][$\w]*) is not a constructor$/)?.[1],
-    message.match(/\(reading ['"]([$A-Z_a-z][$\w]*)['"]\)/)?.[1],
-  ].find(Boolean);
-  return token && IDENTIFIER_RE.test(token) ? token : null;
+function runtimeTokenFromMessage(message: string): RuntimeMessageToken | null {
+  const propertyFunction = message.match(/\.([$A-Z_a-z][$\w]*) is not a function$/)?.[1]
+    ?? message.match(/\(reading ['"]([$A-Z_a-z][$\w]*)['"]\)/)?.[1];
+  if (propertyFunction && IDENTIFIER_RE.test(propertyFunction)) {
+    return { token: propertyFunction, access: "property" };
+  }
+
+  const identifier = message.match(/^([$A-Z_a-z][$\w]*) is not defined$/)?.[1]
+    ?? message.match(/^([$A-Z_a-z][$\w]*) is not a function$/)?.[1]
+    ?? message.match(/^([$A-Z_a-z][$\w]*) is not a constructor$/)?.[1];
+  return identifier && IDENTIFIER_RE.test(identifier)
+    ? { token: identifier, access: "identifier" }
+    : null;
 }
 
 function rangeForToken(
   source: string,
   token: string,
   position: SourcePosition | null,
+  access: RuntimeTokenAccess = "any",
 ): Omit<SourceDiagnostic, "message"> | null {
   if (position) {
-    const lineRange = tokenRangeOnLine(sourceLine(source, position.lineNumber), position.lineNumber, token, position.column);
+    const lineRange = tokenRangeOnLine(sourceLine(source, position.lineNumber), position.lineNumber, token, position.column, access);
     if (lineRange) return lineRange;
   }
 
   const lines = sourceLines(source);
   let best: TokenCandidate | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    for (const candidate of tokenRangesOnLine(lines[index], index + 1, token)) {
+    for (const candidate of tokenRangesOnLine(lines[index], index + 1, token, access)) {
       if (!position) return candidate.range;
       const distance = Math.abs(candidate.lineNumber - position.lineNumber) * 1000
         + Math.abs(candidate.column - position.column);
       if (!best || distance < best.distance) best = { ...candidate, distance };
     }
   }
-  return best?.range ?? null;
+  if (best) return best.range;
+  if (access === "any") return null;
+  return rangeForToken(source, token, position, "any");
 }
 
 function rangeFromSyntaxMessage(message: string, source: string): Omit<SourceDiagnostic, "message"> | null {
@@ -139,8 +147,9 @@ function tokenRangeOnLine(
   lineNumber: number,
   token: string,
   preferredColumn: number,
+  access: RuntimeTokenAccess = "any",
 ): Omit<SourceDiagnostic, "message"> | null {
-  const candidates = tokenRangesOnLine(line, lineNumber, token);
+  const candidates = tokenRangesOnLine(line, lineNumber, token, access);
   let best: TokenRangeOnLine | null = null;
   for (const candidate of candidates) {
     const distance = Math.min(
@@ -152,12 +161,21 @@ function tokenRangeOnLine(
   return best?.range ?? null;
 }
 
-function tokenRangesOnLine(line: string, lineNumber: number, token: string): TokenRangeOnLine[] {
+function tokenRangesOnLine(
+  line: string,
+  lineNumber: number,
+  token: string,
+  access: RuntimeTokenAccess = "any",
+): TokenRangeOnLine[] {
   const ranges: TokenRangeOnLine[] = [];
   let start = line.indexOf(token);
   while (start >= 0) {
     const end = start + token.length;
-    if (isIdentifierBoundary(line[start - 1]) && isIdentifierBoundary(line[end])) {
+    if (
+      isIdentifierBoundary(line[start - 1])
+      && isIdentifierBoundary(line[end])
+      && tokenAccessMatches(line, start, access)
+    ) {
       ranges.push({
         lineNumber,
         column: start + 1,
@@ -174,6 +192,18 @@ function tokenRangesOnLine(line: string, lineNumber: number, token: string): Tok
     start = line.indexOf(token, start + token.length);
   }
   return ranges;
+}
+
+function tokenAccessMatches(line: string, start: number, access: RuntimeTokenAccess): boolean {
+  if (access === "any") return true;
+  const previous = previousNonWhitespaceChar(line, start);
+  return access === "property" ? previous === "." : previous !== ".";
+}
+
+function previousNonWhitespaceChar(line: string, start: number): string {
+  let index = start - 1;
+  while (index >= 0 && /\s/.test(line[index])) index -= 1;
+  return line[index] ?? "";
 }
 
 function isIdentifierBoundary(char: string | undefined): boolean {
@@ -234,6 +264,13 @@ function clamp(value: number, min: number, max: number): number {
 interface SourcePosition {
   lineNumber: number;
   column: number;
+}
+
+type RuntimeTokenAccess = "any" | "identifier" | "property";
+
+interface RuntimeMessageToken {
+  token: string;
+  access: RuntimeTokenAccess;
 }
 
 interface RuntimeTokenRange {

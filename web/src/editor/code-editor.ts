@@ -9,7 +9,11 @@ import {
 import { apiSignatureHelpAt } from "./api-signature-help";
 import type { GraphSourceLink } from "./clean-source-patch";
 import type { SourceDiagnostic } from "./source-diagnostics";
-import { sourceCompletionContextAt, sourceCompletionEntries } from "./source-completions";
+import {
+  SOURCE_COMPLETION_TRIGGER_CHARACTERS,
+  sourceCompletionContextAt,
+  sourceCompletionEntries,
+} from "./source-completions";
 import {
   apiSuggestionTargetFromDiagnosticMessage,
   markerCodeValue,
@@ -42,7 +46,7 @@ interface SourceInlayHintModelState {
 }
 
 monaco.languages.registerCompletionItemProvider("javascript", {
-  triggerCharacters: ["."],
+  triggerCharacters: [...SOURCE_COMPLETION_TRIGGER_CHARACTERS],
   provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
     const word = model.getWordUntilPosition(position);
     const range = {
@@ -53,7 +57,7 @@ monaco.languages.registerCompletionItemProvider("javascript", {
     };
     const context = sourceCompletionContextAt(model.getValue(), position.lineNumber, position.column);
     return {
-      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, insertAsSnippet, insertText, sortText }) => ({
+      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, insertAsSnippet, insertText, matchRank, sortText }) => ({
         label: entry.name,
         kind: completionKindForApiEntry(entry),
         insertText,
@@ -64,7 +68,7 @@ monaco.languages.registerCompletionItemProvider("javascript", {
         documentation: {
           value: `${entry.description}\n\n_${entry.group}_`,
         },
-        preselect: entry.name.toLowerCase().startsWith(context.token.toLowerCase()) && context.token.length > 0,
+        preselect: matchRank <= 1 && context.token.length > 0,
         sortText,
       })),
     };
@@ -241,6 +245,15 @@ export function createCodeEditor(
     scrollBeyondLastLine: false,
     tabSize: 2,
     wordWrap: "on",
+    quickSuggestions: {
+      other: true,
+      comments: false,
+      strings: false,
+    },
+    suggestOnTriggerCharacters: true,
+    acceptSuggestionOnEnter: "smart",
+    wordBasedSuggestions: "off",
+    snippetSuggestions: "top",
     inlayHints: {
       enabled: "on",
       padding: true,

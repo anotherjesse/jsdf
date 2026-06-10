@@ -11,6 +11,7 @@ export interface SourceCompletionEntry {
   filterText: string;
   insertAsSnippet: boolean;
   insertText: string;
+  matchRank: number;
   sortText: string;
 }
 
@@ -19,6 +20,10 @@ interface CompletionParam {
   optional: boolean;
   optionsObject: boolean;
 }
+
+const IDENTIFIER_TRIGGER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$0123456789".split("");
+
+export const SOURCE_COMPLETION_TRIGGER_CHARACTERS = [".", ...IDENTIFIER_TRIGGER_CHARS] as const;
 
 export function sourceCompletionContextAt(source: string, lineNumber: number, column: number): SourceCompletionContext {
   const line = sourceLine(source, lineNumber);
@@ -38,9 +43,14 @@ export function sourceCompletionEntries(context: SourceCompletionContext): Sourc
   return apiCompletionEntriesForScope(context.scope).map((entry) => ({
     entry,
     filterText: entry.name,
+    matchRank: completionMatchRank(entry.name.toLowerCase(), token),
     ...sourceCompletionInsert(entry, context),
     sortText: sourceCompletionSortText(entry, token),
   }));
+}
+
+export function sourceCompletionMatchesToken(entry: SourceCompletionEntry, token: string): boolean {
+  return completionMatchRank(entry.entry.name.toLowerCase(), token.toLowerCase()) < 4;
 }
 
 export function sourceCompletionSortText(entry: ApiReferenceEntry, lowerToken: string): string {

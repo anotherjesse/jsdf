@@ -6,7 +6,12 @@ import { loadEditorPreferences, saveEditorPreferences } from "../editor/editor-p
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
 import { prettifySource } from "../editor/prettify-source";
-import { sourceCompletionContextAt, sourceCompletionEntries } from "../editor/source-completions";
+import {
+  SOURCE_COMPLETION_TRIGGER_CHARACTERS,
+  sourceCompletionContextAt,
+  sourceCompletionEntries,
+  sourceCompletionMatchesToken,
+} from "../editor/source-completions";
 import {
   apiSuggestionTargetFromDiagnosticMessage,
   replacementTextForSuggestionTarget,
@@ -80,9 +85,11 @@ export interface EditorRuntimeVerification {
     methodPartialCompletion: string;
     methodPartialSnippet: string;
     methodPartialScope: string;
+    methodFuzzyCompletion: string;
     easingPartialCompletion: string;
     easingPartialSnippet: string;
     easingPartialScope: string;
+    completionTriggers: string;
     slabSnippet: string;
     sphereSnippet: string;
     signatureChecks: number;
@@ -100,6 +107,8 @@ export interface EditorRuntimeVerification {
     globalErrorSuggestion: string;
     easingErrorColumn: number;
     easingErrorSuggestion: string;
+    propertyOnlyErrorLine: number;
+    propertyOnlyErrorColumn: number;
     quickFixTitle: string;
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
@@ -413,6 +422,11 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (methodPartial.insertText !== "difference(${1:rest})$0") {
     errors.push(`f.diffe snippet rendered ${methodPartial.insertText || "nothing"}`);
   }
+  const methodFuzzy = firstCompletionForSource("const f = sphere(1)\nreturn f.dff", 2, 13);
+  if (methodFuzzy.first !== "difference") errors.push(`f.dff completion first offered ${methodFuzzy.first || "nothing"}`);
+  if (!SOURCE_COMPLETION_TRIGGER_CHARACTERS.includes("e") || !SOURCE_COMPLETION_TRIGGER_CHARACTERS.includes(".")) {
+    errors.push("api hints completion triggers do not keep member suggestions live");
+  }
   const easingPartial = firstCompletionForSource("return sphere(ease.lin)", 1, 23);
   if (easingPartial.context.scope !== "ease") errors.push(`ease.lin completion used ${easingPartial.context.scope} scope`);
   if (easingPartial.first !== "linear") errors.push(`ease.lin completion first offered ${easingPartial.first || "nothing"}`);
@@ -429,9 +443,11 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     methodPartialCompletion: methodPartial.first,
     methodPartialSnippet: methodPartial.insertText,
     methodPartialScope: methodPartial.context.scope,
+    methodFuzzyCompletion: methodFuzzy.first,
     easingPartialCompletion: easingPartial.first,
     easingPartialSnippet: easingPartial.insertText,
     easingPartialScope: easingPartial.context.scope,
+    completionTriggers: SOURCE_COMPLETION_TRIGGER_CHARACTERS.join(""),
     slabSnippet: slabPartial.insertText,
     sphereSnippet: spherePartial.insertText,
     signatureChecks,
@@ -448,7 +464,7 @@ function firstCompletionForSource(
 ): { context: ReturnType<typeof sourceCompletionContextAt>; first: string; insertText: string } {
   const context = sourceCompletionContextAt(source, lineNumber, column);
   const first = sourceCompletionEntries(context)
-    .filter(({ entry }) => entry.name.toLowerCase().startsWith(context.token.toLowerCase()))
+    .filter((entry) => sourceCompletionMatchesToken(entry, context.token))
     .sort((left, right) => left.sortText.localeCompare(right.sortText))[0];
   return {
     context,
@@ -511,6 +527,22 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     errors.push(`easing typo quick fix ${easingQuickFixTarget ?? "missing"} -> ${easingQuickFixReplacement}`);
   }
 
+  const propertyOnlySource = "const diffe = sphere(0.2)\nreturn sphere(1).diffe(diffe)";
+  const propertyOnlyDiagnostic = sourceDiagnosticFromError(
+    new TypeError("sphere(...).diffe is not a function"),
+    propertyOnlySource,
+  );
+  if (
+    propertyOnlyDiagnostic.lineNumber !== 2
+    || propertyOnlyDiagnostic.column !== 18
+    || propertyOnlyDiagnostic.endColumn !== 23
+  ) {
+    errors.push(`property typo diagnostic range ${propertyOnlyDiagnostic.lineNumber}:${propertyOnlyDiagnostic.column}-${propertyOnlyDiagnostic.endColumn}`);
+  }
+  if (!propertyOnlyDiagnostic.message.includes(".difference")) {
+    errors.push(`property typo diagnostic suggestion ${propertyOnlyDiagnostic.message}`);
+  }
+
   const syntaxSource = "const radius = ;\nreturn sphere(1)";
   const syntaxDiagnostic = diagnosticForSource(syntaxSource, errors, "syntax typo");
   if (syntaxDiagnostic.lineNumber !== 1) {
@@ -530,6 +562,8 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     globalErrorSuggestion: globalDiagnostic.message,
     easingErrorColumn: easingDiagnostic.column,
     easingErrorSuggestion: easingDiagnostic.message,
+    propertyOnlyErrorLine: propertyOnlyDiagnostic.lineNumber,
+    propertyOnlyErrorColumn: propertyOnlyDiagnostic.column,
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,
