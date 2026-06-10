@@ -167,7 +167,9 @@ undoGraphButton.addEventListener("click", undoGraphEdit);
 redoGraphButton.addEventListener("click", redoGraphEdit);
 resetGraphButton.addEventListener("click", resetGraphEdits);
 window.addEventListener("resize", () => activeRenderer()?.redraw());
+window.addEventListener("keydown", handleAppKeyboardShortcuts, { capture: true });
 window.addEventListener("keydown", handleGraphKeyboardShortcuts);
+window.addEventListener("beforeunload", handleBeforeUnload);
 
 void boot();
 
@@ -521,6 +523,31 @@ function redoGraphEdit(): void {
   updateGraphHistoryControls();
   if (!entry) return;
   applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
+}
+
+function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
+  if (!isSaveShortcut(event)) return;
+  event.preventDefault();
+  if (event.repeat) return;
+  if (!boundsAreValid) {
+    setEditorStatus("Fix bounds before saving", "error");
+    return;
+  }
+  if (!hasUnsavedChanges) {
+    setEditorStatus("No changes to save", "idle");
+    return;
+  }
+  saveCurrentSource();
+}
+
+function isSaveShortcut(event: KeyboardEvent): boolean {
+  return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "s";
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!hasUnsavedChanges) return;
+  event.preventDefault();
+  event.returnValue = "";
 }
 
 function handleGraphKeyboardShortcuts(event: KeyboardEvent): void {
