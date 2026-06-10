@@ -167,6 +167,7 @@ undoGraphButton.addEventListener("click", undoGraphEdit);
 redoGraphButton.addEventListener("click", redoGraphEdit);
 resetGraphButton.addEventListener("click", resetGraphEdits);
 window.addEventListener("resize", () => activeRenderer()?.redraw());
+window.addEventListener("keydown", handleGraphKeyboardShortcuts);
 
 void boot();
 
@@ -520,6 +521,42 @@ function redoGraphEdit(): void {
   updateGraphHistoryControls();
   if (!entry) return;
   applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
+}
+
+function handleGraphKeyboardShortcuts(event: KeyboardEvent): void {
+  if (editorView !== "graph") return;
+  if (!event.metaKey && !event.ctrlKey) return;
+  if (event.altKey || isEditableEventTarget(event.target)) return;
+
+  const key = event.key.toLowerCase();
+  if (key === "z" && event.shiftKey) {
+    if (!graphHistory.canRedo) return;
+    event.preventDefault();
+    redoGraphEdit();
+    return;
+  }
+
+  if (key === "z") {
+    if (!graphHistory.canUndo) return;
+    event.preventDefault();
+    undoGraphEdit();
+    return;
+  }
+
+  if (key === "y") {
+    if (!graphHistory.canRedo) return;
+    event.preventDefault();
+    redoGraphEdit();
+  }
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
 }
 
 function resetGraphEdits(): void {
