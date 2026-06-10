@@ -680,6 +680,7 @@ function isCountParam(label: string): boolean {
 }
 
 function isNonNegativeParam(label: string): boolean {
+  if (label.startsWith("entries[") && label.endsWith(".k")) return true;
   return /(^|\.)(radius|r|r0|r1|thickness|h|padding|scaledistance)$/.test(label)
     || label.startsWith("size")
     || label.startsWith("factor")

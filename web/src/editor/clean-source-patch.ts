@@ -239,11 +239,16 @@ const EXTRA_NODE_CALLS: Record<string, string[]> = {
   union: ["union"],
 };
 
+const CSG_NODE_KINDS = new Set(["union", "difference", "intersection", "blend"]);
+
 export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
   if (edit.nodeKind === "rotate3" && edit.label === "axis") {
     return patchOrientSource(source, sdf, edit, value);
   }
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (isEntryKEdit(edit)) {
+    return patchEntryKSource(source, sdf, edit, value);
+  }
   const patch = CALL_PATCHES[edit.nodeKind]?.[edit.label];
   if (!patch) return null;
   const nodes = patchableNodes(sdf.node, edit.nodeKind, edit.label);
@@ -255,6 +260,7 @@ export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourc
 export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink[] {
   const links: GraphSourceLink[] = [];
   links.push(...findGraphCallLinks(source, sdf));
+  links.push(...findGraphEntryKLinks(source, sdf));
 
   const scalarVectorLinks = new Set<string>();
   for (const [nodeKind, labels] of Object.entries(CALL_PATCHES)) {
@@ -338,6 +344,84 @@ function callFnsForNodeKind(nodeKind: string): string[] {
     for (const fn of patch.fns) fns.add(fn);
   }
   return [...fns];
+}
+
+function findGraphEntryKLinks(source: string, sdf: SDF3): GraphSourceLink[] {
+  const links: GraphSourceLink[] = [];
+  const calls = findKMethodCalls(source);
+  entryKTargets(sdf.node).forEach((target, ordinal) => {
+    const call = calls[ordinal];
+    if (!call) return;
+    const label = entryKLabel(target.entryIndex);
+    links.push({
+      nodeId: target.node.id,
+      nodeKind: target.node.kind,
+      path: ["entries", target.entryIndex, "k"],
+      label,
+      start: call.nameStart,
+      end: call.nameEnd,
+      scrubbable: false,
+    });
+
+    const range = numericArgRange(source, call, 0);
+    if (!range) return;
+    links.push({
+      nodeId: target.node.id,
+      nodeKind: target.node.kind,
+      path: ["entries", target.entryIndex, "k"],
+      label,
+      ...range,
+    });
+  });
+  return links;
+}
+
+function patchEntryKSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: number): string | null {
+  const entryIndex = entryKIndex(edit);
+  if (entryIndex == null) return null;
+  const ordinal = entryKTargets(sdf.node).findIndex((target) => {
+    return target.node.id === edit.nodeId && target.entryIndex === entryIndex;
+  });
+  if (ordinal < 0) return null;
+  const call = findKMethodCalls(source)[ordinal];
+  if (!call) return null;
+  const range = numericArgRange(source, call, 0);
+  if (!range) return null;
+  return replaceRange(source, range.start, range.end, formatNumberLike(source.slice(range.start, range.end), Math.max(0, value)));
+}
+
+interface EntryKTarget {
+  node: Node;
+  entryIndex: number;
+}
+
+function entryKTargets(root: Node): EntryKTarget[] {
+  const targets: EntryKTarget[] = [];
+  for (const node of collectNodes(root).sort((a, b) => a.id - b.id)) {
+    if (!CSG_NODE_KINDS.has(node.kind)) continue;
+    const entries = node.params.entries;
+    if (!Array.isArray(entries)) continue;
+    entries.forEach((entry, entryIndex) => {
+      const k = (entry as Record<string, unknown> | null | undefined)?.k;
+      if (typeof k === "number" && Number.isFinite(k)) {
+        targets.push({ node, entryIndex });
+      }
+    });
+  }
+  return targets;
+}
+
+function isEntryKEdit(edit: GraphSourceEdit): boolean {
+  return entryKIndex(edit) != null && CSG_NODE_KINDS.has(edit.nodeKind);
+}
+
+function entryKIndex(edit: GraphSourceEdit): number | null {
+  const [entries, index, k] = edit.path;
+  return entries === "entries" && typeof index === "number" && k === "k" ? index : null;
+}
+
+function entryKLabel(entryIndex: number): string {
+  return `entries[${entryIndex}].k`;
 }
 
 function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
@@ -441,12 +525,11 @@ function findNthCallArgumentRange(source: string, patch: CallPatch, ordinal: num
   const calls = findCalls(source, patch.fns);
   const call = calls[ordinal];
   if (!call) return null;
+  if (patch.element == null) {
+    return numericArgRange(source, call, patch.arg);
+  }
   const arg = call.args[patch.arg];
   if (!arg) return null;
-  if (patch.element == null) {
-    if (!isNumericLiteral(arg.text)) return null;
-    return trimRange(source, arg.start, arg.end);
-  }
   return findVectorElementRange(source, arg, patch.element);
 }
 
@@ -501,6 +584,19 @@ function findCalls(source: string, fns: string | string[]): CallMatch[] {
     }
   }
   return calls.sort((a, b) => a.start - b.start);
+}
+
+function findKMethodCalls(source: string): CallMatch[] {
+  return findCalls(source, "k").filter((call) => {
+    const arg = call.args[0]?.text.trim();
+    return source[call.nameStart - 1] === "." && arg !== undefined && arg !== "" && arg !== "null";
+  });
+}
+
+function numericArgRange(source: string, call: CallMatch, index: number): SourceRange | null {
+  const arg = call.args[index];
+  if (!arg || !isNumericLiteral(arg.text)) return null;
+  return trimRange(source, arg.start, arg.end);
 }
 
 function findMatchingParen(source: string, open: number): number {

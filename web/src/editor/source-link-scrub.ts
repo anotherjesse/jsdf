@@ -45,6 +45,7 @@ function isCountParam(label: string): boolean {
 
 function isNonNegativeParam(label: string): boolean {
   const lower = label.toLowerCase();
+  if (lower.startsWith("entries[") && lower.endsWith(".k")) return true;
   return /(^|\.)(radius|r|r0|r1|thickness|h|padding|scaledistance)$/.test(lower)
     || lower.startsWith("size")
     || lower.startsWith("factor")
