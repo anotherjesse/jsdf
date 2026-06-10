@@ -994,6 +994,7 @@ export class GraphInspector {
     const showCustom = activeAxis === "custom" || this.customMatrixNodeIds.has(node.id);
     const group = document.createElement("div");
     group.className = "axis-control";
+    if (this.matchesFilterText("orient", "axis", "matrix", activeAxis)) group.classList.add("matched");
     if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
@@ -1040,6 +1041,7 @@ export class GraphInspector {
     const sourceLink = this.sourceLinkForParam(node.id, ["matrix"]);
     const group = document.createElement("div");
     group.className = "matrix-control";
+    if (this.matrixMatchesFilter(matrix)) group.classList.add("matched");
     if (matrixCellPaths().some((path) => this.dirtyParamKeys.has(paramKey(node.id, path)))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
@@ -1144,6 +1146,7 @@ export class GraphInspector {
   private renderNumberField(node: Node, field: NumericParam): HTMLElement {
     const row = document.createElement("div");
     row.className = "param-row";
+    if (this.numericParamMatchesFilter(field)) row.classList.add("matched");
     if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, field.path)) row.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, field.path)) row.classList.add("source-selected");
@@ -1263,6 +1266,27 @@ export class GraphInspector {
     }) ?? null;
   }
 
+  private numericParamMatchesFilter(field: NumericParam): boolean {
+    return this.matchesFilterText(field.label, String(field.value), ...field.path.map(String));
+  }
+
+  private matrixMatchesFilter(matrix: number[][]): boolean {
+    const parts = ["matrix"];
+    matrix.forEach((row, rowIndex) => {
+      row.forEach((value, columnIndex) => {
+        parts.push(`matrix[${rowIndex}][${columnIndex}]`, String(value));
+      });
+    });
+    return this.matchesFilterText(...parts);
+  }
+
+  private matchesFilterText(...parts: string[]): boolean {
+    const terms = filterTerms(this.filter);
+    if (terms.length === 0) return false;
+    const text = parts.join(" ").toLowerCase();
+    return terms.every((term) => text.includes(term));
+  }
+
   private sourceLinkMatchesParam(link: GraphSourceLink | null, nodeId: number, path: ParamPath): boolean {
     if (!link || link.nodeId !== nodeId || link.end <= link.start) return false;
     return pathsEqual(link.path, path) || (link.scrubbable === false && pathStartsWith(path, link.path));
@@ -1328,6 +1352,10 @@ function collectNumericParams(params: Record<string, unknown>): NumericParam[] {
   const out: NumericParam[] = [];
   walkParams(params, [], out);
   return out;
+}
+
+function filterTerms(filter: string): string[] {
+  return filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
 function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void {

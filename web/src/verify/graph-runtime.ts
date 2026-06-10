@@ -152,6 +152,22 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     }
     const sphereHoverLabel = `${sphere.kind} #${sphere.id}`;
 
+    const filterInput = graphRoot.querySelector<HTMLInputElement>(".graph-toolbar input[type='search']");
+    if (!filterInput) {
+      verifyErrors.push("graph filter input did not render");
+    } else {
+      filterInput.value = "radius";
+      filterInput.dispatchEvent(new Event("input", { bubbles: true }));
+      if (!graphRoot.querySelector(".param-row.matched")) {
+        verifyErrors.push("filter did not mark matching radius param row");
+      }
+      filterInput.value = "";
+      filterInput.dispatchEvent(new Event("input", { bubbles: true }));
+      if (graphRoot.querySelector(".param-row.matched")) {
+        verifyErrors.push("clearing filter left matched param row marked");
+      }
+    }
+
     const currentCrumb = graphRoot.querySelector<HTMLElement>(".param-breadcrumb button[aria-current='page']");
     if (!currentCrumb) {
       verifyErrors.push("selected sphere has no current breadcrumb crumb");

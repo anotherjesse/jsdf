@@ -988,6 +988,14 @@ button:disabled {
   color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
 }
 
+.param-row.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.param-row.matched .param-name {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
 .param-row.source-hovered {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
@@ -1098,6 +1106,14 @@ button:disabled {
   color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
 }
 
+.axis-control.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.axis-control.matched .axis-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
 .axis-control.source-hovered {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
@@ -1157,6 +1173,14 @@ button:disabled {
 
 .matrix-control.edited {
   border-left-color: var(--accent-2);
+}
+
+.matrix-control.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.matrix-control.matched .matrix-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
 }
 
 .matrix-control.source-hovered {
