@@ -12,6 +12,11 @@ export interface AppHealthRuntimeVerification {
     graphInspector: boolean;
     status: string;
   };
+  graphHoverStatus: {
+    before: string;
+    during: string;
+    after: string;
+  };
   errors: string[];
 }
 
@@ -31,6 +36,7 @@ export async function runAppHealthRuntimeVerification(
   const health = await waitForAppHealth(frame, APP_HEALTH_TIMEOUT_MS);
   const loadMs = performance.now() - start;
   const dom = summarizeFrameDom(frame);
+  const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
 
   if (!health) {
     errors.push("app health hook never became available");
@@ -44,6 +50,7 @@ export async function runAppHealthRuntimeVerification(
     loadMs,
     health,
     dom,
+    graphHoverStatus,
     errors,
   };
 }
@@ -132,6 +139,62 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",
   };
+}
+
+async function verifyGraphHoverKeepsStatus(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["graphHoverStatus"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = { before: "", during: "", after: "" };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for graph hover status verification");
+    return empty;
+  }
+
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const status = frameDocument.querySelector<HTMLElement>("#editorStatus");
+  if (!graphMode || !status) {
+    errors.push("app frame missing graph mode button or editor status");
+    return empty;
+  }
+
+  graphMode.click();
+  await nextFrame(frameWindow);
+
+  const graphNodes = Array.from(frameDocument.querySelectorAll<HTMLElement>(".graph-node[data-node-id]"));
+  const target = graphNodes.find((node) => node.getAttribute("aria-pressed") !== "true") ?? graphNodes[0] ?? null;
+  if (!target) {
+    errors.push("app frame had no graph node to hover");
+    return empty;
+  }
+
+  const before = status.textContent ?? "";
+  dispatchPointer(target, "pointerenter");
+  dispatchPointer(target, "pointermove");
+  await nextFrame(frameWindow);
+  const during = status.textContent ?? "";
+  dispatchPointer(target, "pointerleave");
+  await nextFrame(frameWindow);
+  const after = status.textContent ?? "";
+
+  if (during !== before) {
+    errors.push(`graph hover changed editor status from "${before}" to "${during}"`);
+  }
+  if (after !== before) {
+    errors.push(`graph hover leave changed editor status from "${before}" to "${after}"`);
+  }
+
+  return { before, during, after };
+}
+
+function dispatchPointer(target: HTMLElement, type: string): void {
+  target.dispatchEvent(new Event(type, { bubbles: true, composed: true }));
+}
+
+function nextFrame(frameWindow: Window): Promise<void> {
+  return new Promise((resolve) => frameWindow.requestAnimationFrame(() => resolve()));
 }
 
 function safeFrameWindow(frame: HTMLIFrameElement): AppHealthWindow | null {
