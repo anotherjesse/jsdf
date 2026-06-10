@@ -97,6 +97,7 @@ const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
 const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
 const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
+const SELECTED_TARGET_SHORTCUTS = "Control+Alt+Enter Meta+Alt+Enter";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -792,6 +793,12 @@ function configureEditorModeShortcuts(): void {
 }
 
 function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
+  if (isSelectedTargetShortcut(event) && !selectionFocusButton.hidden) {
+    event.preventDefault();
+    if (!event.repeat) revealSelectedTarget();
+    return;
+  }
+
   const editorShortcutMode = editorModeShortcut(event);
   if (editorShortcutMode) {
     event.preventDefault();
@@ -844,6 +851,13 @@ function editorModeShortcut(event: KeyboardEvent): EditorView | null {
 function isSourceHintsShortcut(event: KeyboardEvent): boolean {
   if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
   return event.code === "KeyH" || event.key.toLowerCase() === "h";
+}
+
+function isSelectedTargetShortcut(event: KeyboardEvent): boolean {
+  return (event.metaKey || event.ctrlKey)
+    && event.altKey
+    && !event.shiftKey
+    && event.key === "Enter";
 }
 
 function isCommandShortcut(event: KeyboardEvent, key: string): boolean {
@@ -988,14 +1002,16 @@ function updateSelectionFocusButton(): void {
     selectionFocusButton.textContent = "";
     selectionFocusButton.removeAttribute("title");
     selectionFocusButton.removeAttribute("aria-label");
+    selectionFocusButton.removeAttribute("aria-keyshortcuts");
     return;
   }
 
   const destination = editorView === "graph" ? "code" : "graph";
   selectionFocusButton.hidden = false;
   selectionFocusButton.textContent = label;
-  selectionFocusButton.title = `Reveal ${label} in ${destination}`;
+  selectionFocusButton.title = `Reveal ${label} in ${destination} (Cmd/Ctrl+Alt+Enter)`;
   selectionFocusButton.setAttribute("aria-label", `Reveal ${label} in ${destination}`);
+  selectionFocusButton.setAttribute("aria-keyshortcuts", SELECTED_TARGET_SHORTCUTS);
 }
 
 function selectedSourceLinkLabel(link: GraphSourceLink): string {
@@ -1428,6 +1444,7 @@ function appHealthDiagnostics() {
       ? selectedSourceLinkLabel(selectedSourceLink)
       : null,
     selectionFocusLabel: selectionFocusButton.textContent?.trim() ?? "",
+    selectionFocusShortcut: selectionFocusButton.getAttribute("aria-keyshortcuts") ?? "",
     selectionFocusVisible: !selectionFocusButton.hidden,
     hiddenNodes: hiddenNodeIds.size,
     meshTriangles: mesh ? mesh.triangles.length : null,

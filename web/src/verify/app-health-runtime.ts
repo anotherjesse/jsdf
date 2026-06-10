@@ -17,6 +17,7 @@ export interface AppHealthRuntimeVerification {
     graphInspector: boolean;
     status: string;
     selectionFocusLabel: string;
+    selectionFocusShortcut: string;
     selectionFocusVisible: boolean;
   };
   graphHoverStatus: {
@@ -53,6 +54,8 @@ export interface AppHealthRuntimeVerification {
     labelBefore: string;
     labelAfterGraph: string;
     labelAfterCode: string;
+    shortcut: string;
+    shortcutPreventedDefault: boolean;
     graphView: string;
     graphVisible: boolean;
     graphFocusedSelectedNode: boolean;
@@ -146,6 +149,9 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
   if (!health.selectionFocusVisible) errors.push("selection focus button was not visible in app health");
   if (!health.selectionFocusLabel.includes("#")) errors.push(`selection focus label rendered ${health.selectionFocusLabel || "nothing"}`);
+  if (health.selectionFocusShortcut !== "Control+Alt+Enter Meta+Alt+Enter") {
+    errors.push(`selection focus shortcut rendered ${health.selectionFocusShortcut || "nothing"}`);
+  }
   if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
   if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
   if (!health.graphActionButtons.includes("Reset graph edits")) errors.push("graph action health missing Reset button");
@@ -169,6 +175,9 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   verifyEditorModeShortcuts("DOM", dom.editorModeShortcuts, errors);
   if (!dom.selectionFocusVisible) errors.push("app frame DOM selection focus button was hidden");
   if (!dom.selectionFocusLabel.includes("#")) errors.push(`app frame DOM selection focus label rendered ${dom.selectionFocusLabel || "nothing"}`);
+  if (dom.selectionFocusShortcut !== "Control+Alt+Enter Meta+Alt+Enter") {
+    errors.push(`app frame DOM selection focus shortcut rendered ${dom.selectionFocusShortcut || "nothing"}`);
+  }
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
   if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
@@ -275,6 +284,7 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",
     selectionFocusLabel: frameDocument?.querySelector("#selectionFocusButton")?.textContent?.trim() ?? "",
+    selectionFocusShortcut: frameDocument?.querySelector("#selectionFocusButton")?.getAttribute("aria-keyshortcuts") ?? "",
     selectionFocusVisible: Boolean(frameDocument?.querySelector<HTMLButtonElement>("#selectionFocusButton:not([hidden])")),
   };
 }
@@ -465,6 +475,8 @@ async function verifySelectionFocusButton(
     labelBefore: "",
     labelAfterGraph: "",
     labelAfterCode: "",
+    shortcut: "",
+    shortcutPreventedDefault: false,
     graphView: "",
     graphVisible: false,
     graphFocusedSelectedNode: false,
@@ -489,10 +501,21 @@ async function verifySelectionFocusButton(
   codeMode.click();
   await settleFrame(frameWindow);
   const labelBefore = button.textContent?.trim() ?? "";
+  const shortcut = button.getAttribute("aria-keyshortcuts") ?? "";
   if (button.hidden) errors.push("selection focus button was hidden before navigation");
   if (!labelBefore.includes("#")) errors.push(`selection focus button label rendered ${labelBefore || "nothing"}`);
+  if (shortcut !== "Control+Alt+Enter Meta+Alt+Enter") {
+    errors.push(`selection focus button advertised shortcut as ${shortcut || "nothing"}`);
+  }
 
-  button.click();
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const shortcutPreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "Enter",
+    ctrlKey: true,
+    altKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
   await settleFrame(frameWindow);
   const graphHealth = readAppHealth(frame);
   const graphView = graphHealth?.editorView ?? "";
@@ -515,6 +538,7 @@ async function verifySelectionFocusButton(
   const revealedMarks = frameDocument.querySelectorAll("#codeEditor .source-revealed-link").length;
 
   if (graphView !== "graph") errors.push(`selection focus button switched to ${graphView || "unknown"} instead of graph`);
+  if (!shortcutPreventedDefault) errors.push("selection focus shortcut did not prevent the browser default");
   if (!graphVisible) errors.push("selection focus button left graph panel hidden");
   if (!graphFocusedSelectedNode) errors.push("selection focus button did not focus the selected graph node");
   if (codeView !== "code") errors.push(`selection focus button returned to ${codeView || "unknown"} instead of code`);
@@ -528,6 +552,8 @@ async function verifySelectionFocusButton(
     labelBefore,
     labelAfterGraph,
     labelAfterCode,
+    shortcut,
+    shortcutPreventedDefault,
     graphView,
     graphVisible,
     graphFocusedSelectedNode,
