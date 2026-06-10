@@ -89,6 +89,7 @@ export function createCodeEditor(
   let focusedNodeDecorations: string[] = [];
   let revealedSourceDecorations: string[] = [];
   let selectedSourceDecorations: string[] = [];
+  let localHoveredSourceDecorations: string[] = [];
   let hoveredSourceDecorations: string[] = [];
   let editedSourceDecorations: string[] = [];
   let focusedNodeId: number | null = null;
@@ -129,6 +130,7 @@ export function createCodeEditor(
     if (key === hoveredKey) return;
     hoveredKey = key;
     hoveredLink = link;
+    markLocalHoveredSourceLink(link);
     onSourceLinkHover(link, { shiftKey });
   };
 
@@ -203,6 +205,27 @@ export function createCodeEditor(
     if (options.reveal) {
       editor.revealRangeInCenterIfOutsideViewport(range);
     }
+  };
+
+  const updateHoveredSourceDecorations = (decorations: string[], link: GraphSourceLink | null): string[] => {
+    const range = link ? rangeForSourceLink(link) : null;
+    if (!range) {
+      return editor.deltaDecorations(decorations, []);
+    }
+    return editor.deltaDecorations(decorations, [{
+      range,
+      options: {
+        inlineClassName: "source-hovered-link",
+      },
+    }]);
+  };
+
+  const markLocalHoveredSourceLink = (link: GraphSourceLink | null) => {
+    localHoveredSourceDecorations = updateHoveredSourceDecorations(localHoveredSourceDecorations, link);
+  };
+
+  const markHoveredSourceLink = (link: GraphSourceLink | null) => {
+    hoveredSourceDecorations = updateHoveredSourceDecorations(hoveredSourceDecorations, link);
   };
 
   const syncCursorSourceLink = (position: monaco.Position | null | undefined) => {
@@ -331,6 +354,7 @@ export function createCodeEditor(
       if (!model) return;
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
       selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
+      localHoveredSourceDecorations = editor.deltaDecorations(localHoveredSourceDecorations, []);
       hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
       editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
       sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
@@ -362,17 +386,7 @@ export function createCodeEditor(
       markSelectedSourceLink(link, options);
     },
     markHoveredSourceLink(link: GraphSourceLink | null) {
-      const range = link ? rangeForSourceLink(link) : null;
-      if (!range) {
-        hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
-        return;
-      }
-      hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, [{
-        range,
-        options: {
-          inlineClassName: "source-hovered-link",
-        },
-      }]);
+      markHoveredSourceLink(link);
     },
     markEditedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
       const range = link ? rangeForSourceLink(link) : null;
