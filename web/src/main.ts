@@ -8,6 +8,7 @@ import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./ed
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
+import { buildVisibleSdf } from "./editor/visible-sdf";
 import {
   deleteSavedSourceDocument,
   deleteSavedSourceVersion,
@@ -81,6 +82,7 @@ let selectedNode: Node | null = null;
 let hoveredNode: Node | null = null;
 let focusPreview: SoloPreview | null = null;
 let soloPreview: SoloPreview | null = null;
+let hiddenNodeIds = new Set<number>();
 let boundsEditor: BoundsEditor | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
@@ -188,6 +190,7 @@ async function boot(): Promise<void> {
       onEdit: handleGraphEdit,
       onSolo: handleSoloPreview,
       onRevealSource: revealGraphSource,
+      onVisibilityChange: handleGraphVisibilityChange,
     });
     setViewMode("shader");
     compileEditorSource({ status: "Ready", statusState: "idle", invalidateMesh: false });
@@ -224,6 +227,7 @@ function loadExample(id: string): void {
   selectedNode = null;
   hoveredNode = null;
   focusPreview = null;
+  hiddenNodeIds = new Set();
   codeEditor?.setValue(source);
   markSourceClean(source, activeSourceName);
   renderLoadDialog();
@@ -251,6 +255,7 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
   selectedNode = null;
   hoveredNode = null;
   focusPreview = null;
+  hiddenNodeIds = new Set();
   codeEditor?.setValue(source);
   markSourceClean(source, document.name);
   renderLoadDialog();
@@ -328,6 +333,7 @@ function compileEditorSource(
     const { sdf } = evaluateSource(source);
     soloPreview = null;
     focusPreview = null;
+    hiddenNodeIds = new Set();
     activeSdf = sdf;
     graphInspector?.setSdf(sdf);
     codeEditor?.setError(null);
@@ -473,6 +479,14 @@ function handleSoloPreview(preview: SoloPreview | null): void {
     setViewMode("mesh");
     return;
   }
+  schedulePreview(0);
+}
+
+function handleGraphVisibilityChange(hiddenIds: readonly number[]): void {
+  hiddenNodeIds = new Set(hiddenIds);
+  focusPreview = null;
+  soloPreview = null;
+  invalidateMeshForActiveSdf();
   schedulePreview(0);
 }
 
@@ -718,10 +732,10 @@ function scheduleMeshBuild(delay = 300): void {
 async function renderCurrent(): Promise<void> {
   if (!rayRenderer) return;
   const preview = soloPreview;
-  const sdf = preview?.sdf ?? activeSdf;
+  const sdf = preview?.sdf ?? visibleActiveSdf();
   if (!sdf) {
     previewStat.textContent = "-";
-    overlay.textContent = "Write editor code that returns an SDF3.";
+    overlay.textContent = activeSdf ? "No visible graph nodes." : "Write editor code that returns an SDF3.";
     return;
   }
 
@@ -750,17 +764,21 @@ async function renderCurrent(): Promise<void> {
 }
 
 function highlightForRender(preview: SoloPreview | null): { node: Node | null; mode: "mark" | "focus" } {
-  if (preview?.node) return { node: isActiveRootNode(preview.node) ? null : preview.node, mode: "mark" };
-  if (focusPreview?.sdf.node && !isActiveRootNode(focusPreview.node)) {
+  if (preview?.node) return { node: isHighlightableNode(preview.node) ? preview.node : null, mode: "mark" };
+  if (focusPreview?.sdf.node && isHighlightableNode(focusPreview.node)) {
     return { node: focusPreview.sdf.node, mode: "focus" };
   }
-  if (hoveredNode && !isActiveRootNode(hoveredNode)) return { node: hoveredNode, mode: "mark" };
-  if (selectedNode && !isActiveRootNode(selectedNode)) return { node: selectedNode, mode: "mark" };
+  if (hoveredNode && isHighlightableNode(hoveredNode)) return { node: hoveredNode, mode: "mark" };
+  if (selectedNode && isHighlightableNode(selectedNode)) return { node: selectedNode, mode: "mark" };
   return { node: null, mode: "mark" };
 }
 
 function isActiveRootNode(node: Node): boolean {
   return activeSdf?.node.id === node.id;
+}
+
+function isHighlightableNode(node: Node): boolean {
+  return !isActiveRootNode(node) && !hiddenNodeIds.has(node.id);
 }
 
 async function showMesh(): Promise<void> {
@@ -780,9 +798,9 @@ async function rebuildMeshView(): Promise<void> {
 async function buildMesh(): Promise<void> {
   if (mesh && mesh.triangles.length > 0) return;
   if (meshBuildPromise) return meshBuildPromise;
-  const sdf = activeSdf;
+  const sdf = visibleActiveSdf();
   if (!sdf) {
-    overlay.textContent = "Fix the editor code before building mesh view.";
+    overlay.textContent = activeSdf ? "No visible graph nodes to mesh." : "Fix the editor code before building mesh view.";
     return;
   }
 
@@ -846,6 +864,10 @@ function setEditorStatus(message: string, state: EditorStatusState): void {
 
 function currentBounds(): Bounds3 {
   return activeBounds;
+}
+
+function visibleActiveSdf(): SDF3 | null {
+  return activeSdf ? buildVisibleSdf(activeSdf, hiddenNodeIds) : null;
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {

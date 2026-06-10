@@ -23,6 +23,7 @@ export interface GraphInspectorOptions {
   onEdit(edit: GraphParamEdit): void;
   onSolo(preview: SoloPreview | null): void;
   onRevealSource(link: GraphSourceLink): void;
+  onVisibilityChange(hiddenNodeIds: readonly number[]): void;
 }
 
 export interface GraphHoverOptions {
@@ -40,6 +41,7 @@ export class GraphInspector {
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
   private revealSelectedAfterRender = false;
+  private readonly hiddenNodeIds = new Set<number>();
   private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
@@ -102,8 +104,10 @@ export class GraphInspector {
     this.hoverSoloKey = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
+    this.hiddenNodeIds.clear();
     this.render();
     this.options.onSelect(this.selected);
+    this.options.onVisibilityChange([]);
   }
 
   setSelected(node: Node | null): void {
@@ -194,13 +198,31 @@ export class GraphInspector {
     group.className = "graph-node-group";
     const view = model.nodeById.get(node.id);
 
+    const row = document.createElement("div");
+    row.className = "graph-node-row";
+    row.style.setProperty("--depth", String(depth));
+
+    const isRoot = this.sdf?.node.id === node.id;
+    const visibility = document.createElement("button");
+    visibility.type = "button";
+    visibility.className = "graph-visibility";
+    visibility.disabled = isRoot;
+    visibility.title = isRoot ? "Root stays visible" : this.hiddenNodeIds.has(node.id) ? "Show node" : "Hide node";
+    visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
+    visibility.setAttribute("aria-pressed", String(!this.hiddenNodeIds.has(node.id)));
+    visibility.append(renderEyeIcon());
+    visibility.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleNodeVisibility(node);
+    });
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "graph-node";
+    if (this.hiddenNodeIds.has(node.id)) button.classList.add("hidden-node");
     if (this.filter && view?.matched) button.classList.add("matched");
     if (this.hovered?.id === node.id) button.classList.add("hovered");
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
-    button.style.setProperty("--depth", String(depth));
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
     button.dataset.nodeId = String(node.id);
     const label = document.createElement("span");
@@ -210,8 +232,9 @@ export class GraphInspector {
     meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}`;
     button.append(label, meta);
     button.addEventListener("click", () => this.select(node));
-    this.attachSoloHover(button, path);
-    group.append(button);
+    this.attachSoloHover(row, path);
+    row.append(visibility, button);
+    group.append(row);
 
     node.children.forEach((child) => {
       if (childMatchesFilter(child.node, model.visibleNodeIds)) {
@@ -296,6 +319,7 @@ export class GraphInspector {
     if (this.selected?.id === view.node.id) group.classList.add("selected");
     if (this.hovered?.id === view.node.id) group.classList.add("hovered");
     if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
+    if (this.hiddenNodeIds.has(view.node.id)) group.classList.add("hidden-node");
     if (this.filter && view.matched) group.classList.add("matched");
     if (view.parents.size > 1) group.classList.add("shared");
     group.dataset.nodeId = String(view.node.id);
@@ -325,6 +349,16 @@ export class GraphInspector {
       }
     });
     return group;
+  }
+
+  private toggleNodeVisibility(node: Node): void {
+    if (this.hiddenNodeIds.has(node.id)) {
+      this.hiddenNodeIds.delete(node.id);
+    } else {
+      this.hiddenNodeIds.add(node.id);
+    }
+    this.render();
+    this.options.onVisibilityChange([...this.hiddenNodeIds]);
   }
 
   private select(node: Node): void {
@@ -898,4 +932,11 @@ function attachScrubber(
 
 function mapLabel(kind: string): string {
   return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
+}
+
+function renderEyeIcon(): HTMLElement {
+  const icon = document.createElement("span");
+  icon.className = "eye-icon";
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
 }

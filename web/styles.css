@@ -455,13 +455,70 @@ button:disabled {
   gap: 4px;
 }
 
+.graph-node-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-left: calc(var(--depth) * 14px);
+}
+
+.graph-visibility {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.graph-visibility:hover {
+  color: var(--accent);
+}
+
+.graph-visibility[aria-pressed="false"] {
+  color: #65707c;
+}
+
+.eye-icon {
+  position: relative;
+  width: 17px;
+  height: 11px;
+  border: 1.6px solid currentColor;
+  border-radius: 50%;
+}
+
+.eye-icon::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.graph-visibility[aria-pressed="false"] .eye-icon::after {
+  position: absolute;
+  left: 1px;
+  top: 4px;
+  width: 15px;
+  border-top: 1.6px solid currentColor;
+  content: "";
+  transform: rotate(-35deg);
+  transform-origin: center;
+}
+
 .graph-node {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 32px;
-  margin-left: calc(var(--depth) * 14px);
   border-color: transparent;
   background: transparent;
   color: var(--text);
@@ -485,6 +542,11 @@ button:disabled {
 .graph-node.isolated {
   border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
   background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+}
+
+.graph-node.hidden-node,
+.graph-map-node.hidden-node {
+  opacity: 0.42;
 }
 
 .graph-node.matched:not([aria-pressed="true"]) {
