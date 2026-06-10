@@ -28,6 +28,8 @@ export interface EditorRuntimeVerification {
     nextValue: number | null;
     graphValue: unknown;
     patchedSource: string;
+    editedSourceDecorations: number;
+    selectedGraphParamsAfterPatch: number;
   };
   errors: string[];
 }
@@ -46,6 +48,8 @@ export async function runEditorRuntimeVerification(
     nextValue: null,
     graphValue: null,
     patchedSource: "",
+    editedSourceDecorations: 0,
+    selectedGraphParamsAfterPatch: 0,
   };
   let selectedNode = "";
 
@@ -146,6 +150,33 @@ export async function runEditorRuntimeVerification(
         }
       }
       verifySourceScrubPath(radiusLink, sourceScrub, graphInspector, sdf, errors);
+      if (sourceScrub.patchedSource) {
+        const patchedLinks = findGraphSourceLinks(sourceScrub.patchedSource, sdf);
+        const editedLink = patchedLinks.find((link) => {
+          return link.nodeId === radiusLink.nodeId && link.label === "radius" && link.end > link.start;
+        }) ?? null;
+        codeEditor.setValue(sourceScrub.patchedSource);
+        codeEditor.setSourceLinks(patchedLinks.filter((link) => link.nodeId !== sdf.node.id));
+        graphInspector.setSourceLinks(patchedLinks);
+        graphInspector.setSelectedSourceLink(editedLink);
+        codeEditor.markSelectedSourceLink(editedLink);
+        codeEditor.markEditedSourceLink(editedLink);
+        await nextFrame();
+        sourceScrub.editedSourceDecorations = codeRoot.querySelectorAll(".source-edited-link").length;
+        sourceScrub.selectedGraphParamsAfterPatch = graphRoot.querySelectorAll(".param-row.source-selected").length;
+        if (!editedLink) {
+          errors.push("graph edit patch did not rediscover edited source link");
+        }
+        if (sourceScrub.editedSourceDecorations === 0) {
+          errors.push("graph edit patch did not mark edited source literal");
+        }
+        if (sourceScrub.selectedGraphParamsAfterPatch !== 1) {
+          errors.push("graph edit patch did not keep graph param linked to source");
+        }
+        codeEditor.setValue(fixtureSource);
+        codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
+        graphInspector.setSourceLinks(links);
+      }
     }
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");

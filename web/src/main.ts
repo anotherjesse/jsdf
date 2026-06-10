@@ -738,6 +738,10 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
   codeEditor.setError(null);
   updateSaveState();
   refreshSourceLinks(nextSource, activeSdf, nextSourceLinks);
+  if (editedLink) {
+    graphInspector?.setSelectedSourceLink(editedLink);
+    codeEditor.markSelectedSourceLink(editedLink);
+  }
   codeEditor.markEditedSourceLink(editedLink, { reveal: editorView === "code" });
   return true;
 }
