@@ -652,6 +652,7 @@ export function createCodeEditor(
     onSourceLinkValueChange(link, nextValue, {
       ...(options.editSessionId ? { editSessionId: options.editSessionId } : {}),
     });
+    updateSourceLinkStatus(liveSourceLinkFor(link) ?? link, nextValue);
     return true;
   };
 
@@ -700,7 +701,7 @@ export function createCodeEditor(
     return true;
   };
 
-  const updateSourceLinkStatus = (link: GraphSourceLink | null) => {
+  const updateSourceLinkStatus = (link: GraphSourceLink | null, valueOverride?: number | null) => {
     const range = link ? rangeForSourceLink(link) : null;
     if (!link || !range) {
       sourceLinkStatus.hidden = true;
@@ -713,7 +714,11 @@ export function createCodeEditor(
       sourceLinkStatus.removeAttribute("title");
       return;
     }
-    const value = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
+    const value = valueOverride !== undefined
+      ? valueOverride
+      : isScrubbableSourceLink(link)
+        ? readSourceLinkNumber(editor.getValue(), link)
+        : null;
     const isNumber = value != null;
     sourceLinkStatus.hidden = false;
     sourceLinkStatus.dataset.numeric = String(isNumber);

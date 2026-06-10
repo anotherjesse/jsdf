@@ -87,7 +87,9 @@ export interface EditorRuntimeVerification {
     radiusStepButtons: number;
     radiusStepTitle: string;
     radiusStepNextValue: number | null;
+    radiusStepStatus: string;
     radiusFineStepNextValue: number | null;
+    radiusFineStepStatus: string;
     radiusStepSession: string;
     hiddenAfterClear: boolean;
     box: string;
@@ -220,7 +222,9 @@ export async function runEditorRuntimeVerification(
     radiusStepButtons: 0,
     radiusStepTitle: "",
     radiusStepNextValue: null,
+    radiusStepStatus: "",
     radiusFineStepNextValue: null,
+    radiusFineStepStatus: "",
     radiusStepSession: "",
     hiddenAfterClear: false,
     box: "",
@@ -324,16 +328,24 @@ export async function runEditorRuntimeVerification(
         }
         increaseButton.click();
         await nextFrame();
+        sourceLinkStatus.radiusStepStatus = visibleSourceLinkStatus(codeRoot);
         if (Math.abs((sourceLinkStatus.radiusStepNextValue ?? 0) - 1.1) > 0.000001) {
           errors.push(`source link status step emitted ${sourceLinkStatus.radiusStepNextValue ?? "nothing"}`);
+        }
+        if (!sourceLinkStatus.radiusStepStatus.endsWith("= 1.1")) {
+          errors.push(`source link status step displayed ${sourceLinkStatus.radiusStepStatus || "nothing"}`);
         }
         if (!sourceLinkStatus.radiusStepSession.startsWith("source-status-step:")) {
           errors.push(`source link status step session was ${sourceLinkStatus.radiusStepSession || "missing"}`);
         }
         increaseButton.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
         await nextFrame();
+        sourceLinkStatus.radiusFineStepStatus = visibleSourceLinkStatus(codeRoot);
         if (Math.abs((sourceLinkStatus.radiusFineStepNextValue ?? 0) - 1.025) > 0.000001) {
           errors.push(`source link status fine step emitted ${sourceLinkStatus.radiusFineStepNextValue ?? "nothing"}`);
+        }
+        if (!sourceLinkStatus.radiusFineStepStatus.endsWith("= 1.025")) {
+          errors.push(`source link status fine step displayed ${sourceLinkStatus.radiusFineStepStatus || "nothing"}`);
         }
       }
       if (cursorEvents.at(-1) !== "sphere:radius") {
