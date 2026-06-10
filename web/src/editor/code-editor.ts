@@ -265,11 +265,15 @@ export interface CodeEditor {
 
 type CodeEditorError = string | SourceDiagnostic;
 
+export interface SourceLinkSelectOptions {
+  revealGraph?: boolean;
+}
+
 export function createCodeEditor(
   element: HTMLElement,
   initialValue: string,
   onChange: (value: string) => void,
-  onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
+  onSourceLinkSelect: (link: GraphSourceLink, options?: SourceLinkSelectOptions) => void = () => {},
   onSourceLinkValueChange: (link: GraphSourceLink, value: number, options?: SourceLinkValueChangeOptions) => void = () => {},
   onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
   onSourceLinkCursor: (link: GraphSourceLink | null) => void = () => {},
@@ -768,7 +772,9 @@ export function createCodeEditor(
     event.event.stopPropagation();
     cursorLinkKey = sourceLinkKey(link);
     markSelectedSourceLink(link);
-    onSourceLinkSelect(link);
+    onSourceLinkSelect(link, {
+      revealGraph: event.event.browserEvent.metaKey || event.event.browserEvent.ctrlKey,
+    });
 
     const startValue = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
     if (startValue == null) return;

@@ -1,7 +1,7 @@
 import type { Node, SDF3 } from "./core/nodes";
 import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
-import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
+import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
@@ -535,8 +535,11 @@ function selectRestoredSourceLink(link: GraphSourceLink): boolean {
   return true;
 }
 
-function handleSourceLinkSelect(link: GraphSourceLink): void {
+function handleSourceLinkSelect(link: GraphSourceLink, options: SourceLinkSelectOptions = {}): void {
   handleSourceLinkCursor(link);
+  if (!options.revealGraph) return;
+  setEditorView("graph");
+  window.setTimeout(() => graphInspector?.revealSelected({ focus: true }), 0);
 }
 
 function handleSourceLinkCursor(link: GraphSourceLink | null): void {
