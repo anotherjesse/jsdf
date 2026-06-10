@@ -15,6 +15,14 @@ export interface PreviewRuntimeVerification {
     usedWorker: boolean;
     meshTimeMs: number;
   };
+  meshHighlight: {
+    markNode: string;
+    focusNode: string;
+    markMode: string;
+    focusMode: string;
+    markProgramBuilds: number;
+    focusProgramBuilds: number;
+  };
   quadLabels: string[];
   errors: string[];
 }
@@ -69,7 +77,9 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   const meshTimeMs = performance.now() - meshStart;
 
   shaderRenderer.setActive(false);
-  meshRenderer.render(meshResult.triangles, meshResult.bounds);
+  const meshMarkNode = sdf.node.children[0]?.node ?? null;
+  const meshFocusNode = sdf.node.children[1]?.node ?? null;
+  meshRenderer.render(meshResult.triangles, meshResult.bounds, sdf, meshMarkNode, "mark");
   meshRenderer.setActive(true);
   const mesh = {
     ...diagnostics(canvas),
@@ -81,6 +91,20 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   verifyDiagnostics("mesh", mesh, "mesh", errors);
   if (mesh.triangles <= 0) errors.push("mesh preview generated no triangles");
   if (!mesh.usedWorker) errors.push("mesh preview did not use worker mesh generation");
+  if (meshMarkNode && mesh.highlightNode !== String(meshMarkNode.id)) {
+    errors.push(`mesh mark highlight node mismatch: ${mesh.highlightNode} !== ${meshMarkNode.id}`);
+  }
+  if (meshMarkNode && mesh.highlightMode !== "mark") errors.push(`mesh mark highlight mode mismatch: ${mesh.highlightMode}`);
+
+  meshRenderer.setHighlight(sdf, meshFocusNode, "focus");
+  const meshFocus = diagnostics(canvas);
+  if (meshFocusNode && meshFocus.highlightNode !== String(meshFocusNode.id)) {
+    errors.push(`mesh focus highlight node mismatch: ${meshFocus.highlightNode} !== ${meshFocusNode.id}`);
+  }
+  if (meshFocusNode && meshFocus.highlightMode !== "focus") errors.push(`mesh focus highlight mode mismatch: ${meshFocus.highlightMode}`);
+  if (meshFocus.programBuilds !== mesh.programBuilds) {
+    errors.push(`mesh focus highlight rebuilt shader program: ${meshFocus.programBuilds} !== ${mesh.programBuilds}`);
+  }
 
   const quadLabels = viewPanels("quad", 800, 600).map((panel) => panel.label);
   if (quadLabels.join(",") !== "Orbit,Top Z,Right X,Front Y") {
@@ -92,6 +116,14 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
     shader,
     highlight,
     mesh,
+    meshHighlight: {
+      markNode: mesh.highlightNode,
+      focusNode: meshFocus.highlightNode,
+      markMode: mesh.highlightMode,
+      focusMode: meshFocus.highlightMode,
+      markProgramBuilds: mesh.programBuilds,
+      focusProgramBuilds: meshFocus.programBuilds,
+    },
     quadLabels,
     errors,
   };

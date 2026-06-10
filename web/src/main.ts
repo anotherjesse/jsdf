@@ -425,7 +425,7 @@ function handleSourceLinkCursor(link: GraphSourceLink | null): void {
   graphInspector?.setSelectedSourceLink(link);
   codeEditor?.markSelectedSourceLink(link);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
-  schedulePreview(0);
+  scheduleActivePreview(0);
 }
 
 function handleSourceLinkValueChange(
@@ -521,7 +521,23 @@ function previewHoverSignature(): string {
 }
 
 function schedulePreviewIfHoverChanged(before: string): void {
-  if (previewHoverSignature() !== before) schedulePreview(0);
+  if (previewHoverSignature() !== before) scheduleActivePreview(0);
+}
+
+function scheduleActivePreview(delay = 0): void {
+  if (viewMode === "mesh" && !soloPreview) {
+    updateMeshHighlight();
+    return;
+  }
+  schedulePreview(delay);
+}
+
+function updateMeshHighlight(): void {
+  if (!mesh || mesh.triangles.length === 0) return;
+  const sdf = visibleActiveSdf();
+  if (!sdf) return;
+  const highlight = highlightForRender(null);
+  meshRenderer?.setHighlight(sdf, highlight.node, highlight.mode);
 }
 
 function revealGraphSource(link: GraphSourceLink): void {
@@ -546,7 +562,7 @@ function selectNode(node: Node | null): void {
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
-    schedulePreview(0);
+    scheduleActivePreview(0);
   }
 }
 
@@ -962,6 +978,7 @@ function setViewMode(mode: RenderView): void {
   meshViewButton.setAttribute("aria-pressed", String(mode === "mesh"));
   rayRenderer?.setActive(mode === "shader");
   meshRenderer?.setActive(mode === "mesh");
+  if (mode === "mesh") updateMeshHighlight();
   overlay.textContent = "";
 }
 
@@ -1086,7 +1103,8 @@ async function buildMesh(): Promise<void> {
       });
       if (job !== meshJob) return;
       mesh = result;
-      meshRenderer?.render(mesh.triangles, mesh.bounds);
+      const highlight = highlightForRender(null);
+      meshRenderer?.render(mesh.triangles, mesh.bounds, sdf, highlight.node, highlight.mode);
       lastBlob = binarySTL(mesh.triangles, `sdf-browser ${currentDocumentName()}`);
       const total = mesh.sampleTimeMs + mesh.polygonizeTimeMs;
       meshStat.textContent = `${total.toFixed(0)} ms ${mesh.usedGPU ? "GPU" : "CPU"}${mesh.usedWorker ? " worker" : ""} ${algorithmLabel(mesh.algorithm)}`;

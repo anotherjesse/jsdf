@@ -1,8 +1,8 @@
 import type { Node, SDF3 } from "../core/nodes";
 import type { Bounds3 } from "../mesh/bounds";
 import { compileGLSLScene } from "../glsl/compiler";
-import { fnName } from "../glsl/format";
 import type { OrbitCamera } from "./orbit-camera";
+import { selectedSceneFunction } from "./selected-scene";
 import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
 
 export type HighlightMode = "mark" | "focus";
@@ -315,35 +315,4 @@ void main() {
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);
 }
 `;
-}
-
-function selectedSceneFunction(root: Node): string {
-  const lines = [
-    "float selectedScene(vec3 p) {",
-    "  if (u_highlightNode < 0) { return 1000000000.0; }",
-  ];
-
-  for (const node of collectNodes(root)) {
-    const call = node.dim === 2 ? `${fnName(node)}(p.xy)` : `${fnName(node)}(p)`;
-    lines.push(`  if (u_highlightNode == ${node.id}) { return ${call}; }`);
-  }
-
-  lines.push("  return 1000000000.0;");
-  lines.push("}");
-  return lines.join("\n");
-}
-
-function collectNodes(root: Node): Node[] {
-  const out: Node[] = [];
-  const seen = new Set<number>();
-
-  const visit = (node: Node) => {
-    if (seen.has(node.id)) return;
-    seen.add(node.id);
-    out.push(node);
-    for (const child of node.children) visit(child.node);
-  };
-
-  visit(root);
-  return out;
 }

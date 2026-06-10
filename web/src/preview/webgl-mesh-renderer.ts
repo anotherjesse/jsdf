@@ -1,15 +1,22 @@
+import type { Node, SDF3 } from "../core/nodes";
+import { compileGLSLScene } from "../glsl/compiler";
 import type { Bounds3 } from "../mesh/bounds";
 import type { Triangle } from "../mesh/polygonize";
 import type { OrbitCamera } from "./orbit-camera";
+import { selectedSceneFunction } from "./selected-scene";
 import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
+
+type HighlightMode = "mark" | "focus";
 
 export class WebGLMeshRenderer {
   private readonly gl: WebGL2RenderingContext;
-  private readonly program: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly buffer: WebGLBuffer;
-  private readonly mvpLocation: WebGLUniformLocation;
-  private readonly lightLocation: WebGLUniformLocation;
+  private program: WebGLProgram | null = null;
+  private currentSource = "";
+  private programBuilds = 0;
+  private highlightNodeId = -1;
+  private highlightMode: HighlightMode = "mark";
   private vertexCount = 0;
   private bounds: Bounds3 | null = null;
   private center = [0, 0, 0];
@@ -24,11 +31,8 @@ export class WebGLMeshRenderer {
     const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
     if (!gl) throw new Error("WebGL2 is not available in this browser.");
     this.gl = gl;
-    this.program = createProgram(gl, vertexShader, fragmentShader);
     this.vao = gl.createVertexArray()!;
     this.buffer = gl.createBuffer()!;
-    this.mvpLocation = gl.getUniformLocation(this.program, "u_mvp")!;
-    this.lightLocation = gl.getUniformLocation(this.program, "u_light")!;
 
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
@@ -50,15 +54,36 @@ export class WebGLMeshRenderer {
     if (this.active) this.redraw();
   }
 
-  render(triangles: Triangle[], bounds: Bounds3): void {
+  render(
+    triangles: Triangle[],
+    bounds: Bounds3,
+    sdf: SDF3 | null = null,
+    highlightNode: Node | null = null,
+    highlightMode: HighlightMode = "mark",
+  ): void {
     this.upload(triangles);
     this.setBounds(bounds);
+    this.setHighlight(sdf, highlightNode, highlightMode, { redraw: false });
     if (this.active) this.redraw();
+  }
+
+  setHighlight(
+    sdf: SDF3 | null,
+    highlightNode: Node | null,
+    highlightMode: HighlightMode = "mark",
+    options: { redraw?: boolean } = {},
+  ): void {
+    this.ensureProgram(sdf);
+    this.highlightNodeId = highlightNode?.id ?? -1;
+    this.highlightMode = highlightNode ? highlightMode : "mark";
+    this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
+    this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
+    if (options.redraw !== false && this.active) this.redraw();
   }
 
   redraw(): void {
     if (!this.active) return;
-    if (!this.bounds || this.vertexCount === 0) return;
+    if (!this.program || !this.bounds || this.vertexCount === 0) return;
     this.resize();
     const gl = this.gl;
     const panels = viewPanels(this.layout, this.canvas.width, this.canvas.height);
@@ -70,7 +95,9 @@ export class WebGLMeshRenderer {
     gl.enable(gl.CULL_FACE);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
-    gl.uniform3f(this.lightLocation, 0.45, 0.7, 0.9);
+    gl.uniform3f(gl.getUniformLocation(this.program, "u_light"), 0.45, 0.7, 0.9);
+    gl.uniform1i(gl.getUniformLocation(this.program, "u_highlightNode"), this.highlightNodeId);
+    gl.uniform1i(gl.getUniformLocation(this.program, "u_focusHighlight"), this.highlightMode === "focus" && this.highlightNodeId >= 0 ? 1 : 0);
     gl.bindVertexArray(this.vao);
     for (const panel of panels) {
       this.drawPanel(panel);
@@ -80,6 +107,7 @@ export class WebGLMeshRenderer {
   }
 
   private drawPanel(panel: ViewPanel): void {
+    if (!this.program) return;
     const aspect = panel.width / panel.height;
     const eye = panel.direction
       ? this.camera.eyeForDirection(this.center, this.radius, panel.direction)
@@ -89,8 +117,16 @@ export class WebGLMeshRenderer {
     const projection = perspective(this.layout === "quad" ? Math.PI / 4 : Math.PI / 5, aspect, 0.01, this.radius * 60 + 10);
     const mvp = multiplyMat4(projection, view);
     this.gl.viewport(panel.x, panel.y, panel.width, panel.height);
-    this.gl.uniformMatrix4fv(this.mvpLocation, false, mvp);
+    this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_mvp"), false, mvp);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, this.vertexCount);
+  }
+
+  private ensureProgram(sdf: SDF3 | null): void {
+    const source = fragmentShader(sdf);
+    if (source === this.currentSource) return;
+    this.program = createProgram(this.gl, vertexShader, source);
+    this.currentSource = source;
+    this.programBuilds += 1;
   }
 
   private resize(): void {
@@ -163,6 +199,9 @@ export class WebGLMeshRenderer {
     this.canvas.dataset.previewMin = String(min);
     this.canvas.dataset.previewMax = String(max);
     this.canvas.dataset.previewDistinct = String(distinct.size);
+    this.canvas.dataset.programBuilds = String(this.programBuilds);
+    this.canvas.dataset.highlightNode = this.highlightNodeId >= 0 ? String(this.highlightNodeId) : "";
+    this.canvas.dataset.highlightMode = this.highlightNodeId >= 0 ? this.highlightMode : "";
     delete this.canvas.dataset.previewSteps;
   }
 }
@@ -269,11 +308,26 @@ void main() {
 }
 `;
 
-const fragmentShader = `#version 300 es
+function fragmentShader(sdf: SDF3 | null): string {
+  const sceneSource = sdf ? compileGLSLScene(sdf).source : "";
+  const selectedScene = sdf
+    ? selectedSceneFunction(sdf.node)
+    : [
+      "float selectedScene(vec3 p) {",
+      "  return 1000000000.0;",
+      "}",
+    ].join("\n");
+  return `#version 300 es
 precision highp float;
+${sceneSource}
+
 in vec3 v_normal;
 in vec3 v_position;
 uniform vec3 u_light;
+uniform int u_highlightNode;
+uniform int u_focusHighlight;
+${selectedScene}
+
 out vec4 outColor;
 void main() {
   vec3 n = normalize(v_normal);
@@ -284,6 +338,15 @@ void main() {
   vec3 base = vec3(0.16, 0.72, 0.66);
   vec3 warm = vec3(0.95, 0.64, 0.16);
   vec3 color = base * (0.34 + diffuse * 0.75) + warm * fill * 0.16 + vec3(rim);
+  float selectedBand = 1.0 - smoothstep(0.006, 0.055, abs(selectedScene(v_position)));
+  if (u_focusHighlight == 1) {
+    vec3 faded = mix(vec3(0.11, 0.125, 0.145), color, 0.26);
+    color = mix(faded, color, selectedBand);
+    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.34);
+  } else {
+    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.42);
+  }
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);
 }
 `;
+}
