@@ -43,6 +43,7 @@ export interface CodeEditor {
   setError(message: string | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
+  markSelectedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   markHoveredSourceLink(link: GraphSourceLink | null): void;
   markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
@@ -57,6 +58,7 @@ export function createCodeEditor(
   onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
   onSourceLinkValueChange: (link: GraphSourceLink, value: number, options?: SourceLinkValueChangeOptions) => void = () => {},
   onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
+  onSourceLinkCursor: (link: GraphSourceLink | null) => void = () => {},
 ): CodeEditor {
   const editor = monaco.editor.create(element, {
     value: initialValue,
@@ -80,9 +82,11 @@ export function createCodeEditor(
   let sourceLinkDecorations: string[] = [];
   let focusedNodeDecorations: string[] = [];
   let revealedSourceDecorations: string[] = [];
+  let selectedSourceDecorations: string[] = [];
   let hoveredSourceDecorations: string[] = [];
   let editedSourceDecorations: string[] = [];
   let focusedNodeId: number | null = null;
+  let cursorLinkKey: string | null = null;
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
   let hoveredLink: GraphSourceLink | null = null;
@@ -154,6 +158,37 @@ export function createCodeEditor(
     return new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
   };
 
+  const sourceLinkKey = (link: GraphSourceLink | null): string | null => {
+    return link ? `${link.nodeId}:${link.label}:${link.start}:${link.end}` : null;
+  };
+
+  const markSelectedSourceLink = (link: GraphSourceLink | null, options: { reveal?: boolean } = {}) => {
+    const range = link ? rangeForSourceLink(link) : null;
+    if (!range) {
+      selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
+      return;
+    }
+    selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, [{
+      range,
+      options: {
+        inlineClassName: "source-selected-link",
+      },
+    }]);
+    if (options.reveal) {
+      editor.revealRangeInCenterIfOutsideViewport(range);
+    }
+  };
+
+  const syncCursorSourceLink = (position: monaco.Position | null | undefined) => {
+    if (suppress || activeScrub) return;
+    const link = linkAtPosition(position);
+    const key = sourceLinkKey(link);
+    if (key === cursorLinkKey) return;
+    cursorLinkKey = key;
+    markSelectedSourceLink(link);
+    onSourceLinkCursor(link);
+  };
+
   const applyFocusedNodeDecorations = (reveal: boolean) => {
     const model = editor.getModel();
     if (!model || focusedNodeId == null) {
@@ -186,6 +221,8 @@ export function createCodeEditor(
     if (!link) return;
     event.event.preventDefault();
     event.event.stopPropagation();
+    cursorLinkKey = sourceLinkKey(link);
+    markSelectedSourceLink(link);
     onSourceLinkSelect(link);
 
     const startValue = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
@@ -206,6 +243,9 @@ export function createCodeEditor(
     pointerInside = true;
     pointerLink = linkAtPosition(event.target.position);
     updateHover(pointerLink, event.event.browserEvent.shiftKey || shiftDown);
+  });
+  const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
+    syncCursorSourceLink(event.position);
   });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
@@ -264,6 +304,7 @@ export function createCodeEditor(
       const model = editor.getModel();
       if (!model) return;
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
+      selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
       hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
       editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
       sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
@@ -283,10 +324,16 @@ export function createCodeEditor(
           };
         }));
       applyFocusedNodeDecorations(false);
+      cursorLinkKey = null;
+      syncCursorSourceLink(editor.getPosition());
     },
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;
       applyFocusedNodeDecorations(Boolean(options.reveal));
+    },
+    markSelectedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
+      cursorLinkKey = sourceLinkKey(link);
+      markSelectedSourceLink(link, options);
     },
     markHoveredSourceLink(link: GraphSourceLink | null) {
       const range = link ? rangeForSourceLink(link) : null;
@@ -342,6 +389,7 @@ export function createCodeEditor(
       subscription.dispose();
       linkSubscription.dispose();
       hoverSubscription.dispose();
+      cursorSubscription.dispose();
       leaveSubscription.dispose();
       editor.dispose();
     },

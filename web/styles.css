@@ -349,6 +349,12 @@ button:disabled {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 48%, transparent);
 }
 
+.source-selected-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent);
+}
+
 .source-revealed-link {
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 32%, transparent);

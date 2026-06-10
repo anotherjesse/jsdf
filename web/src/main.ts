@@ -217,6 +217,7 @@ async function boot(): Promise<void> {
       handleSourceLinkSelect,
       handleSourceLinkValueChange,
       handleSourceLinkHover,
+      handleSourceLinkCursor,
     );
     if (!restoreSourceDraft()) refreshSourceLinks();
     draftPersistenceEnabled = true;
@@ -411,8 +412,14 @@ function compileEditorSource(
 }
 
 function handleSourceLinkSelect(link: GraphSourceLink): void {
+  handleSourceLinkCursor(link);
+}
+
+function handleSourceLinkCursor(link: GraphSourceLink | null): void {
+  if (!link) return;
   const node = graphInspector?.selectNodeById(link.nodeId);
   if (!node) return;
+  codeEditor?.markSelectedSourceLink(link);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
   schedulePreview(0);
 }
@@ -529,6 +536,7 @@ function handleGraphSourceHover(link: GraphSourceLink | null): void {
 
 function selectNode(node: Node | null): void {
   selectedNode = node;
+  codeEditor?.markSelectedSourceLink(node ? sourceLinkForNodeId(node.id) : null);
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
@@ -720,6 +728,14 @@ function refreshSourceLinks(
 function sourceFocusNodeId(): number | null {
   const node = hoveredNode ?? selectedNode;
   return node && !isActiveRootNode(node) ? node.id : null;
+}
+
+function sourceLinkForNodeId(nodeId: number): GraphSourceLink | null {
+  return currentSourceLinks.find((link) => {
+    return link.nodeId === nodeId && link.label === "call" && link.end > link.start;
+  }) ?? currentSourceLinks.find((link) => {
+    return link.nodeId === nodeId && link.end > link.start;
+  }) ?? null;
 }
 
 function sourceLinkForGraphEdit(links: readonly GraphSourceLink[], edit: GraphSourceEdit): GraphSourceLink | null {
