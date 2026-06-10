@@ -7,6 +7,8 @@ import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
 import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
+import { prettifySource } from "./editor/prettify-source";
+import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
 import {
   graphNodeIdentityKeyForNode,
   graphNodeSourceIdentityForNode,
@@ -48,6 +50,7 @@ const documentNameInput = document.querySelector<HTMLInputElement>("#documentNam
 const dirtyIndicator = document.querySelector<HTMLElement>("#dirtyIndicator")!;
 const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
 const saveSourceButton = document.querySelector<HTMLButtonElement>("#saveSourceButton")!;
+const prettifySourceButton = document.querySelector<HTMLButtonElement>("#prettifySourceButton")!;
 const sourceDialog = document.querySelector<HTMLDialogElement>("#sourceDialog")!;
 const sourceDialogList = document.querySelector<HTMLElement>("#sourceDialogList")!;
 const closeSourceDialogButton = document.querySelector<HTMLButtonElement>("#closeSourceDialogButton")!;
@@ -177,6 +180,7 @@ downloadButton.addEventListener("click", () => {
 documentNameInput.addEventListener("input", updateSaveState);
 loadSourceButton.addEventListener("click", openSourceDialog);
 saveSourceButton.addEventListener("click", saveCurrentSource);
+prettifySourceButton.addEventListener("click", prettifyCurrentSource);
 closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
 sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
@@ -347,6 +351,21 @@ function saveCurrentSource(): void {
   }
 }
 
+function prettifyCurrentSource(): void {
+  if (!codeEditor) return;
+  const source = codeEditor.getValue();
+  const nextSource = prettifySource(source);
+  if (nextSource === source) {
+    setEditorStatus("Already pretty", "idle");
+    return;
+  }
+  window.clearTimeout(sourceCompileTimer);
+  pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
+  codeEditor.setValue(nextSource);
+  updateSaveState();
+  compileEditorSource({ status: "Prettified" });
+}
+
 function deleteSavedDocument(documentId: string): void {
   const savedDocument = listSavedSourceDocuments().find((candidate) => candidate.id === documentId);
   if (!savedDocument) {
@@ -423,14 +442,14 @@ function compileEditorSource(
     schedulePreview(0);
     return true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    codeEditor?.setError(message);
+    const diagnostic = sourceDiagnosticFromError(error, source);
+    codeEditor?.setError(diagnostic);
     codeEditor?.setSourceLinks([]);
     graphInspector?.setSourceLinks([]);
     currentSourceLinks = [];
     selectedSourceLink = null;
-    setEditorStatus(message, "error");
-    overlay.textContent = `Code error: ${message}`;
+    setEditorStatus(diagnostic.message, "error");
+    overlay.textContent = `Code error: ${diagnostic.message}`;
     return false;
   }
 }

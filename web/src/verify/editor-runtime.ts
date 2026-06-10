@@ -4,6 +4,8 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
+import { prettifySource } from "../editor/prettify-source";
+import { sourceDiagnosticFromError } from "../editor/source-diagnostics";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
@@ -50,10 +52,18 @@ export interface EditorRuntimeVerification {
     globalCompletions: number;
     methodCompletions: number;
     easeCompletions: number;
+    methodDifference: boolean;
     signatureChecks: number;
     sphere: string;
     translate: string;
     easing: string;
+  };
+  editorTools: {
+    prettifiedLines: number;
+    runtimeErrorLine: number;
+    runtimeErrorColumn: number;
+    syntaxErrorLine: number;
+    syntaxErrorColumn: number;
   };
   selectionRestore: {
     previousNode: string;
@@ -89,6 +99,7 @@ export async function runEditorRuntimeVerification(
   };
   const sourceLinkHitTest = verifySourceLinkHitTest(errors);
   const apiHints = verifyApiHints(errors);
+  const editorTools = verifyEditorTools(errors);
   const selectionRestore = verifySelectionRestore(errors);
   let selectedNode = "";
 
@@ -257,6 +268,7 @@ export async function runEditorRuntimeVerification(
       sourceScrub,
       sourceLinkHitTest,
       apiHints,
+      editorTools,
       selectionRestore,
       errors,
     };
@@ -288,6 +300,7 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (!globalNames.has("save")) errors.push("api hints missing save workflow completion");
   if (globalNames.has("translate")) errors.push("api hints leaked translate into global completions");
   if (!methodNames.has("translate")) errors.push("api hints missing translate method completion");
+  if (!methodNames.has("difference")) errors.push("api hints missing chained difference completion");
   if (methodNames.has("sphere")) errors.push("api hints leaked sphere into method completions");
   if (!easeNames.has("linear")) errors.push("api hints missing ease.linear completion");
   if (easeNames.has("sphere")) errors.push("api hints leaked sphere into ease completions");
@@ -300,11 +313,62 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     globalCompletions: globalCompletions.length,
     methodCompletions: methodCompletions.length,
     easeCompletions: easeCompletions.length,
+    methodDifference: methodNames.has("difference"),
     signatureChecks,
     sphere: sphere?.signature ?? "",
     translate: translate?.signature ?? "",
     easing: linear?.signature ?? "",
   };
+}
+
+function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorTools"] {
+  const pretty = prettifySource("return sphere(1).translate([1,2,3]).difference(box(0.5))");
+  if (!pretty.includes("\n  .translate([1, 2, 3])")) {
+    errors.push("prettify did not space vector args and wrap translate chain");
+  }
+  if (!pretty.includes("\n  .difference(box(0.5))")) {
+    errors.push("prettify did not wrap difference chain");
+  }
+
+  const runtimeSource = "return sphere(1).diffe(sphere(2))";
+  const runtimeDiagnostic = diagnosticForSource(runtimeSource, errors, "runtime typo");
+  if (runtimeDiagnostic.lineNumber !== 1) {
+    errors.push(`runtime typo diagnostic line ${runtimeDiagnostic.lineNumber}`);
+  }
+  if (runtimeDiagnostic.column < 16 || runtimeDiagnostic.column > 18) {
+    errors.push(`runtime typo diagnostic column ${runtimeDiagnostic.column}`);
+  }
+
+  const syntaxSource = "const radius = ;\nreturn sphere(1)";
+  const syntaxDiagnostic = diagnosticForSource(syntaxSource, errors, "syntax typo");
+  if (syntaxDiagnostic.lineNumber !== 1) {
+    errors.push(`syntax typo diagnostic line ${syntaxDiagnostic.lineNumber}`);
+  }
+  if (syntaxDiagnostic.column < 14) {
+    errors.push(`syntax typo diagnostic column ${syntaxDiagnostic.column}`);
+  }
+
+  return {
+    prettifiedLines: pretty.split("\n").length,
+    runtimeErrorLine: runtimeDiagnostic.lineNumber,
+    runtimeErrorColumn: runtimeDiagnostic.column,
+    syntaxErrorLine: syntaxDiagnostic.lineNumber,
+    syntaxErrorColumn: syntaxDiagnostic.column,
+  };
+}
+
+function diagnosticForSource(
+  source: string,
+  errors: string[],
+  label: string,
+): ReturnType<typeof sourceDiagnosticFromError> {
+  try {
+    evaluateSource(source);
+  } catch (error) {
+    return sourceDiagnosticFromError(error, source);
+  }
+  errors.push(`${label} unexpectedly compiled`);
+  return sourceDiagnosticFromError(new Error(`${label} unexpectedly compiled`), source);
 }
 
 function verifyApiSignatureHelp(errors: string[]): number {

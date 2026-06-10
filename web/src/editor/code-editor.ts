@@ -10,6 +10,7 @@ import {
 import { apiSignatureHelpAt } from "./api-signature-help";
 import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
+import type { SourceDiagnostic } from "./source-diagnostics";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
@@ -96,7 +97,7 @@ monaco.languages.registerSignatureHelpProvider("javascript", {
 export interface CodeEditor {
   setValue(value: string): void;
   getValue(): string;
-  setError(message: string | null): void;
+  setError(error: CodeEditorError | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
   markSelectedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
@@ -106,6 +107,8 @@ export interface CodeEditor {
   layout(): void;
   dispose(): void;
 }
+
+type CodeEditorError = string | SourceDiagnostic;
 
 export function createCodeEditor(
   element: HTMLElement,
@@ -394,18 +397,11 @@ export function createCodeEditor(
     getValue() {
       return editor.getValue();
     },
-    setError(message: string | null) {
+    setError(error: CodeEditorError | null) {
       const model = editor.getModel();
       if (!model) return;
-      monaco.editor.setModelMarkers(model, "sdf-runtime", message
-        ? [{
-          severity: monaco.MarkerSeverity.Error,
-          message,
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: Math.max(2, model.getLineLength(1) + 1),
-        }]
+      monaco.editor.setModelMarkers(model, "sdf-runtime", error
+        ? [markerForEditorError(error, model)]
         : []);
     },
     setSourceLinks(links: readonly GraphSourceLink[]) {
@@ -519,6 +515,35 @@ function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
 }
 
+function markerForEditorError(
+  error: CodeEditorError,
+  model: monaco.editor.ITextModel,
+): monaco.editor.IMarkerData {
+  if (typeof error === "string") {
+    return {
+      severity: monaco.MarkerSeverity.Error,
+      message: error,
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 1,
+      endColumn: Math.max(2, model.getLineLength(1) + 1),
+    };
+  }
+  const lineNumber = clamp(error.lineNumber, 1, model.getLineCount());
+  const endLineNumber = clamp(error.endLineNumber, lineNumber, model.getLineCount());
+  const lineLength = model.getLineLength(lineNumber);
+  const column = clamp(error.column, 1, Math.max(1, lineLength + 1));
+  const endColumn = clamp(error.endColumn, column + 1, Math.max(column + 1, model.getLineLength(endLineNumber) + 1));
+  return {
+    severity: monaco.MarkerSeverity.Error,
+    message: error.message,
+    startLineNumber: lineNumber,
+    startColumn: column,
+    endLineNumber,
+    endColumn,
+  };
+}
+
 function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
   const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
   return isNumber
@@ -589,4 +614,8 @@ function completionGroupRank(group: string): number {
   ];
   const index = order.indexOf(group);
   return index === -1 ? order.length : index;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

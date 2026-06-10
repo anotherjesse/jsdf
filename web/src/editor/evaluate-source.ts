@@ -13,7 +13,7 @@ export interface SourceResult {
 export function evaluateSource(source: string): SourceResult {
   const names = Object.keys(runtime);
   const values = names.map((name) => runtime[name as keyof typeof runtime]);
-  const fn = new Function(...names, `"use strict";\n${source}`);
+  const fn = new Function(...names, `"use strict";\n${source}\n//# sourceURL=sdf-editor-source.js`);
   const result = fn(...values);
   if (!(result instanceof SDF3)) {
     throw new Error("Editor code must return an SDF3.");

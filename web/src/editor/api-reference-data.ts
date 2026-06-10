@@ -17,6 +17,8 @@ const fn = (
   completionScopes?: readonly ApiCompletionScope[],
 ): ApiReferenceSeed => ({ kind, group, signature, description, completionScopes });
 
+const GLOBAL_AND_METHOD = ["global", "method"] as const satisfies readonly ApiCompletionScope[];
+
 export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   SDF2: fn("Classes", "class SDF2", "2D SDF value returned by 2D primitives and operations.", "class"),
   SDF3: fn("Classes", "class SDF3", "3D SDF value returned by 3D primitives, extrusions, and revolves.", "class"),
@@ -53,15 +55,15 @@ export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   polygon: fn("2D Primitives", "polygon(points): SDF2", "Creates a 2D polygon from a list of points."),
   vesica: fn("2D Primitives", "vesica(radius, distance): SDF2", "Creates a vesica shape from two overlapping circles."),
 
-  union: fn("CSG", "union(first, ...rest, { k? }): SDF", "Combines SDFs, optionally using smooth blending with k."),
-  difference: fn("CSG", "difference(first, ...rest, { k? }): SDF", "Subtracts later SDFs from the first, optionally smoothing with k."),
+  union: fn("CSG", "union(first, ...rest, { k? }): SDF", "Combines SDFs, optionally using smooth blending with k.", "function", GLOBAL_AND_METHOD),
+  difference: fn("CSG", "difference(first, ...rest, { k? }): SDF", "Subtracts later SDFs from the first, optionally smoothing with k.", "function", GLOBAL_AND_METHOD),
   subtract: fn("CSG", "shape.subtract(...others, { k? }): SDF", "Method alias for difference.", "method"),
-  intersection: fn("CSG", "intersection(first, ...rest, { k? }): SDF", "Keeps the overlapping region of the inputs."),
-  blend: fn("CSG", "blend(first, ...rest, { k? }): SDF", "Smoothly blends SDFs together."),
-  negate: fn("CSG", "negate(shape): SDF", "Inverts the inside and outside of an SDF."),
-  dilate: fn("CSG", "dilate(shape, radius): SDF", "Expands an SDF outward."),
-  erode: fn("CSG", "erode(shape, radius): SDF", "Shrinks an SDF inward."),
-  shell: fn("CSG", "shell(shape, thickness): SDF", "Turns a solid into a thin shell."),
+  intersection: fn("CSG", "intersection(first, ...rest, { k? }): SDF", "Keeps the overlapping region of the inputs.", "function", GLOBAL_AND_METHOD),
+  blend: fn("CSG", "blend(first, ...rest, { k? }): SDF", "Smoothly blends SDFs together.", "function", GLOBAL_AND_METHOD),
+  negate: fn("CSG", "negate(shape): SDF", "Inverts the inside and outside of an SDF.", "function", GLOBAL_AND_METHOD),
+  dilate: fn("CSG", "dilate(shape, radius): SDF", "Expands an SDF outward.", "function", GLOBAL_AND_METHOD),
+  erode: fn("CSG", "erode(shape, radius): SDF", "Shrinks an SDF inward.", "function", GLOBAL_AND_METHOD),
+  shell: fn("CSG", "shell(shape, thickness): SDF", "Turns a solid into a thin shell.", "function", GLOBAL_AND_METHOD),
   repeat: fn("CSG", "shape.repeat(spacing, count = null, padding = 0): SDF", "Repeats a shape across a grid.", "method"),
 
   k: fn("CSG", "shape.k(value): SDF", "Sets the smoothness used by the next CSG operation.", "method"),
