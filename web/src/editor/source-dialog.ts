@@ -204,6 +204,9 @@ function renderSavedDocument(
   if (olderVersions.length > 0) {
     const details = document.createElement("details");
     details.className = "source-versions";
+    details.open = olderVersions.some((version) => {
+      return state.activeDocumentId === savedDocument.id && state.activeVersionId === version.id;
+    });
     const summary = document.createElement("summary");
     summary.textContent = "Older versions";
     const versionList = document.createElement("div");

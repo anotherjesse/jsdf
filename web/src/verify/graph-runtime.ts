@@ -75,6 +75,7 @@ export interface GraphRuntimeVerification {
     activeExampleCurrent: string;
     activeLatestSavedCurrent: string;
     activeOlderSavedCurrent: string;
+    activeOlderVersionsOpen: boolean;
     loadedExample: string;
     loadedSaved: string;
   };
@@ -719,6 +720,7 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
       activeExampleCurrent: "",
       activeLatestSavedCurrent: "",
       activeOlderSavedCurrent: "",
+      activeOlderVersionsOpen: false,
       loadedExample,
       loadedSaved,
     };
@@ -820,8 +822,11 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
     deleteVersion() {},
   });
   const savedVersionsForCurrent = root.querySelector<HTMLDetailsElement>(".source-versions");
-  if (savedVersionsForCurrent) savedVersionsForCurrent.open = true;
+  const activeOlderVersionsOpen = Boolean(savedVersionsForCurrent?.open);
   const activeOlderSavedCurrent = currentSourceTargets(root).join(",");
+  if (!activeOlderVersionsOpen) {
+    errors.push("source dialog did not expand active older saved version");
+  }
   if (activeOlderSavedCurrent !== "source-version-button:Saved Vessel") {
     errors.push(`source dialog current older saved was ${activeOlderSavedCurrent || "nothing"}`);
   }
@@ -840,6 +845,7 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
     activeExampleCurrent,
     activeLatestSavedCurrent,
     activeOlderSavedCurrent,
+    activeOlderVersionsOpen,
     loadedExample,
     loadedSaved,
   };
