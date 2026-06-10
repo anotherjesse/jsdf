@@ -2,7 +2,12 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js";
 import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import { apiCompletionEntries, apiReferenceForWord, type ApiReferenceEntry } from "./api-reference";
+import {
+  apiCompletionEntriesForScope,
+  apiReferenceForWord,
+  type ApiReferenceEntry,
+} from "./api-reference";
+import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
@@ -28,8 +33,9 @@ monaco.languages.registerCompletionItemProvider("javascript", {
       startColumn: word.startColumn,
       endColumn: word.endColumn,
     };
+    const scope = completionScopeAtPosition(model, position, word);
     return {
-      suggestions: apiCompletionEntries().map((entry) => ({
+      suggestions: apiCompletionEntriesForScope(scope).map((entry) => ({
         label: entry.name,
         kind: completionKindForApiEntry(entry),
         insertText: entry.name,
@@ -511,6 +517,17 @@ function completionKindForApiEntry(entry: ApiReferenceEntry): monaco.languages.C
   if (entry.kind === "method") return monaco.languages.CompletionItemKind.Method;
   if (entry.kind === "namespace") return monaco.languages.CompletionItemKind.Module;
   return monaco.languages.CompletionItemKind.Function;
+}
+
+function completionScopeAtPosition(
+  model: monaco.editor.ITextModel,
+  position: monaco.Position,
+  word: monaco.editor.IWordAtPosition,
+): ApiCompletionScope {
+  const beforeWord = model.getLineContent(position.lineNumber).slice(0, word.startColumn - 1).trimEnd();
+  if (!beforeWord.endsWith(".")) return "global";
+  const beforeDot = beforeWord.slice(0, -1).trimEnd();
+  return /\bease$/.test(beforeDot) ? "ease" : "method";
 }
 
 function completionGroupRank(group: string): number {

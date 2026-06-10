@@ -1,4 +1,4 @@
-import { apiCompletionEntries, apiReferenceForWord } from "../editor/api-reference";
+import { apiCompletionEntriesForScope, apiReferenceForWord } from "../editor/api-reference";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
@@ -46,10 +46,12 @@ export interface EditorRuntimeVerification {
     farGap: string;
   };
   apiHints: {
-    completions: number;
+    globalCompletions: number;
+    methodCompletions: number;
+    easeCompletions: number;
     sphere: string;
     translate: string;
-    fallback: string;
+    easing: string;
   };
   selectionRestore: {
     previousNode: string;
@@ -267,25 +269,37 @@ export async function runEditorRuntimeVerification(
 }
 
 function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"] {
-  const completions = apiCompletionEntries();
-  const completionNames = new Set(completions.map((entry) => entry.name));
+  const globalCompletions = apiCompletionEntriesForScope("global");
+  const methodCompletions = apiCompletionEntriesForScope("method");
+  const easeCompletions = apiCompletionEntriesForScope("ease");
+  const globalNames = new Set(globalCompletions.map((entry) => entry.name));
+  const methodNames = new Set(methodCompletions.map((entry) => entry.name));
+  const easeNames = new Set(easeCompletions.map((entry) => entry.name));
   const sphere = apiReferenceForWord("sphere");
   const translate = apiReferenceForWord("translate");
-  const asVec = apiReferenceForWord("asVec");
+  const linear = apiReferenceForWord("linear");
 
-  if (completions.length < 40) errors.push(`api hints only exposed ${completions.length} completions`);
-  if (!completionNames.has("sphere")) errors.push("api hints missing sphere completion");
-  if (!completionNames.has("translate")) errors.push("api hints missing translate method completion");
-  if (!completionNames.has("save")) errors.push("api hints missing save workflow completion");
+  if (globalCompletions.length < 35) errors.push(`api hints only exposed ${globalCompletions.length} global completions`);
+  if (methodCompletions.length < 20) errors.push(`api hints only exposed ${methodCompletions.length} method completions`);
+  if (easeCompletions.length < 30) errors.push(`api hints only exposed ${easeCompletions.length} ease completions`);
+  if (!globalNames.has("sphere")) errors.push("api hints missing sphere global completion");
+  if (!globalNames.has("save")) errors.push("api hints missing save workflow completion");
+  if (globalNames.has("translate")) errors.push("api hints leaked translate into global completions");
+  if (!methodNames.has("translate")) errors.push("api hints missing translate method completion");
+  if (methodNames.has("sphere")) errors.push("api hints leaked sphere into method completions");
+  if (!easeNames.has("linear")) errors.push("api hints missing ease.linear completion");
+  if (easeNames.has("sphere")) errors.push("api hints leaked sphere into ease completions");
   if (!sphere?.signature.includes("sphere(")) errors.push("api hints missing sphere signature");
   if (translate?.kind !== "method") errors.push(`api hints classified translate as ${translate?.kind ?? "missing"}`);
-  if (asVec?.kind !== "function") errors.push(`api hints fallback classified asVec as ${asVec?.kind ?? "missing"}`);
+  if (!linear?.signature.includes("ease.linear")) errors.push("api hints missing ease.linear signature");
 
   return {
-    completions: completions.length,
+    globalCompletions: globalCompletions.length,
+    methodCompletions: methodCompletions.length,
+    easeCompletions: easeCompletions.length,
     sphere: sphere?.signature ?? "",
     translate: translate?.signature ?? "",
-    fallback: asVec?.signature ?? "",
+    easing: linear?.signature ?? "",
   };
 }
 

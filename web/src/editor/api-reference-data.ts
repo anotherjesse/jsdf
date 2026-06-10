@@ -1,10 +1,12 @@
 export type ApiSymbolKind = "function" | "method" | "constant" | "class" | "namespace";
+export type ApiCompletionScope = "global" | "method" | "ease";
 
 export interface ApiReferenceSeed {
   kind: ApiSymbolKind;
   signature: string;
   description: string;
   group: string;
+  completionScopes?: readonly ApiCompletionScope[];
 }
 
 const fn = (
@@ -12,7 +14,8 @@ const fn = (
   signature: string,
   description: string,
   kind: ApiSymbolKind = "function",
-): ApiReferenceSeed => ({ kind, group, signature, description });
+  completionScopes?: readonly ApiCompletionScope[],
+): ApiReferenceSeed => ({ kind, group, signature, description, completionScopes });
 
 export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   SDF2: fn("Classes", "class SDF2", "2D SDF value returned by 2D primitives and operations.", "class"),
