@@ -18,6 +18,16 @@ export class OrbitCamera {
       Math.cos(this.elevation) * Math.sin(this.azimuth),
       Math.sin(this.elevation),
     ];
+    return this.eyeForDirection(center, radius, orbit);
+  }
+
+  eyeForDirection(center: number[], radius: number, direction: number[]): number[] {
+    const length = Math.hypot(direction[0], direction[1], direction[2]) || 1;
+    const orbit = [
+      direction[0] / length,
+      direction[1] / length,
+      direction[2] / length,
+    ];
     return [
       center[0] + orbit[0] * radius * this.distance,
       center[1] + orbit[1] * radius * this.distance,

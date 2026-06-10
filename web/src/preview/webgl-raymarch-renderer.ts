@@ -3,6 +3,7 @@ import type { Bounds3 } from "../mesh/bounds";
 import { compileGLSLScene } from "../glsl/compiler";
 import { fnName } from "../glsl/format";
 import type { OrbitCamera } from "./orbit-camera";
+import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
 
 export type HighlightMode = "mark" | "focus";
 
@@ -16,6 +17,7 @@ export class WebGLRaymarchRenderer {
   private radius = 1;
   private steps = 180;
   private active = true;
+  private layout: PreviewLayout = "single";
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -30,6 +32,12 @@ export class WebGLRaymarchRenderer {
   setActive(active: boolean): void {
     this.active = active;
     if (active) this.redraw();
+  }
+
+  setLayout(layout: PreviewLayout): void {
+    if (this.layout === layout) return;
+    this.layout = layout;
+    if (this.active) this.redraw();
   }
 
   render(
@@ -48,6 +56,7 @@ export class WebGLRaymarchRenderer {
     this.steps = steps;
     this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
+    this.canvas.dataset.previewLayout = this.layout;
     this.setBounds(bounds);
     if (this.active) this.redraw();
   }
@@ -57,7 +66,7 @@ export class WebGLRaymarchRenderer {
     if (!this.program || !this.bounds) return;
     this.resize();
     const gl = this.gl;
-    const eye = this.camera.eye(this.center, this.radius);
+    const panels = viewPanels(this.layout, this.canvas.width, this.canvas.height);
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.disable(gl.DEPTH_TEST);
@@ -66,14 +75,28 @@ export class WebGLRaymarchRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
-    gl.uniform2f(gl.getUniformLocation(this.program, "u_resolution"), this.canvas.width, this.canvas.height);
-    gl.uniform3f(gl.getUniformLocation(this.program, "u_eye"), eye[0], eye[1], eye[2]);
     gl.uniform3f(gl.getUniformLocation(this.program, "u_target"), this.center[0], this.center[1], this.center[2]);
     gl.uniform1f(gl.getUniformLocation(this.program, "u_radius"), this.radius);
+    gl.uniform1f(gl.getUniformLocation(this.program, "u_viewScale"), this.layout === "quad" ? 0.82 : 0.62);
     gl.uniform1i(gl.getUniformLocation(this.program, "u_steps"), this.steps);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    for (const panel of panels) {
+      this.drawPanel(panel);
+    }
     this.recordPixelDiagnostics();
     gl.bindVertexArray(null);
+  }
+
+  private drawPanel(panel: ViewPanel): void {
+    if (!this.program) return;
+    const gl = this.gl;
+    const eye = panel.direction
+      ? this.camera.eyeForDirection(this.center, this.radius, panel.direction)
+      : this.camera.eye(this.center, this.radius);
+    gl.viewport(panel.x, panel.y, panel.width, panel.height);
+    gl.uniform2f(gl.getUniformLocation(this.program, "u_resolution"), panel.width, panel.height);
+    gl.uniform2f(gl.getUniformLocation(this.program, "u_viewOrigin"), panel.x, panel.y);
+    gl.uniform3f(gl.getUniformLocation(this.program, "u_eye"), eye[0], eye[1], eye[2]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   private setBounds(bounds: Bounds3): void {
@@ -126,6 +149,7 @@ export class WebGLRaymarchRenderer {
       distinct.add(`${pixel[0]},${pixel[1]},${pixel[2]}`);
     }
     this.canvas.dataset.previewMode = "glsl-raymarch";
+    this.canvas.dataset.previewLayout = this.layout;
     this.canvas.dataset.previewWidth = String(this.canvas.width);
     this.canvas.dataset.previewHeight = String(this.canvas.height);
     this.canvas.dataset.previewSum = String(sum);
@@ -183,9 +207,11 @@ ${selectedSceneFunction(highlightNode)}
 const bool SDF_FOCUS_HIGHLIGHT = ${highlightMode === "focus" && highlightNode ? "true" : "false"};
 
 uniform vec2 u_resolution;
+uniform vec2 u_viewOrigin;
 uniform vec3 u_eye;
 uniform vec3 u_target;
 uniform float u_radius;
+uniform float u_viewScale;
 uniform int u_steps;
 
 out vec4 outColor;
@@ -200,16 +226,17 @@ vec3 estimateNormal(vec3 p) {
 }
 
 void main() {
-  vec2 uv = gl_FragCoord.xy / u_resolution * 2.0 - 1.0;
+  vec2 uv = (gl_FragCoord.xy - u_viewOrigin) / u_resolution * 2.0 - 1.0;
   uv.x *= u_resolution.x / u_resolution.y;
 
   vec3 forward = normalize(u_target - u_eye);
-  vec3 right = normalize(cross(forward, vec3(0.0, 0.0, 1.0)));
-  if (length(right) < 0.001) {
-    right = vec3(1.0, 0.0, 0.0);
+  vec3 rightSeed = cross(forward, vec3(0.0, 0.0, 1.0));
+  if (length(rightSeed) < 0.001) {
+    rightSeed = vec3(1.0, 0.0, 0.0);
   }
+  vec3 right = normalize(rightSeed);
   vec3 up = normalize(cross(right, forward));
-  vec3 ray = normalize(forward + uv.x * right * 0.62 + uv.y * up * 0.62);
+  vec3 ray = normalize(forward + uv.x * right * u_viewScale + uv.y * up * u_viewScale);
 
   float t = 0.0;
   float prevT = 0.0;

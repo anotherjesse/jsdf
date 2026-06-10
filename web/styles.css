@@ -695,7 +695,7 @@ button:disabled {
 }
 
 .segmented.view-toggle {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 46px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px 46px;
 }
 
 .segmented button {
@@ -748,6 +748,21 @@ button:disabled {
   border-bottom: 2px solid currentColor;
   content: "";
   transform: rotate(45deg);
+}
+
+.grid-icon {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+  gap: 3px;
+}
+
+.grid-icon span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 1px;
 }
 
 .range {

@@ -23,6 +23,7 @@ import { hasWebGPU } from "./gpu/webgpu";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
 import { OrbitCamera } from "./preview/orbit-camera";
+import type { PreviewLayout } from "./preview/view-layout";
 import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
 import { WebGLRaymarchRenderer } from "./preview/webgl-raymarch-renderer";
 
@@ -37,6 +38,7 @@ const closeSourceDialogButton = document.querySelector<HTMLButtonElement>("#clos
 const gpuBadge = document.querySelector<HTMLElement>("#gpuBadge")!;
 const shaderViewButton = document.querySelector<HTMLButtonElement>("#shaderViewButton")!;
 const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButton")!;
+const layoutViewButton = document.querySelector<HTMLButtonElement>("#layoutViewButton")!;
 const downloadButton = document.querySelector<HTMLButtonElement>("#downloadButton")!;
 const surfaceNetButton = document.querySelector<HTMLButtonElement>("#surfaceNetButton")!;
 const tetraMeshButton = document.querySelector<HTMLButtonElement>("#tetraMeshButton")!;
@@ -90,6 +92,7 @@ let meshTimer = 0;
 let sourceCompileTimer = 0;
 let viewMode: RenderView = "shader";
 let desiredViewMode: RenderView = "shader";
+let previewLayout: PreviewLayout = "single";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
@@ -140,6 +143,9 @@ meshViewButton.addEventListener("click", () => {
   desiredViewMode = "mesh";
   void showMesh();
 });
+layoutViewButton.addEventListener("click", () => {
+  setPreviewLayout(previewLayout === "single" ? "quad" : "single");
+});
 surfaceNetButton.addEventListener("click", () => setMeshAlgorithm("surface-net"));
 tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
 fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
@@ -175,6 +181,7 @@ async function boot(): Promise<void> {
     const camera = new OrbitCamera(canvas, () => activeRenderer()?.redraw());
     rayRenderer = new WebGLRaymarchRenderer(canvas, camera);
     meshRenderer = new WebGLMeshRenderer(canvas, camera);
+    setPreviewLayout(previewLayout);
     graphInspector = new GraphInspector(graphInspectorElement, {
       onSelect: selectNode,
       onHover: handleGraphHover,
@@ -640,6 +647,16 @@ function clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}):
 
 function activeRenderer(): { redraw(): void } | null {
   return viewMode === "shader" ? rayRenderer : meshRenderer;
+}
+
+function setPreviewLayout(layout: PreviewLayout): void {
+  previewLayout = layout;
+  layoutViewButton.setAttribute("aria-pressed", String(layout === "quad"));
+  layoutViewButton.title = layout === "quad" ? "Use single view" : "Use 2x2 view";
+  layoutViewButton.setAttribute("aria-label", layoutViewButton.title);
+  rayRenderer?.setLayout(layout);
+  meshRenderer?.setLayout(layout);
+  activeRenderer()?.redraw();
 }
 
 function setEditorView(mode: EditorView): void {

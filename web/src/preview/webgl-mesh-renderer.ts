@@ -1,6 +1,7 @@
 import type { Bounds3 } from "../mesh/bounds";
 import type { Triangle } from "../mesh/polygonize";
 import type { OrbitCamera } from "./orbit-camera";
+import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
 
 export class WebGLMeshRenderer {
   private readonly gl: WebGL2RenderingContext;
@@ -14,6 +15,7 @@ export class WebGLMeshRenderer {
   private center = [0, 0, 0];
   private radius = 1;
   private active = false;
+  private layout: PreviewLayout = "single";
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -42,6 +44,12 @@ export class WebGLMeshRenderer {
     if (active) this.redraw();
   }
 
+  setLayout(layout: PreviewLayout): void {
+    if (this.layout === layout) return;
+    this.layout = layout;
+    if (this.active) this.redraw();
+  }
+
   render(triangles: Triangle[], bounds: Bounds3): void {
     this.upload(triangles);
     this.setBounds(bounds);
@@ -53,11 +61,7 @@ export class WebGLMeshRenderer {
     if (!this.bounds || this.vertexCount === 0) return;
     this.resize();
     const gl = this.gl;
-    const aspect = this.canvas.width / this.canvas.height;
-    const eye = this.camera.eye(this.center, this.radius);
-    const view = lookAt(eye, this.center, [0, 0, 1]);
-    const projection = perspective(Math.PI / 5, aspect, 0.01, this.radius * 60 + 10);
-    const mvp = multiplyMat4(projection, view);
+    const panels = viewPanels(this.layout, this.canvas.width, this.canvas.height);
 
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(0.11, 0.125, 0.145, 1);
@@ -66,12 +70,27 @@ export class WebGLMeshRenderer {
     gl.enable(gl.CULL_FACE);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
-    gl.uniformMatrix4fv(this.mvpLocation, false, mvp);
     gl.uniform3f(this.lightLocation, 0.45, 0.7, 0.9);
     gl.bindVertexArray(this.vao);
-    gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    for (const panel of panels) {
+      this.drawPanel(panel);
+    }
     this.recordPixelDiagnostics();
     gl.bindVertexArray(null);
+  }
+
+  private drawPanel(panel: ViewPanel): void {
+    const aspect = panel.width / panel.height;
+    const eye = panel.direction
+      ? this.camera.eyeForDirection(this.center, this.radius, panel.direction)
+      : this.camera.eye(this.center, this.radius);
+    const up = panel.direction && Math.abs(panel.direction[2]) > 0.9 ? [0, 1, 0] : [0, 0, 1];
+    const view = lookAt(eye, this.center, up);
+    const projection = perspective(this.layout === "quad" ? Math.PI / 4 : Math.PI / 5, aspect, 0.01, this.radius * 60 + 10);
+    const mvp = multiplyMat4(projection, view);
+    this.gl.viewport(panel.x, panel.y, panel.width, panel.height);
+    this.gl.uniformMatrix4fv(this.mvpLocation, false, mvp);
+    this.gl.drawArrays(this.gl.TRIANGLES, 0, this.vertexCount);
   }
 
   private resize(): void {
@@ -137,6 +156,7 @@ export class WebGLMeshRenderer {
       distinct.add(`${pixel[0]},${pixel[1]},${pixel[2]}`);
     }
     this.canvas.dataset.previewMode = "mesh";
+    this.canvas.dataset.previewLayout = this.layout;
     this.canvas.dataset.previewWidth = String(this.canvas.width);
     this.canvas.dataset.previewHeight = String(this.canvas.height);
     this.canvas.dataset.previewSum = String(sum);

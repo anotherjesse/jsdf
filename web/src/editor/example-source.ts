@@ -140,7 +140,7 @@ medal = medal.difference(cylinder(0.16));
 return medal;`,
 
   chain: `const flatLink = torus(0.54, 0.085).scale([1.18, 0.62, 1]).rotate(Math.PI / 2, X);
-const crossLink = torus(0.54, 0.085).scale([1.18, 0.62, 1]).rotate(Math.PI / 2, Y);
+const crossLink = torus(0.54, 0.085).scale([1.18, 0.62, 1]);
 return union(
   flatLink.translate([-0.8, 0, 0]),
   crossLink,
