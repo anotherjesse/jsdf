@@ -12,6 +12,8 @@ export interface SourceDialogState {
 export interface SourceDialogActions {
   loadExample(id: string): void;
   loadSaved(documentId: string, versionId: string): void;
+  deleteDocument(documentId: string): void;
+  deleteVersion(documentId: string, versionId: string): void;
 }
 
 export function renderSourceDialog(
@@ -78,13 +80,20 @@ function renderSavedDocument(
   item.className = "saved-source";
   if (!latest) return item;
 
+  const latestRow = document.createElement("div");
+  latestRow.className = "source-row";
+
   const latestButton = renderSourceButton({
     name: savedDocument.name,
     meta: `Saved ${formatVersionLabel(latest.createdAt)}${savedDocument.versions.length > 1 ? `, ${savedDocument.versions.length} versions` : ""}`,
     pressed: state.activeDocumentId === savedDocument.id && state.activeVersionId === latest.id,
   });
   latestButton.addEventListener("click", () => actions.loadSaved(savedDocument.id, latest.id));
-  item.append(latestButton);
+  latestRow.append(
+    latestButton,
+    renderDeleteButton(`Delete ${savedDocument.name}`, () => actions.deleteDocument(savedDocument.id)),
+  );
+  item.append(latestRow);
 
   const olderVersions = savedDocument.versions.filter((version) => version.id !== latest.id);
   if (olderVersions.length > 0) {
@@ -95,7 +104,7 @@ function renderSavedDocument(
     const versionList = document.createElement("div");
     versionList.className = "source-version-list";
     for (const version of olderVersions) {
-      versionList.append(renderVersionButton(savedDocument, version, state, actions));
+      versionList.append(renderVersionRow(savedDocument, version, state, actions));
     }
     details.append(summary, versionList);
     item.append(details);
@@ -120,6 +129,23 @@ function renderVersionButton(
   return button;
 }
 
+function renderVersionRow(
+  savedDocument: SavedSourceDocument,
+  version: SavedSourceVersion,
+  state: SourceDialogState,
+  actions: SourceDialogActions,
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "source-row source-version-row";
+  row.append(
+    renderVersionButton(savedDocument, version, state, actions),
+    renderDeleteButton(`Delete ${savedDocument.name} version ${formatVersionLabel(version.createdAt)}`, () => {
+      actions.deleteVersion(savedDocument.id, version.id);
+    }),
+  );
+  return row;
+}
+
 function renderSourceButton(options: {
   name: string;
   meta: string;
@@ -138,6 +164,24 @@ function renderSourceButton(options: {
   meta.textContent = options.meta;
 
   button.append(name, meta);
+  return button;
+}
+
+function renderDeleteButton(label: string, onClick: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "source-delete-button icon-button";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+
+  const icon = document.createElement("span");
+  icon.className = "trash-icon";
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon);
   return button;
 }
 

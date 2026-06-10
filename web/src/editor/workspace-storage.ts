@@ -73,6 +73,37 @@ export function saveSourceVersion(
   return normalizeDocument(document) ?? document;
 }
 
+export function deleteSavedSourceDocument(docId: string, storage = globalThis.localStorage): boolean {
+  const state = readState(storage);
+  const nextDocuments = state.documents.filter((doc) => doc.id !== docId);
+  if (nextDocuments.length === state.documents.length) return false;
+  writeState(storage, { documents: nextDocuments });
+  return true;
+}
+
+export function deleteSavedSourceVersion(
+  docId: string,
+  versionId: string,
+  storage = globalThis.localStorage,
+): SavedSourceDocument | null {
+  const state = readState(storage);
+  const document = state.documents.find((doc) => doc.id === docId);
+  if (!document) return null;
+
+  const nextVersions = document.versions.filter((version) => version.id !== versionId);
+  if (nextVersions.length === document.versions.length) return normalizeDocument(document) ?? document;
+
+  if (nextVersions.length === 0) {
+    writeState(storage, { documents: state.documents.filter((doc) => doc.id !== docId) });
+    return null;
+  }
+
+  document.versions = nextVersions;
+  document.updatedAt = latestSourceVersion(normalizeDocument(document) ?? document)?.createdAt ?? document.updatedAt;
+  writeState(storage, state);
+  return normalizeDocument(document);
+}
+
 function readState(storage: Storage): SavedWorkspaceState {
   try {
     const raw = storage.getItem(STORAGE_KEY);

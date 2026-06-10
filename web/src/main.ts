@@ -8,6 +8,8 @@ import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./e
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
 import {
+  deleteSavedSourceDocument,
+  deleteSavedSourceVersion,
   latestSourceVersion,
   listSavedSourceDocuments,
   loadSavedSourceVersion,
@@ -238,6 +240,39 @@ function saveCurrentSource(): void {
     const message = error instanceof Error ? error.message : String(error);
     setEditorStatus(`Save failed: ${message}`, "error");
   }
+}
+
+function deleteSavedDocument(documentId: string): void {
+  const savedDocument = listSavedSourceDocuments().find((candidate) => candidate.id === documentId);
+  if (!savedDocument) {
+    renderLoadDialog();
+    return;
+  }
+  if (!window.confirm(`Delete "${savedDocument.name}" and all of its saved versions?`)) return;
+
+  if (!deleteSavedSourceDocument(documentId)) {
+    setEditorStatus("Saved shape not found", "error");
+    renderLoadDialog();
+    return;
+  }
+
+  if (activeDocumentId === documentId) detachDeletedSource();
+  renderLoadDialog();
+  setEditorStatus("Deleted saved shape", "ok");
+}
+
+function deleteSavedVersion(documentId: string, versionId: string): void {
+  const loaded = loadSavedSourceVersion(documentId, versionId);
+  if (!loaded) {
+    renderLoadDialog();
+    return;
+  }
+  if (!window.confirm(`Delete this saved version of "${loaded.document.name}"?`)) return;
+
+  deleteSavedSourceVersion(documentId, versionId);
+  if (activeDocumentId === documentId && activeSourceVersionId === versionId) detachDeletedSource();
+  renderLoadDialog();
+  setEditorStatus("Deleted saved version", "ok");
 }
 
 function scheduleSourceCompile(): void {
@@ -746,6 +781,8 @@ function renderLoadDialog(): void {
   }, {
     loadExample,
     loadSaved: loadSavedSourceById,
+    deleteDocument: deleteSavedDocument,
+    deleteVersion: deleteSavedVersion,
   });
 }
 
@@ -760,6 +797,15 @@ function currentSourceValue(): string {
 function markSourceClean(source: string, name: string): void {
   cleanSourceSnapshot = source;
   cleanNameSnapshot = name;
+  updateSaveState();
+}
+
+function detachDeletedSource(): void {
+  activeDocumentId = null;
+  activeSourceVersionId = null;
+  activeSourceName = currentDocumentName();
+  cleanSourceSnapshot = "";
+  cleanNameSnapshot = "";
   updateSaveState();
 }
 
