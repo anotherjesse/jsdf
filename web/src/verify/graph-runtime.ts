@@ -794,11 +794,63 @@ function verifySourcePatch(edit: GraphParamEdit | null, sdf: SDF3, errors: strin
 
 function verifyVectorSourcePatches(errors: string[]): string[] {
   const patches = [
+    verifyConstScalarPatch(errors),
+    verifyConstVectorElementPatch(errors),
     verifyMulAxisScalarPatch(errors),
     verifyMulOffAxisMaterialization(errors),
     verifyDirectAxisExpansion(errors),
   ].filter((source): source is string => Boolean(source));
   return patches;
+}
+
+function verifyConstScalarPatch(errors: string[]): string | null {
+  const source = "const radius = 0.75\nreturn sphere(radius)";
+  const { sdf } = evaluateSource(source);
+  const sphere = findNodeByKind(sdf.node, "sphere");
+  if (!sphere) {
+    errors.push("const scalar fixture did not produce sphere");
+    return null;
+  }
+  const links = findGraphSourceLinks(source, sdf);
+  const radiusLink = links.find((link) => link.nodeId === sphere.id && link.label === "radius");
+  if (!radiusLink || source.slice(radiusLink.start, radiusLink.end) !== "0.75") {
+    errors.push("const scalar link did not point at const value");
+  }
+
+  const patched = patchGraphEditSource(source, sdf, graphEdit(sphere, ["radius"], "radius", 0.75, 1.1), 1.1);
+  if (!patched) {
+    errors.push("const scalar patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("const radius = 1.1")) {
+    errors.push("const scalar patch did not preserve const reference style");
+  }
+  return patched;
+}
+
+function verifyConstVectorElementPatch(errors: string[]): string | null {
+  const source = "const dx = -0.45\nreturn sphere(1).translate([dx, 0, 0])";
+  const { sdf } = evaluateSource(source);
+  const translate = findNodeByKind(sdf.node, "translate");
+  if (!translate) {
+    errors.push("const vector fixture did not produce translate");
+    return null;
+  }
+  const links = findGraphSourceLinks(source, sdf);
+  const offsetLink = links.find((link) => link.nodeId === translate.id && link.label === "offset[0]");
+  if (!offsetLink || source.slice(offsetLink.start, offsetLink.end) !== "-0.45") {
+    errors.push("const vector link did not point at const value");
+  }
+
+  const patched = patchGraphEditSource(source, sdf, graphEdit(translate, ["offset", 0], "offset[0]", -0.45, -0.25), -0.25);
+  if (!patched) {
+    errors.push("const vector patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("const dx = -0.25")) {
+    errors.push("const vector patch did not preserve const reference style");
+  }
+  return patched;
 }
 
 function verifyMulAxisScalarPatch(errors: string[]): string | null {

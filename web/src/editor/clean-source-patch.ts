@@ -597,7 +597,7 @@ function findNthCallArgumentRange(source: string, patch: CallPatch, ordinal: num
   const call = calls[ordinal];
   if (!call) return null;
   if (patch.element == null) {
-    return numericArgRange(source, call, patch.arg);
+    return numericArgRange(source, call, patch.arg) ?? numericConstArgRange(source, call.args[patch.arg]);
   }
   const arg = call.args[patch.arg];
   if (!arg) return null;
@@ -693,8 +693,10 @@ function findArrayElementRange(source: string, arg: CallArg, element: number): S
 
   const elements = splitArgs(source, open + 1, close);
   const target = elements[element];
-  if (!target || !isNumericLiteral(target.text)) return null;
-  return trimRange(source, target.start, target.end);
+  if (!target) return null;
+  return isNumericLiteral(target.text)
+    ? trimRange(source, target.start, target.end)
+    : numericConstArgRange(source, target);
 }
 
 function findArrayArgumentRange(source: string, arg: CallArg): SourceRange | null {
@@ -736,6 +738,25 @@ function directAxisArgument(arg: CallArg): { axis: string; start: number; end: n
 function findScalarVectorRange(source: string, arg: CallArg): SourceRange | null {
   if (!isNumericLiteral(arg.text)) return null;
   return { ...trimRange(source, arg.start, arg.end), scalarVector: true };
+}
+
+function numericConstArgRange(source: string, arg: CallArg | undefined): SourceRange | null {
+  if (!arg) return null;
+  const identifier = arg.text.trim();
+  if (!/^[A-Za-z_$][\w$]*$/.test(identifier)) return null;
+  return findNumericConstValueRange(source, identifier, arg.start);
+}
+
+function findNumericConstValueRange(source: string, identifier: string, beforeOffset: number): SourceRange | null {
+  const numberPattern = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?";
+  const pattern = new RegExp(`\\bconst\\s+${escapeRegExp(identifier)}\\s*=\\s*(${numberPattern})`, "g");
+  let found: SourceRange | null = null;
+  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+    if (match.index >= beforeOffset) break;
+    const start = match.index + match[0].length - match[1].length;
+    found = { start, end: start + match[1].length };
+  }
+  return found;
 }
 
 function findAxisExpressionRange(arg: CallArg): SourceRange | null {
@@ -804,4 +825,8 @@ function formatNumber(value: number): string {
 function formatNumberLike(previous: string, value: number): string {
   const match = /^(\s*)-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(\s*)$/i.exec(previous);
   return `${match?.[1] ?? ""}${formatNumber(value)}${match?.[2] ?? ""}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
