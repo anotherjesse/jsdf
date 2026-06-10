@@ -4,7 +4,7 @@ import type { CodeEditor, SourceLinkHoverOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
-import { GraphInspector, type GraphParamEdit } from "./editor/graph-inspector";
+import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
@@ -131,6 +131,7 @@ async function boot(): Promise<void> {
     meshRenderer = new WebGLMeshRenderer(canvas, camera);
     graphInspector = new GraphInspector(graphInspectorElement, {
       onSelect: selectNode,
+      onHover: handleGraphHover,
       onEdit: handleGraphEdit,
       onSolo: handleSoloPreview,
     });
@@ -227,6 +228,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
     if (soloPreview) handleSoloPreview(null);
     else schedulePreview(0);
     const selected = graphInspector.getSelected();
+    codeEditor?.setFocusedNode(selected?.id ?? null);
     if (selected) setEditorStatus(`${selected.kind} #${selected.id}`, "ok");
     return;
   }
@@ -234,6 +236,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   const node = graphInspector.setHoveredNodeById(link.nodeId);
   hoveredNode = node;
   if (!node) return;
+  codeEditor?.setFocusedNode(node.id);
 
   if (options.shiftKey) {
     handleSoloPreview(graphInspector.buildSoloPreviewForNodeId(link.nodeId));
@@ -246,8 +249,32 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
 }
 
+function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
+  if (!graphInspector) return;
+  hoveredNode = node;
+  if (!node) {
+    if (soloPreview) handleSoloPreview(null);
+    else schedulePreview(0);
+    codeEditor?.setFocusedNode(selectedNode?.id ?? null);
+    if (selectedNode) setEditorStatus(`${selectedNode.kind} #${selectedNode.id}`, "ok");
+    return;
+  }
+
+  codeEditor?.setFocusedNode(node.id);
+  if (options.shiftKey) {
+    handleSoloPreview(graphInspector.buildSoloPreviewForNodeId(node.id));
+    setEditorStatus(`Solo ${node.kind} #${node.id}`, "ok");
+    return;
+  }
+
+  if (soloPreview) handleSoloPreview(null);
+  else schedulePreview(0);
+  setEditorStatus(`${node.kind} #${node.id}`, "ok");
+}
+
 function selectNode(node: Node | null): void {
   selectedNode = node;
+  codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
     schedulePreview(0);
@@ -349,6 +376,7 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
 function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
   if (!codeEditor || !source || !sdf) return;
   codeEditor.setSourceLinks(findGraphSourceLinks(source, sdf));
+  codeEditor.setFocusedNode(hoveredNode?.id ?? selectedNode?.id ?? null);
 }
 
 function clearGraphHistory(): void {

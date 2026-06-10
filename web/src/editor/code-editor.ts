@@ -42,6 +42,7 @@ export interface CodeEditor {
   getValue(): string;
   setError(message: string | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
+  setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
   layout(): void;
   dispose(): void;
 }
@@ -74,6 +75,8 @@ export function createCodeEditor(
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
   let sourceLinkDecorations: string[] = [];
+  let focusedNodeDecorations: string[] = [];
+  let focusedNodeId: number | null = null;
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
   let hoveredLink: GraphSourceLink | null = null;
@@ -112,6 +115,30 @@ export function createCodeEditor(
     if (!model || !position) return null;
     const offset = model.getOffsetAt(position);
     return sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end) ?? null;
+  };
+
+  const applyFocusedNodeDecorations = (reveal: boolean) => {
+    const model = editor.getModel();
+    if (!model || focusedNodeId == null) {
+      focusedNodeDecorations = editor.deltaDecorations(focusedNodeDecorations, []);
+      return;
+    }
+
+    const links = sourceLinks.filter((link) => link.nodeId === focusedNodeId && link.end > link.start);
+    focusedNodeDecorations = editor.deltaDecorations(focusedNodeDecorations, links.map((link) => {
+      const start = model.getPositionAt(link.start);
+      const end = model.getPositionAt(link.end);
+      return {
+        range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
+        options: {
+          inlineClassName: "source-focused-link",
+        },
+      };
+    }));
+
+    if (reveal && links[0]) {
+      editor.revealPositionInCenterIfOutsideViewport(model.getPositionAt(links[0].start));
+    }
   };
 
   const subscription = editor.onDidChangeModelContent(() => {
@@ -194,6 +221,11 @@ export function createCodeEditor(
             },
           };
         }));
+      applyFocusedNodeDecorations(false);
+    },
+    setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
+      focusedNodeId = nodeId;
+      applyFocusedNodeDecorations(Boolean(options.reveal));
     },
     layout() {
       editor.layout();

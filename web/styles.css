@@ -308,6 +308,12 @@ button:disabled {
   color: var(--accent-2) !important;
 }
 
+.source-focused-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-2) 24%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 48%, transparent);
+}
+
 .graph-inspector {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;

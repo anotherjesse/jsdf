@@ -18,8 +18,13 @@ export interface GraphParamEdit {
 
 export interface GraphInspectorOptions {
   onSelect(node: Node | null): void;
+  onHover(node: Node | null, options: GraphHoverOptions): void;
   onEdit(edit: GraphParamEdit): void;
   onSolo(preview: SoloPreview | null): void;
+}
+
+export interface GraphHoverOptions {
+  shiftKey: boolean;
 }
 
 export class GraphInspector {
@@ -64,6 +69,9 @@ export class GraphInspector {
       this.render();
     });
     window.addEventListener("pointermove", (event) => {
+      if (!(event.target instanceof globalThis.Node) || !this.root.contains(event.target)) {
+        this.clearHover();
+      }
       if (!event.shiftKey) this.clearSolo();
     }, { capture: true });
     window.addEventListener("pointerup", () => this.clearSolo(), { capture: true });
@@ -71,6 +79,10 @@ export class GraphInspector {
       if (event.key === "Shift") this.clearSolo();
     });
     window.addEventListener("blur", () => this.clearSolo());
+    root.addEventListener("pointerleave", () => {
+      this.clearHover();
+      this.clearSolo();
+    });
     this.toolbar.append(this.filterInput, this.mapButton, this.summary);
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
@@ -301,9 +313,19 @@ export class GraphInspector {
   }
 
   private attachSoloHover(target: Element, path: Node[]): void {
-    target.addEventListener("pointerenter", (event) => this.updateSolo(path, event));
-    target.addEventListener("pointermove", (event) => this.updateSolo(path, event));
-    target.addEventListener("pointerleave", () => this.clearSolo());
+    target.addEventListener("pointerenter", (event) => this.updateHover(path, event));
+    target.addEventListener("pointermove", (event) => this.updateHover(path, event));
+    target.addEventListener("pointerleave", () => {
+      this.clearHover();
+      this.clearSolo();
+    });
+  }
+
+  private updateHover(path: Node[], event: Event): void {
+    const target = path.at(-1) ?? null;
+    this.setHoveredNodeById(target?.id ?? null);
+    this.options.onHover(target, { shiftKey: event instanceof PointerEvent && event.shiftKey });
+    this.updateSolo(path, event);
   }
 
   private updateSolo(path: Node[], event: Event): void {
@@ -319,6 +341,11 @@ export class GraphInspector {
     if (preview.key === this.soloKey) return;
     this.soloKey = preview.key;
     this.options.onSolo(preview);
+  }
+
+  private clearHover(): void {
+    this.setHoveredNodeById(null);
+    this.options.onHover(null, { shiftKey: false });
   }
 
   private clearSolo(): void {
