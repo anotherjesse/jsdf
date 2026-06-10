@@ -210,6 +210,70 @@ button:disabled {
   color: var(--danger);
 }
 
+.change-journal {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  width: min(100%, 360px);
+  min-width: 0;
+}
+
+.change-journal[hidden] {
+  display: none;
+}
+
+.change-journal-count {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.change-journal-list {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+}
+
+.change-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 108px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 3px 7px;
+  text-align: left;
+}
+
+.change-entry-node,
+.change-entry-value {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-entry-node {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.change-entry-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.change-journal-more {
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .editor-toggle {
   margin: 0 14px 12px;
 }

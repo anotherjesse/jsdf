@@ -73,6 +73,14 @@ export class GraphInspector {
     this.render();
   }
 
+  selectNodeById(id: number): Node | null {
+    if (!this.sdf) return null;
+    const node = findNode(this.sdf.node, id);
+    if (!node) return null;
+    this.select(node);
+    return node;
+  }
+
   getSelected(): Node | null {
     return this.selected;
   }
@@ -329,25 +337,36 @@ export class GraphInspector {
 
     const input = document.createElement("input");
     input.type = "number";
-    input.step = String(stepFor(field.value));
+    input.step = String(stepFor(field));
     input.value = formatValue(field.value);
 
     const range = document.createElement("input");
     range.type = "range";
-    range.min = String(field.value - rangeRadius(field.value));
-    range.max = String(field.value + rangeRadius(field.value));
     range.step = input.step;
     range.value = input.value;
 
-    const update = (value: number) => {
-      if (!Number.isFinite(value)) return;
-      const previousValue = getAtPath(node.params, field.path);
-      if (previousValue === value) return;
-      setAtPath(node.params, field.path, value);
-      input.value = formatValue(value);
-      range.min = String(value - rangeRadius(value));
-      range.max = String(value + rangeRadius(value));
+    const recenterRange = (value: number) => {
+      const bounds = rangeBoundsFor(field, value);
+      range.min = formatValue(bounds.min);
+      range.max = formatValue(bounds.max);
       range.value = formatValue(value);
+    };
+    recenterRange(field.value);
+
+    const update = (value: number, options: { clampToRange?: boolean; recenterRange?: boolean } = {}) => {
+      if (!Number.isFinite(value)) return;
+      const nextValue = options.clampToRange
+        ? clamp(value, Number(range.min), Number(range.max))
+        : value;
+      const previousValue = getAtPath(node.params, field.path);
+      if (previousValue === nextValue) return;
+      setAtPath(node.params, field.path, nextValue);
+      input.value = formatValue(nextValue);
+      if (options.recenterRange !== false) {
+        recenterRange(nextValue);
+      } else {
+        range.value = formatValue(nextValue);
+      }
       this.options.onEdit({
         node,
         nodeId: node.id,
@@ -355,13 +374,21 @@ export class GraphInspector {
         path: [...field.path],
         label: field.label,
         previousValue,
-        nextValue: value,
+        nextValue,
       });
     };
 
     input.addEventListener("input", () => update(Number(input.value)));
-    range.addEventListener("input", () => update(Number(range.value)));
-    attachScrubber(name, input, field.value, update);
+    range.addEventListener("input", () => update(Number(range.value), { recenterRange: false }));
+    attachScrubber(
+      name,
+      input,
+      field.value,
+      (value) => update(value, { clampToRange: true, recenterRange: false }),
+      () => {
+        range.value = formatValue(Number(input.value));
+      },
+    );
 
     row.append(name, input, range);
     return row;
@@ -372,6 +399,11 @@ interface NumericParam {
   label: string;
   path: ParamPath;
   value: number;
+}
+
+interface NumericRange {
+  min: number;
+  max: number;
 }
 
 function collectNumericParams(params: Record<string, unknown>): NumericParam[] {
@@ -445,18 +477,53 @@ function formatValue(value: number): string {
   return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(4).replace(/\.?0+$/, "");
 }
 
-function rangeRadius(value: number): number {
-  return Math.max(0.25, Math.abs(value) * 1.5);
+function rangeBoundsFor(field: NumericParam, value: number): NumericRange {
+  const label = field.label.toLowerCase();
+  if (label.startsWith("matrix")) return { min: -1, max: 1 };
+
+  if (isCountParam(label)) {
+    const radius = Math.min(24, Math.max(4, Math.abs(value) * 0.5));
+    return {
+      min: Math.max(1, Math.floor(value - radius)),
+      max: Math.max(2, Math.ceil(value + radius)),
+    };
+  }
+
+  const radius = Math.min(4, Math.max(0.25, Math.abs(value) * 1.5));
+  const min = isNonNegativeParam(label) ? Math.max(0, value - radius) : value - radius;
+  return { min, max: value + radius };
 }
 
-function stepFor(value: number): number {
-  const size = Math.abs(value);
+function isCountParam(label: string): boolean {
+  return label === "count" || label.endsWith(".count");
+}
+
+function isNonNegativeParam(label: string): boolean {
+  return /(^|\.)(radius|r|r0|r1|thickness|h|padding|scaledistance)$/.test(label)
+    || label.startsWith("size")
+    || label.startsWith("factor")
+    || label.startsWith("spacing");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function stepFor(field: NumericParam): number {
+  if (isCountParam(field.label.toLowerCase())) return 1;
+  const size = Math.abs(field.value);
   if (size >= 10) return 0.1;
   if (size >= 1) return 0.01;
   return 0.001;
 }
 
-function attachScrubber(label: HTMLElement, input: HTMLInputElement, initialValue: number, update: (value: number) => void): void {
+function attachScrubber(
+  label: HTMLElement,
+  input: HTMLInputElement,
+  initialValue: number,
+  update: (value: number) => void,
+  finish: () => void,
+): void {
   let startX = 0;
   let startValue = initialValue;
   let dragging = false;
@@ -465,7 +532,8 @@ function attachScrubber(label: HTMLElement, input: HTMLInputElement, initialValu
     event.preventDefault();
     dragging = true;
     startX = event.clientX;
-    startValue = Number(input.value) || initialValue;
+    const value = Number(input.value);
+    startValue = Number.isFinite(value) ? value : initialValue;
     label.setPointerCapture(event.pointerId);
     label.classList.add("scrubbing");
   });
@@ -481,12 +549,14 @@ function attachScrubber(label: HTMLElement, input: HTMLInputElement, initialValu
     dragging = false;
     label.releasePointerCapture(event.pointerId);
     label.classList.remove("scrubbing");
+    finish();
   });
 
   label.addEventListener("pointercancel", (event) => {
     dragging = false;
     label.releasePointerCapture(event.pointerId);
     label.classList.remove("scrubbing");
+    finish();
   });
 }
 

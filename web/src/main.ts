@@ -2,7 +2,8 @@ import type { Node, SDF3 } from "./core/nodes";
 import type { CodeEditor } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
-import { GraphInspector, type GraphParamEdit, type ParamPath } from "./editor/graph-inspector";
+import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
+import { GraphInspector, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
@@ -30,6 +31,7 @@ const editorStatus = document.querySelector<HTMLElement>("#editorStatus")!;
 const undoGraphButton = document.querySelector<HTMLButtonElement>("#undoGraphButton")!;
 const redoGraphButton = document.querySelector<HTMLButtonElement>("#redoGraphButton")!;
 const resetGraphButton = document.querySelector<HTMLButtonElement>("#resetGraphButton")!;
+const graphChangeJournal = document.querySelector<HTMLElement>("#graphChangeJournal")!;
 const stepsInput = document.querySelector<HTMLInputElement>("#stepsInput")!;
 const stepsOutput = document.querySelector<HTMLOutputElement>("#stepsOutput")!;
 const gridInput = document.querySelector<HTMLInputElement>("#gridInput")!;
@@ -42,16 +44,6 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
 type RenderView = "shader" | "mesh";
 type EditorView = "code" | "graph";
-
-interface GraphHistoryEntry {
-  nodeId: number;
-  nodeKind: string;
-  path: ParamPath;
-  label: string;
-  previousValue: number;
-  nextValue: number;
-  timestamp: number;
-}
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -72,8 +64,7 @@ let viewMode: RenderView = "shader";
 let desiredViewMode: RenderView = "shader";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
-let undoStack: GraphHistoryEntry[] = [];
-let redoStack: GraphHistoryEntry[] = [];
+const graphHistory = new GraphEditHistory();
 
 for (const example of examples) {
   const option = document.createElement("option");
@@ -234,56 +225,30 @@ function invalidateMeshForActiveSdf(): void {
 }
 
 function recordGraphEdit(edit: GraphParamEdit): void {
-  const now = performance.now();
-  const last = undoStack.at(-1);
-  redoStack = [];
-  if (last && last.nodeId === edit.nodeId && samePath(last.path, edit.path) && now - last.timestamp < 700) {
-    last.nextValue = edit.nextValue;
-    last.timestamp = now;
-  } else {
-    undoStack.push({
-      nodeId: edit.nodeId,
-      nodeKind: edit.nodeKind,
-      path: [...edit.path],
-      label: edit.label,
-      previousValue: edit.previousValue,
-      nextValue: edit.nextValue,
-      timestamp: now,
-    });
-  }
+  graphHistory.record(edit);
   updateGraphHistoryControls();
 }
 
 function undoGraphEdit(): void {
-  const entry = undoStack.pop();
-  if (!entry) return;
-  const node = graphInspector?.setParamValue(entry.nodeId, entry.path, entry.previousValue);
-  if (!node) {
-    undoStack.push(entry);
-    updateGraphHistoryControls();
-    return;
-  }
-  redoStack.push({ ...entry, timestamp: performance.now() });
+  const entry = graphHistory.undo((candidate) => {
+    return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.previousValue));
+  });
   updateGraphHistoryControls();
+  if (!entry) return;
   applyGraphMutationStatus(`Undid ${entry.nodeKind} ${entry.label}`);
 }
 
 function redoGraphEdit(): void {
-  const entry = redoStack.pop();
-  if (!entry) return;
-  const node = graphInspector?.setParamValue(entry.nodeId, entry.path, entry.nextValue);
-  if (!node) {
-    redoStack.push(entry);
-    updateGraphHistoryControls();
-    return;
-  }
-  undoStack.push({ ...entry, timestamp: performance.now() });
+  const entry = graphHistory.redo((candidate) => {
+    return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.nextValue));
+  });
   updateGraphHistoryControls();
+  if (!entry) return;
   applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`);
 }
 
 function resetGraphEdits(): void {
-  if (undoStack.length === 0) return;
+  if (!graphHistory.canUndo) return;
   if (compileEditorSource({ status: "Reset graph" })) {
     overlay.textContent = "";
   }
@@ -296,19 +261,70 @@ function applyGraphMutationStatus(message: string): void {
 }
 
 function clearGraphHistory(): void {
-  undoStack = [];
-  redoStack = [];
+  graphHistory.clear();
   updateGraphHistoryControls();
 }
 
 function updateGraphHistoryControls(): void {
-  undoGraphButton.disabled = undoStack.length === 0;
-  redoGraphButton.disabled = redoStack.length === 0;
-  resetGraphButton.disabled = undoStack.length === 0;
+  undoGraphButton.disabled = !graphHistory.canUndo;
+  redoGraphButton.disabled = !graphHistory.canRedo;
+  resetGraphButton.disabled = !graphHistory.canUndo;
+  renderGraphChangeJournal();
 }
 
-function samePath(a: ParamPath, b: ParamPath): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
+function renderGraphChangeJournal(): void {
+  const entries = graphHistory.current();
+  graphChangeJournal.replaceChildren();
+  graphChangeJournal.hidden = entries.length === 0;
+  if (entries.length === 0) return;
+
+  const count = document.createElement("span");
+  count.className = "change-journal-count";
+  count.textContent = `${entries.length} ${entries.length === 1 ? "change" : "changes"}`;
+
+  const list = document.createElement("div");
+  list.className = "change-journal-list";
+  const visibleEntries = entries.slice(-3).reverse();
+  for (const entry of visibleEntries) {
+    list.append(renderGraphChangeEntry(entry));
+  }
+  if (entries.length > visibleEntries.length) {
+    const overflow = document.createElement("span");
+    overflow.className = "change-journal-more";
+    overflow.textContent = `+${entries.length - visibleEntries.length}`;
+    list.append(overflow);
+  }
+
+  graphChangeJournal.append(count, list);
+}
+
+function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "change-entry";
+  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${entry.label} ${formatGraphValue(entry.previousValue)} -> ${formatGraphValue(entry.nextValue)}`;
+  button.setAttribute("aria-label", button.title);
+  button.dataset.nodeId = String(entry.nodeId);
+
+  const node = document.createElement("span");
+  node.className = "change-entry-node";
+  node.textContent = `${entry.nodeKind} #${entry.nodeId}`;
+
+  const value = document.createElement("span");
+  value.className = "change-entry-value";
+  value.textContent = `${entry.label} ${formatGraphValue(entry.nextValue)}`;
+
+  button.append(node, value);
+  button.addEventListener("click", () => selectGraphHistoryEntry(entry));
+  return button;
+}
+
+function selectGraphHistoryEntry(entry: GraphHistoryEntry): void {
+  const node = graphInspector?.selectNodeById(entry.nodeId);
+  if (!node) return;
+  setEditorView("graph");
+  setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
+  schedulePreview(0);
 }
 
 function clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}): void {
