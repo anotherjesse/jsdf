@@ -385,6 +385,11 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
         verifyErrors.push(`keyboard scrub emitted ${lastEdit?.label ?? "nothing"} ${keyboardValue}`);
       }
     }
+    const rangeBounds = Array.from(paramRow?.querySelectorAll<HTMLElement>(".param-range-bound") ?? [])
+      .map((bound) => bound.textContent ?? "");
+    if (rangeBounds.join(":") !== "0:2.5") {
+      verifyErrors.push(`radius range bounds rendered ${rangeBounds.join(":") || "nothing"}`);
+    }
     const radiusSourceLink = sourceLinks.find((link) => {
       return link.nodeId === sphere.id && link.label === "radius" && link.end > link.start;
     });
@@ -407,6 +412,11 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!lastEdit || lastEdit.nodeId !== sphere.id || lastEdit.label !== "radius" || lastEdit.nextValue !== 1.2) {
       verifyErrors.push("numeric param edit did not emit expected graph edit");
     } else {
+      const updatedRangeBounds = Array.from(paramRow?.querySelectorAll<HTMLElement>(".param-range-bound") ?? [])
+        .map((bound) => bound.textContent ?? "");
+      if (updatedRangeBounds.join(":") !== "0:3") {
+        verifyErrors.push(`radius range bounds did not recenter after edit: ${updatedRangeBounds.join(":") || "nothing"}`);
+      }
       graphInspector.setDirtyParams([lastEdit]);
       if (!graphRoot.querySelector(".graph-node.edited")) verifyErrors.push("dirty graph node marker did not render");
       if (!graphRoot.querySelector(".param-row.edited")) verifyErrors.push("dirty param row marker did not render");

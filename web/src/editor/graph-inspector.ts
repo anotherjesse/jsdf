@@ -1255,11 +1255,26 @@ export class GraphInspector {
     range.step = input.step;
     range.value = input.value;
 
+    const rangeGroup = document.createElement("div");
+    rangeGroup.className = "param-range";
+    const rangeLabels = document.createElement("div");
+    rangeLabels.className = "param-range-labels";
+    const minLabel = document.createElement("span");
+    minLabel.className = "param-range-bound";
+    minLabel.dataset.bound = "min";
+    const maxLabel = document.createElement("span");
+    maxLabel.className = "param-range-bound";
+    maxLabel.dataset.bound = "max";
+    rangeLabels.append(minLabel, maxLabel);
+    rangeGroup.append(range, rangeLabels);
+
     const recenterRange = (value: number) => {
       const bounds = rangeBoundsFor(field, value);
       range.min = formatValue(bounds.min);
       range.max = formatValue(bounds.max);
       range.value = formatValue(value);
+      minLabel.textContent = range.min;
+      maxLabel.textContent = range.max;
     };
     recenterRange(field.value);
 
@@ -1337,7 +1352,7 @@ export class GraphInspector {
       beginEditSession,
     );
 
-    row.append(nameGroup, input, range);
+    row.append(nameGroup, input, rangeGroup);
     return row;
   }
 

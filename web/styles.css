@@ -1271,10 +1271,25 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.param-row input[type="range"] {
+.param-range {
   grid-column: 1 / -1;
+  display: grid;
+  gap: 1px;
+}
+
+.param-range input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
+}
+
+.param-range-labels {
+  display: flex;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0 2px;
 }
 
 .param-name-group {
