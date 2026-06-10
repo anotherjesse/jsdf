@@ -63,6 +63,12 @@ export interface EditorRuntimeVerification {
     prettifiedLines: number;
     runtimeErrorLine: number;
     runtimeErrorColumn: number;
+    runtimeErrorEndColumn: number;
+    runtimeErrorSuggestion: string;
+    globalErrorColumn: number;
+    globalErrorSuggestion: string;
+    easingErrorColumn: number;
+    easingErrorSuggestion: string;
     syntaxErrorLine: number;
     syntaxErrorColumn: number;
   };
@@ -366,8 +372,29 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
   if (runtimeDiagnostic.lineNumber !== 1) {
     errors.push(`runtime typo diagnostic line ${runtimeDiagnostic.lineNumber}`);
   }
-  if (runtimeDiagnostic.column < 16 || runtimeDiagnostic.column > 18) {
+  if (runtimeDiagnostic.column !== 18 || runtimeDiagnostic.endColumn !== 23) {
     errors.push(`runtime typo diagnostic column ${runtimeDiagnostic.column}`);
+  }
+  if (!runtimeDiagnostic.message.includes("difference")) {
+    errors.push(`runtime typo diagnostic suggestion ${runtimeDiagnostic.message}`);
+  }
+
+  const globalSource = "return spere(1)";
+  const globalDiagnostic = diagnosticForSource(globalSource, errors, "global typo");
+  if (globalDiagnostic.lineNumber !== 1 || globalDiagnostic.column !== 8 || globalDiagnostic.endColumn !== 13) {
+    errors.push(`global typo diagnostic range ${globalDiagnostic.lineNumber}:${globalDiagnostic.column}-${globalDiagnostic.endColumn}`);
+  }
+  if (!globalDiagnostic.message.includes("sphere")) {
+    errors.push(`global typo diagnostic suggestion ${globalDiagnostic.message}`);
+  }
+
+  const easingSource = "return sphere(ease.linera(0.5))";
+  const easingDiagnostic = diagnosticForSource(easingSource, errors, "easing typo");
+  if (easingDiagnostic.lineNumber !== 1 || easingDiagnostic.column !== 20 || easingDiagnostic.endColumn !== 26) {
+    errors.push(`easing typo diagnostic range ${easingDiagnostic.lineNumber}:${easingDiagnostic.column}-${easingDiagnostic.endColumn}`);
+  }
+  if (!easingDiagnostic.message.includes("ease.linear")) {
+    errors.push(`easing typo diagnostic suggestion ${easingDiagnostic.message}`);
   }
 
   const syntaxSource = "const radius = ;\nreturn sphere(1)";
@@ -383,6 +410,12 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     prettifiedLines: pretty.split("\n").length,
     runtimeErrorLine: runtimeDiagnostic.lineNumber,
     runtimeErrorColumn: runtimeDiagnostic.column,
+    runtimeErrorEndColumn: runtimeDiagnostic.endColumn,
+    runtimeErrorSuggestion: runtimeDiagnostic.message,
+    globalErrorColumn: globalDiagnostic.column,
+    globalErrorSuggestion: globalDiagnostic.message,
+    easingErrorColumn: easingDiagnostic.column,
+    easingErrorSuggestion: easingDiagnostic.message,
     syntaxErrorLine: syntaxDiagnostic.lineNumber,
     syntaxErrorColumn: syntaxDiagnostic.column,
   };
