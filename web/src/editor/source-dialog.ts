@@ -37,7 +37,6 @@ function renderExampleSection(state: SourceDialogState, actions: SourceDialogAct
   for (const example of state.examples) {
     const button = renderSourceButton({
       name: example.name,
-      meta: "Example",
       pressed: state.activeDocumentId == null && state.activeExampleId === example.id,
     });
     button.addEventListener("click", () => actions.loadExample(example.id));
@@ -148,7 +147,7 @@ function renderVersionRow(
 
 function renderSourceButton(options: {
   name: string;
-  meta: string;
+  meta?: string;
   pressed: boolean;
   className?: string;
 }): HTMLButtonElement {
@@ -160,10 +159,12 @@ function renderSourceButton(options: {
   const name = document.createElement("strong");
   name.textContent = options.name;
 
-  const meta = document.createElement("small");
-  meta.textContent = options.meta;
-
-  button.append(name, meta);
+  button.append(name);
+  if (options.meta) {
+    const meta = document.createElement("small");
+    meta.textContent = options.meta;
+    button.append(meta);
+  }
   return button;
 }
 

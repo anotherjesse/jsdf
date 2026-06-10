@@ -77,6 +77,93 @@ solids.slice(1).forEach((solid, i) => {
   out = out.union(solid.translate([-2.5 + (i + 1), 0, 0]));
 });
 return out;`,
+
+  pagoda: `const column = rounded_box([0.22, 0.22, 1.7], 0.05);
+const columns = union(
+  column.translate([-1.1, 0, -0.1]),
+  column.translate([1.1, 0, -0.1]),
+  column.scale([0.8, 0.8, 0.72]).translate([0, 0, -0.35]),
+);
+let roof = rounded_box([2.9, 0.42, 0.18], 0.06).translate([0, 0, 0.92]);
+roof = roof.union(rounded_box([2.25, 0.34, 0.16], 0.05).translate([0, 0, 1.18]).k(0.04));
+roof = roof.union(rounded_box([1.55, 0.28, 0.14], 0.05).translate([0, 0, 1.42]).k(0.04));
+const lantern = capped_cone([0, -0.34, 0.26], [0, -0.34, 0.72], 0.18, 0.08);
+return union(columns, roof, lantern);`,
+
+  coral: `const stem = capped_cylinder([0, 0, -0.9], [0, 0, 0.45], 0.12);
+const branch = capsule([0, 0, -0.1], [0.85, 0, 0.62], 0.085);
+const highBranch = capsule([0, 0, 0.15], [0.52, 0, 1.02], 0.07).rotate(0.38, Z);
+const tips = sphere(0.16).translate([0.86, 0, 0.64]).circular_array(9, 0.18);
+return union(
+  sphere(0.34).translate([0, 0, -0.92]),
+  stem,
+  branch.circular_array(9, 0.18),
+  highBranch.circular_array(6, 0.42),
+  tips,
+  { k: 0.18 },
+);`,
+
+  crystals: `const core = dodecahedron(0.72).scale([1, 0.85, 1.25]).rotate(0.28, Z);
+const shard = octahedron(0.46).scale([0.55, 0.55, 1.85]).translate([0.96, 0, 0.32]).rotate(0.2, Y);
+const lowShard = icosahedron(0.38).scale([0.7, 0.7, 1.45]).translate([0.68, 0, -0.42]).rotate(-0.34, Y);
+return union(
+  core,
+  shard.circular_array(7, 0.14),
+  lowShard.circular_array(5, 0.48),
+  octahedron(0.34).translate([0, 0, 1.28]),
+);`,
+
+  halo: `const tile = rounded_box([0.28, 0.95, 0.18], 0.05).translate([0, 1.18, 0]).rotate(0.34, Z);
+const inner = rounded_box([0.18, 0.58, 0.14], 0.04).translate([0, 0.77, 0.28]).rotate(-0.18, Z);
+return union(
+  tile.circular_array(18, 0.1),
+  inner.circular_array(18, 0.28),
+  torus(1.02, 0.04),
+);`,
+
+  vessel: `let body = rounded_cone(0.86, 0.42, 1.9);
+body = body.difference(rounded_cone(0.62, 0.24, 1.92).translate([0, 0, 0.1]));
+body = body.union(torus(0.66, 0.08).translate([0, 0, 0.94]));
+body = body.union(torus(0.38, 0.06).translate([0, 0, -0.94]));
+return body;`,
+
+  medal: `const starPoints = (outer, inner, count) => {
+  return Array.from({ length: count * 2 }, (_, i) => {
+    const radius = i % 2 === 0 ? outer : inner;
+    const angle = (i / (count * 2)) * Math.PI * 2 - Math.PI / 2;
+    return [Math.cos(angle) * radius, Math.sin(angle) * radius];
+  });
+};
+const star = polygon(starPoints(1.05, 0.44, 6)).extrude(0.2);
+let medal = star.union(circle(0.68).extrude(0.16).translate([0, 0, 0.04]), { k: 0.04 });
+medal = medal.difference(cylinder(0.16));
+return medal;`,
+
+  chain: `const flatLink = torus(0.54, 0.085).scale([1.18, 0.62, 1]).rotate(Math.PI / 2, X);
+const crossLink = torus(0.54, 0.085).scale([1.18, 0.62, 1]).rotate(Math.PI / 2, Y);
+return union(
+  flatLink.translate([-0.8, 0, 0]),
+  crossLink,
+  flatLink.translate([0.8, 0, 0]),
+  { k: 0.02 },
+);`,
+
+  bracket: `let plate = rounded_box([2.35, 1.22, 0.28], 0.1);
+plate = plate.union(rounded_box([0.46, 1.22, 0.78], 0.09).translate([-0.94, 0, 0.25]).k(0.05));
+plate = plate.union(rounded_box([0.46, 1.22, 0.78], 0.09).translate([0.94, 0, 0.25]).k(0.05));
+plate = plate.difference(cylinder(0.2).translate([-0.72, 0, 0]));
+plate = plate.difference(cylinder(0.2).translate([0.72, 0, 0]));
+plate = plate.difference(cylinder(0.34).orient(X).translate([0, 0, 0.38]));
+return plate;`,
+
+  turbine: `const blade = rounded_box([1.25, 0.22, 0.12], 0.05).translate([0.68, 0, 0]).twist(0.36);
+const fan = blade.circular_array(9, 0.12);
+return union(
+  fan,
+  ellipsoid([0.32, 0.32, 0.14]),
+  capped_cylinder([0, 0, -0.42], [0, 0, 0.42], 0.11),
+  { k: 0.03 },
+);`,
 };
 
 export function sourceForExample(id: string): string {
