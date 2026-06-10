@@ -964,6 +964,7 @@ export class GraphInspector {
     if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
+    this.attachSourceHover(group, this.sourceLinkForParam(node.id, ["matrix"]));
 
     const label = document.createElement("span");
     label.className = "axis-label";
