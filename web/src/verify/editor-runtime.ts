@@ -21,6 +21,8 @@ export interface EditorRuntimeVerification {
   selectedGraphTitles: number;
   graphSelections: string[];
   graphRevealEvents: string[];
+  graphSourceHoverEvents: string[];
+  graphSourceHoverDecorations: number;
   sourceScrub: {
     startValue: number | null;
     nextValue: number | null;
@@ -38,6 +40,7 @@ export async function runEditorRuntimeVerification(
   const cursorEvents: string[] = [];
   const graphSelections: string[] = [];
   const graphRevealEvents: string[] = [];
+  const graphSourceHoverEvents: string[] = [];
   const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
     startValue: null,
     nextValue: null,
@@ -63,7 +66,10 @@ export async function runEditorRuntimeVerification(
       codeEditor?.markSelectedSourceLink(link);
       codeEditor?.revealSourceLink(link);
     },
-    onSourceHover() {},
+    onSourceHover(link) {
+      graphSourceHoverEvents.push(link ? `${link.nodeKind}:${link.label}` : "");
+      codeEditor?.markHoveredSourceLink(link);
+    },
     onVisibilityChange() {},
   });
   codeEditor = createCodeEditor(
@@ -118,6 +124,27 @@ export async function runEditorRuntimeVerification(
           errors.push("graph param reveal did not preserve selected graph param");
         }
       }
+      const paramRow = graphRoot.querySelector<HTMLElement>(".param-row");
+      if (!paramRow) {
+        errors.push("selected radius has no graph param row for source hover");
+      } else {
+        paramRow.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+        await nextFrame();
+        if (graphSourceHoverEvents.at(-1) !== "sphere:radius") {
+          errors.push(`graph param hover emitted ${graphSourceHoverEvents.at(-1) || "nothing"}`);
+        }
+        if (codeRoot.querySelectorAll(".source-hovered-link").length === 0) {
+          errors.push("graph param hover did not mark source as hovered");
+        }
+        paramRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+        await nextFrame();
+        if (graphSourceHoverEvents.at(-1) !== "") {
+          errors.push("graph param leave did not clear source hover event");
+        }
+        if (codeRoot.querySelectorAll(".source-hovered-link").length !== 0) {
+          errors.push("graph param leave did not clear hovered source decoration");
+        }
+      }
       verifySourceScrubPath(radiusLink, sourceScrub, graphInspector, sdf, errors);
     }
 
@@ -140,6 +167,7 @@ export async function runEditorRuntimeVerification(
     const selectedSourceDecorations = codeRoot.querySelectorAll(".source-selected-link").length;
     const selectedGraphParams = graphRoot.querySelectorAll(".param-row.source-selected, .axis-control.source-selected").length;
     const selectedGraphTitles = graphRoot.querySelectorAll(".param-title.source-selected").length;
+    const graphSourceHoverDecorations = codeRoot.querySelectorAll(".source-hovered-link").length;
     if (selectedSourceDecorations === 0) {
       errors.push("selected source decoration did not render");
     }
@@ -154,6 +182,8 @@ export async function runEditorRuntimeVerification(
       selectedGraphTitles,
       graphSelections,
       graphRevealEvents,
+      graphSourceHoverEvents,
+      graphSourceHoverDecorations,
       sourceScrub,
       errors,
     };
