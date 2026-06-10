@@ -9,7 +9,9 @@ void main();
 
 async function main(): Promise<void> {
   try {
-    const result = await runEditorRuntimeVerification(codeRoot, graphRoot);
+    const result = await runEditorRuntimeVerification(codeRoot, graphRoot, (step) => {
+      status.textContent = `Running editor integration verification: ${step}...`;
+    });
     document.body.dataset.status = result.ok ? "pass" : "fail";
     document.title = result.ok ? "editor-check pass" : "editor-check fail";
     status.textContent = result.ok ? "Editor integration verification passed." : "Editor integration verification failed.";

@@ -208,7 +208,8 @@ sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
 });
 sourceDialog.addEventListener("close", () => {
-  loadSourceButton.focus({ preventScroll: true });
+  restoreSourceDialogFocus();
+  afterBrowserFrame(restoreSourceDialogFocus);
 });
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
@@ -692,7 +693,7 @@ function revealGraphSource(link: GraphSourceLink): void {
   setEditorView("code");
   codeEditor?.setFocusedNode(link.nodeId);
   setSelectedSourceLink(link);
-  window.requestAnimationFrame(() => {
+  afterBrowserFrame(() => {
     codeEditor?.revealSourceLink(link);
   });
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
@@ -1261,7 +1262,7 @@ function setEditorView(mode: EditorView): void {
   graphPanel.classList.toggle("hidden", mode !== "graph");
   updateSelectionFocusButton();
   if (editorView === "code") {
-    window.requestAnimationFrame(() => {
+    afterBrowserFrame(() => {
       codeEditor?.layout();
       if (previousMode === "graph" && selectedSourceLink) {
         codeEditor?.revealSourceLink(selectedSourceLink);
@@ -1269,7 +1270,7 @@ function setEditorView(mode: EditorView): void {
     });
   } else if (previousMode === "code") {
     codeEditor?.blur();
-    window.requestAnimationFrame(() => {
+    afterBrowserFrame(() => {
       graphInspector?.revealSelected({ focus: true });
     });
   }
@@ -1475,6 +1476,25 @@ function setEditorStatus(message: string, state: EditorStatusState): void {
   editorStatus.title = message;
 }
 
+function afterBrowserFrame(callback: () => void): void {
+  let settled = false;
+  const timeout = window.setTimeout(run, 50);
+  function run(): void {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    callback();
+  }
+  window.requestAnimationFrame(run);
+}
+
+function restoreSourceDialogFocus(): void {
+  if (sourceDialog.contains(document.activeElement)) {
+    (document.activeElement as HTMLElement).blur();
+  }
+  loadSourceButton.focus({ preventScroll: true });
+}
+
 function appHealthDiagnostics() {
   return {
     ready: Boolean(codeEditor && graphInspector && activeSdf && rayRenderer && meshRenderer),
@@ -1498,6 +1518,7 @@ function appHealthDiagnostics() {
     selectionFocusLabel: selectionFocusButton.textContent?.trim() ?? "",
     selectionFocusShortcut: selectionFocusButton.getAttribute("aria-keyshortcuts") ?? "",
     selectionFocusVisible: !selectionFocusButton.hidden,
+    sourceRevealedDecorations: codeEditor?.sourceDecorationCount("revealed") ?? 0,
     hiddenNodes: hiddenNodeIds.size,
     meshTriangles: mesh ? mesh.triangles.length : null,
     meshBuildPending: Boolean(meshBuildPromise),
@@ -1565,7 +1586,7 @@ function openSourceDialog(): void {
     return;
   }
   sourceDialog.showModal();
-  window.requestAnimationFrame(() => dialog.focusSearch());
+  afterBrowserFrame(() => dialog.focusSearch());
 }
 
 function renderLoadDialog(): ReturnType<typeof renderSourceDialog> {

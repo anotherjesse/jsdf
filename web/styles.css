@@ -662,6 +662,7 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.source-link-status-navigation,
 .source-link-status-controls {
   display: inline-flex;
   gap: 3px;
@@ -672,6 +673,7 @@ button:disabled {
   display: none;
 }
 
+.source-link-status-nav,
 .source-link-status-step {
   display: inline-grid;
   place-items: center;
@@ -687,11 +689,17 @@ button:disabled {
   padding: 0;
 }
 
+.source-link-status-nav {
+  font-size: 15px;
+}
+
+.source-link-status-nav:hover,
 .source-link-status-step:hover {
   border-color: var(--accent);
   color: var(--text);
 }
 
+.source-link-status-nav:focus-visible,
 .source-link-status-step:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: 1px;

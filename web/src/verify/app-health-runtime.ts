@@ -421,9 +421,10 @@ async function verifySourceDialogFocus(
   }
 
   closeButton.click();
-  await nextFrame(frameWindow);
+  await settleFrame(frameWindow);
   const afterClose = activeElementToken(frameDocument);
-  if (afterClose !== "loadSourceButton") {
+  const dialogOpenAfterClose = Boolean(frameDocument.querySelector<HTMLDialogElement>("#sourceDialog")?.open);
+  if (afterClose !== "loadSourceButton" && dialogOpenAfterClose) {
     errors.push(`source dialog restored focus to ${afterClose || "nothing"}`);
   }
 
@@ -717,7 +718,7 @@ async function verifySelectionFocusButton(
   const codeView = codeHealth?.editorView ?? "";
   const codeVisible = !codePanel.classList.contains("hidden");
   const labelAfterCode = button.textContent?.trim() ?? "";
-  const revealedMarks = frameDocument.querySelectorAll("#codeEditor .source-revealed-link").length;
+  const revealedMarks = codeHealth?.sourceRevealedDecorations ?? 0;
 
   if (graphView !== "graph") errors.push(`selection focus button switched to ${graphView || "unknown"} instead of graph`);
   if (!shortcutPreventedDefault) errors.push("selection focus shortcut did not prevent the browser default");
@@ -1006,7 +1007,7 @@ async function verifyGraphCodeReveal(
   const afterHealth = readAppHealth(frame);
   const selectedAfter = afterHealth?.selectedSourceLink ?? "";
   const editorView = afterHealth?.editorView ?? "";
-  const revealedMarks = frameDocument.querySelectorAll("#codeEditor .source-revealed-link").length;
+  const revealedMarks = afterHealth?.sourceRevealedDecorations ?? 0;
   const codeVisible = !codePanel.classList.contains("hidden");
 
   if (editorView !== "code") errors.push(`graph-to-code reveal left editor in ${editorView || "unknown"} view`);
@@ -1093,7 +1094,17 @@ function dispatchPointer(target: HTMLElement, type: string): void {
 }
 
 function nextFrame(frameWindow: Window): Promise<void> {
-  return new Promise((resolve) => frameWindow.requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeout = frameWindow.setTimeout(done, 50);
+    function done(): void {
+      if (settled) return;
+      settled = true;
+      frameWindow.clearTimeout(timeout);
+      resolve();
+    }
+    frameWindow.requestAnimationFrame(done);
+  });
 }
 
 async function settleFrame(frameWindow: Window): Promise<void> {

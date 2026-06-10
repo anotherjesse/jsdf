@@ -18,6 +18,7 @@ export interface AppHealthDiagnostics {
   selectionFocusLabel: string;
   selectionFocusShortcut: string;
   selectionFocusVisible: boolean;
+  sourceRevealedDecorations: number;
   hiddenNodes: number;
   meshTriangles: number | null;
   meshBuildPending: boolean;

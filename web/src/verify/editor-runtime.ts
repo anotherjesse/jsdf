@@ -84,6 +84,10 @@ export interface EditorRuntimeVerification {
     graphReveal: string;
     radiusRevealTargetLabel: string;
     radiusRevealTargetLink: string;
+    radiusNavigationButtons: number;
+    radiusNavigationNextLink: string;
+    radiusNavigationPreviousLink: string;
+    radiusNavigationPreviousStatus: string;
     radiusStepButtons: number;
     radiusStepTitle: string;
     radiusStepNextValue: number | null;
@@ -181,7 +185,9 @@ export interface EditorRuntimeVerification {
 export async function runEditorRuntimeVerification(
   codeRoot: HTMLElement,
   graphRoot: HTMLElement,
+  onProgress: (step: string) => void = () => {},
 ): Promise<EditorRuntimeVerification> {
+  onProgress("setup");
   const errors: string[] = [];
   const cursorEvents: string[] = [];
   const graphSelections: string[] = [];
@@ -219,6 +225,10 @@ export async function runEditorRuntimeVerification(
     graphReveal: "",
     radiusRevealTargetLabel: "",
     radiusRevealTargetLink: "",
+    radiusNavigationButtons: 0,
+    radiusNavigationNextLink: "",
+    radiusNavigationPreviousLink: "",
+    radiusNavigationPreviousStatus: "",
     radiusStepButtons: 0,
     radiusStepTitle: "",
     radiusStepNextValue: null,
@@ -285,6 +295,7 @@ export async function runEditorRuntimeVerification(
   );
 
   try {
+    onProgress("graph setup");
     graphInspector.setSdf(sdf);
     graphInspector.setSourceLinks(links);
     codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
@@ -293,11 +304,41 @@ export async function runEditorRuntimeVerification(
     if (!radiusLink) {
       errors.push("fixture has no sphere radius source link");
     } else {
+      onProgress("source link status: reveal");
       await revealAndSettle(codeEditor, radiusLink);
       sourceLinkStatus.radius = visibleSourceLinkStatus(codeRoot);
       if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink, readSourceLinkNumber(fixtureSource, radiusLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.radius || "nothing"} for radius`);
       }
+      sourceLinkStatus.radiusNavigationButtons = visibleSourceLinkNavigationCount(codeRoot);
+      if (sourceLinkStatus.radiusNavigationButtons !== 2) {
+        errors.push(`source link status rendered ${sourceLinkStatus.radiusNavigationButtons} navigation buttons`);
+      }
+      onProgress("source link status: navigation");
+      const nextButton = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-navigation .source-link-status-nav[data-direction='next']");
+      const previousButton = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-navigation .source-link-status-nav[data-direction='previous']");
+      if (!nextButton || !previousButton) {
+        errors.push("source link status did not render next and previous navigation buttons");
+      } else {
+        const beforeNavigationEvents = sourceSelectionEvents.length;
+        nextButton.click();
+        await nextFrame();
+        sourceLinkStatus.radiusNavigationNextLink = sourceSelectionEvents.at(-1) ?? "";
+        if (sourceSelectionEvents.length <= beforeNavigationEvents || !sourceLinkStatus.radiusNavigationNextLink || sourceLinkStatus.radiusNavigationNextLink === "sphere:radius") {
+          errors.push(`source link status next selected ${sourceLinkStatus.radiusNavigationNextLink || "nothing"}`);
+        }
+        previousButton.click();
+        await nextFrame();
+        sourceLinkStatus.radiusNavigationPreviousLink = sourceSelectionEvents.at(-1) ?? "";
+        sourceLinkStatus.radiusNavigationPreviousStatus = visibleSourceLinkStatus(codeRoot);
+        if (sourceLinkStatus.radiusNavigationPreviousLink !== "sphere:radius") {
+          errors.push(`source link status previous selected ${sourceLinkStatus.radiusNavigationPreviousLink || "nothing"}`);
+        }
+        if (sourceLinkStatus.radiusNavigationPreviousStatus !== sourceLinkStatus.radius) {
+          errors.push(`source link status previous displayed ${sourceLinkStatus.radiusNavigationPreviousStatus || "nothing"}`);
+        }
+      }
+      onProgress("source link status: reveal graph");
       const statusTarget = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-target");
       if (!statusTarget) {
         errors.push("source link status did not render a reveal target button");
@@ -314,6 +355,7 @@ export async function runEditorRuntimeVerification(
           errors.push(`source link status reveal target emitted ${sourceLinkStatus.radiusRevealTargetLink || "nothing"}`);
         }
       }
+      onProgress("source link status: numeric step");
       sourceLinkStatus.radiusStepButtons = visibleSourceLinkStepperCount(codeRoot);
       if (sourceLinkStatus.radiusStepButtons !== 2) {
         errors.push(`source link status rendered ${sourceLinkStatus.radiusStepButtons} numeric step buttons`);
@@ -348,6 +390,7 @@ export async function runEditorRuntimeVerification(
           errors.push(`source link status fine step displayed ${sourceLinkStatus.radiusFineStepStatus || "nothing"}`);
         }
       }
+      onProgress("source link status: keyboard nudge");
       if (cursorEvents.at(-1) !== "sphere:radius") {
         errors.push(`cursor over radius emitted ${cursorEvents.at(-1) || "nothing"}`);
       }
@@ -371,6 +414,7 @@ export async function runEditorRuntimeVerification(
       if (graphRoot.querySelectorAll(".param-row.source-selected").length !== 1) {
         errors.push("radius cursor did not mark exactly one graph param row selected");
       }
+      onProgress("source link status: graph reveal");
       const paramCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-row .param-source-link");
       if (!paramCodeButton) {
         errors.push("selected radius has no graph source reveal button");
@@ -397,6 +441,7 @@ export async function runEditorRuntimeVerification(
           errors.push("graph param reveal did not preserve selected graph param");
         }
       }
+      onProgress("source link status: graph hover");
       const paramRow = graphRoot.querySelector<HTMLElement>(".param-row");
       if (!paramRow) {
         errors.push("selected radius has no graph param row for source hover");
@@ -406,7 +451,8 @@ export async function runEditorRuntimeVerification(
         if (graphSourceHoverEvents.at(-1) !== "sphere:radius") {
           errors.push(`graph param hover emitted ${graphSourceHoverEvents.at(-1) || "nothing"}`);
         }
-        if (codeRoot.querySelectorAll(".source-hovered-link").length === 0) {
+        await nextFrame();
+        if (codeEditor.sourceDecorationCount("hovered") === 0) {
           errors.push("graph param hover did not mark source as hovered");
         }
         paramRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
@@ -414,12 +460,14 @@ export async function runEditorRuntimeVerification(
         if (graphSourceHoverEvents.at(-1) !== "") {
           errors.push("graph param leave did not clear source hover event");
         }
-        if (codeRoot.querySelectorAll(".source-hovered-link").length !== 0) {
+        if (codeEditor.sourceDecorationCount("hovered") !== 0) {
           errors.push("graph param leave did not clear hovered source decoration");
         }
       }
+      onProgress("source link status: scrub path");
       verifySourceScrubPath(radiusLink, sourceScrub, graphInspector, sdf, errors);
       if (sourceScrub.patchedSource) {
+        onProgress("source patch restore");
         const patchedLinks = findGraphSourceLinks(sourceScrub.patchedSource, sdf);
         const editedLink = patchedLinks.find((link) => {
           return link.nodeId === radiusLink.nodeId && link.label === "radius" && link.end > link.start;
@@ -430,8 +478,7 @@ export async function runEditorRuntimeVerification(
         graphInspector.setSelectedSourceLink(editedLink);
         codeEditor.markSelectedSourceLink(editedLink);
         codeEditor.markEditedSourceLink(editedLink);
-        await nextFrame();
-        sourceScrub.editedSourceDecorations = codeRoot.querySelectorAll(".source-edited-link").length;
+        sourceScrub.editedSourceDecorations = codeEditor.sourceDecorationCount("edited");
         sourceScrub.selectedGraphParamsAfterPatch = graphRoot.querySelectorAll(".param-row.source-selected").length;
         if (!editedLink) {
           errors.push("graph edit patch did not rediscover edited source link");
@@ -448,11 +495,13 @@ export async function runEditorRuntimeVerification(
       }
     }
 
+    onProgress("quick fixes");
     verifyCodeEditorQuickFix(codeEditor, editorTools, sourceChangeEvents, errors);
     codeEditor.setValue(fixtureSource);
     codeEditor.setError(null);
     codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
     graphInspector.setSourceLinks(links);
+    onProgress("source navigation");
     const sourceNavigation = await verifySourceNavigation(
       codeEditor,
       links,
@@ -465,6 +514,7 @@ export async function runEditorRuntimeVerification(
     if (!boxCallLink) {
       errors.push("fixture has no box call source link");
     } else {
+      onProgress("box link status");
       await revealAndSettle(codeEditor, boxCallLink);
       sourceLinkStatus.box = visibleSourceLinkStatus(codeRoot);
       if (sourceLinkStatus.box !== sourceLinkStatusText(boxCallLink, readSourceLinkNumber(fixtureSource, boxCallLink))) {
@@ -1018,12 +1068,13 @@ function verifySourceLinkTooltips(
   const call = callLink ? sourceLinkHoverMessage(callLink, false) : "";
   const number = numberLink ? sourceLinkHoverMessage(numberLink, true) : "";
 
-  if (!call.includes("Click to select this node")) errors.push(`source call tooltip rendered ${call || "nothing"}`);
-  if (!call.includes("Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens it in Graph")) {
+  if (!call.includes("Use chip arrows")) errors.push(`source call tooltip missed navigation hint: ${call || "nothing"}`);
+  if (!call.includes("Cmd/Ctrl-click opens this node in Graph")) {
     errors.push(`source call tooltip missed graph reveal hint: ${call || "nothing"}`);
   }
   if (!number.includes("Drag sideways")) errors.push(`source number tooltip missed drag hint: ${number || "nothing"}`);
-  if (!number.includes("Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens this node in Graph")) {
+  if (!number.includes("Use chip arrows")) errors.push(`source number tooltip missed navigation hint: ${number || "nothing"}`);
+  if (!number.includes("Cmd/Ctrl-click opens this node in Graph")) {
     errors.push(`source number tooltip missed graph reveal hint: ${number || "nothing"}`);
   }
 
@@ -1227,6 +1278,10 @@ function visibleSourceLinkStepperCount(root: HTMLElement): number {
   return root.querySelectorAll(".source-link-status-controls:not([hidden]) .source-link-status-step").length;
 }
 
+function visibleSourceLinkNavigationCount(root: HTMLElement): number {
+  return root.querySelectorAll(".source-link-status:not([hidden]) .source-link-status-navigation .source-link-status-nav").length;
+}
+
 function verifySourceScrubPath(
   link: GraphSourceLink,
   state: EditorRuntimeVerification["sourceScrub"],
@@ -1285,7 +1340,17 @@ async function revealAndSettle(
 }
 
 function nextFrame(): Promise<void> {
-  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeout = window.setTimeout(done, 50);
+    function done(): void {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve();
+    }
+    window.requestAnimationFrame(done);
+  });
 }
 
 class MemoryStorage implements Storage {
