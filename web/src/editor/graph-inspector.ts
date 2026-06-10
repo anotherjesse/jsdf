@@ -723,11 +723,26 @@ export class GraphInspector {
   }
 
   private attachSoloHover(target: Element, path: Node[]): void {
-    target.addEventListener("pointerenter", (event) => this.updateHover(path, event));
+    const sourceLink = this.sourceLinkForNode(path.at(-1)?.id ?? -1);
+    target.addEventListener("pointerenter", (event) => {
+      this.updateHover(path, event);
+      if (sourceLink) this.options.onSourceHover(sourceLink);
+    });
     target.addEventListener("pointermove", (event) => this.updateHover(path, event));
-    target.addEventListener("pointerleave", () => {
+    target.addEventListener("pointerleave", (event) => {
+      if (sourceLink && !containsEventTarget(target, relatedEventTarget(event))) {
+        this.options.onSourceHover(null);
+      }
       this.clearHover();
       this.clearSolo();
+    });
+    target.addEventListener("focusin", () => {
+      if (sourceLink) this.options.onSourceHover(sourceLink);
+    });
+    target.addEventListener("focusout", (event) => {
+      if (sourceLink && !containsEventTarget(target, relatedEventTarget(event))) {
+        this.options.onSourceHover(null);
+      }
     });
   }
 
@@ -1382,6 +1397,14 @@ function attachScrubber(
 
 function mapLabel(kind: string): string {
   return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
+}
+
+function containsEventTarget(parent: Element, target: EventTarget | null): boolean {
+  return target instanceof globalThis.Node && parent.contains(target);
+}
+
+function relatedEventTarget(event: Event): EventTarget | null {
+  return event instanceof MouseEvent || event instanceof FocusEvent ? event.relatedTarget : null;
 }
 
 function visibilityShortcutTitle(title: string): string {

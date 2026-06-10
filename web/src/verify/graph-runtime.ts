@@ -171,6 +171,17 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
         showAll.click();
       }
       if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("show-all after map eye did not clear hidden nodes");
+      const mapNode = graphRoot.querySelector<SVGElement>(`.graph-map-node[data-node-id="${sphere.id}"]`);
+      if (!mapNode) {
+        verifyErrors.push("selected sphere has no map node for source hover");
+      } else {
+        mapNode.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+        if (sourceHoverLabels.at(-1) !== "sphere:call") {
+          verifyErrors.push(`map node hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+        }
+        mapNode.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+        if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("map node leave did not clear source hover");
+      }
     }
 
     const radiusInput = graphRoot.querySelector<HTMLInputElement>(".param-row input[type='number']");
@@ -231,7 +242,23 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       return;
     }
 
-    const visibilityButton = nodeButton.closest(".graph-node-row")?.querySelector<HTMLButtonElement>(".graph-visibility");
+    const nodeRow = nodeButton.closest<HTMLElement>(".graph-node-row");
+    if (!nodeRow) {
+      verifyErrors.push("selected sphere node row not found");
+    } else {
+      nodeRow.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:call") {
+        verifyErrors.push(`tree node hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+      }
+      nodeRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node leave did not clear source hover");
+      nodeRow.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:call") verifyErrors.push("tree node focus did not emit source hover");
+      nodeRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node blur did not clear source hover");
+    }
+
+    const visibilityButton = nodeRow?.querySelector<HTMLButtonElement>(".graph-visibility");
     if (!visibilityButton) {
       verifyErrors.push("selected sphere has no eye visibility button");
     } else {
