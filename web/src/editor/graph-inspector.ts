@@ -982,11 +982,12 @@ export class GraphInspector {
     if (soloPreview) {
       const isolate = document.createElement("button");
       isolate.type = "button";
-      isolate.className = "param-title-button param-isolate";
-      isolate.textContent = "Isolate";
+      isolate.className = "param-title-button param-isolate icon-button";
       isolate.title = "Isolate selected node in preview (I)";
       isolate.setAttribute("aria-label", "Isolate selected node in preview");
+      isolate.setAttribute("aria-keyshortcuts", "I");
       isolate.setAttribute("aria-pressed", String(node.id === this.lockedSoloNodeId));
+      isolate.append(renderIsolateIcon(), screenReaderText("Isolate"));
       isolate.addEventListener("click", () => this.toggleLockedSolo(node));
       actions.append(isolate);
     }
@@ -1737,6 +1738,20 @@ function renderCodeLinkButton(label: string, className: string): HTMLButtonEleme
   icon.setAttribute("aria-hidden", "true");
   button.append(icon);
   return button;
+}
+
+function renderIsolateIcon(): HTMLElement {
+  const icon = document.createElement("span");
+  icon.className = "isolate-icon";
+  icon.setAttribute("aria-hidden", "true");
+  return icon;
+}
+
+function screenReaderText(text: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "sr-only";
+  span.textContent = text;
+  return span;
 }
 
 function renderSourceStatusChip(sourceLink: GraphSourceLink | null): HTMLElement {

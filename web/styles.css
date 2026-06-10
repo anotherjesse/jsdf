@@ -1198,18 +1198,18 @@ button:disabled {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  width: 30px;
   min-height: 28px;
   border-radius: 6px;
-  padding: 3px 9px;
+  padding: 0;
   font-size: 12px;
 }
 
-.param-title-button:not(.param-isolate) {
+.param-title-button {
   color: var(--accent);
 }
 
 .param-code-link {
-  width: 30px;
   padding: 0;
 }
 
@@ -1226,6 +1226,43 @@ button:disabled {
 .param-isolate[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
   color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
+.isolate-icon {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.isolate-icon::before,
+.isolate-icon::after {
+  position: absolute;
+  content: "";
+}
+
+.isolate-icon::before {
+  inset: 1px;
+  border: 1.8px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.78;
+}
+
+.isolate-icon::after {
+  top: 5px;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border: 1.8px solid currentColor;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow:
+    -5px 0 0 -2px currentColor,
+    5px 0 0 -2px currentColor,
+    0 -5px 0 -2px currentColor,
+    0 5px 0 -2px currentColor;
 }
 
 .param-title span,

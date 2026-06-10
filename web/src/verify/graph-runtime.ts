@@ -309,6 +309,33 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       }
     }
 
+    const paramIsolate = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-isolate");
+    if (!paramIsolate) {
+      verifyErrors.push("selected node has no parameter-panel isolate button");
+    } else {
+      if (!paramIsolate.querySelector(".isolate-icon")) {
+        verifyErrors.push("parameter-panel isolate button rendered without icon");
+      }
+      if (paramIsolate.getAttribute("aria-keyshortcuts") !== "I") {
+        verifyErrors.push("parameter-panel isolate shortcut missing");
+      }
+      if (paramIsolate.getAttribute("aria-label") !== "Isolate selected node in preview") {
+        verifyErrors.push(`parameter-panel isolate label was ${paramIsolate.getAttribute("aria-label") || "missing"}`);
+      }
+      paramIsolate.click();
+      const pressedParamIsolate = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-isolate");
+      if (pressedParamIsolate?.getAttribute("aria-pressed") !== "true") {
+        verifyErrors.push("parameter-panel isolate did not render pressed state");
+      }
+      if (!soloLabels.at(-1)?.includes("sphere")) {
+        verifyErrors.push("parameter-panel isolate did not emit solo preview");
+      }
+      pressedParamIsolate?.click();
+      if ((soloLabels.at(-1) ?? "not-cleared") !== "") {
+        verifyErrors.push("parameter-panel isolate did not clear solo preview");
+      }
+    }
+
     const mapToggle = graphRoot.querySelector<HTMLButtonElement>(".graph-map-toggle");
     if (!mapToggle) {
       verifyErrors.push("graph map toggle not found");
