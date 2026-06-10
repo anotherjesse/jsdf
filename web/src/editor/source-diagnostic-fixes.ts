@@ -1,4 +1,7 @@
 export const SDF_API_TYPO_MARKER_CODE = "sdf-api-typo";
+export const SDF_DANGLING_MEMBER_MARKER_CODE = "sdf-dangling-member";
+
+export const SDF_DANGLING_MEMBER_FIX_TITLE = "Remove dangling dot";
 
 export function apiSuggestionTargetFromDiagnosticMessage(message: string): string | null {
   return message.match(/(?:^|\s)Did you mean ([^?\s]+)\?$/)?.[1] ?? null;

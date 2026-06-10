@@ -127,6 +127,7 @@ export interface EditorRuntimeVerification {
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
     quickFixAppliedSource: string;
+    danglingQuickFixAppliedSource: string;
     quickFixChangeEvents: number;
     quickFixMarkersBeforeApply: number;
     quickFixMarkersAfterApply: number;
@@ -644,6 +645,7 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,
     quickFixAppliedSource: "",
+    danglingQuickFixAppliedSource: "",
     quickFixChangeEvents: 0,
     quickFixMarkersBeforeApply: -1,
     quickFixMarkersAfterApply: -1,
@@ -681,6 +683,32 @@ function verifyCodeEditorQuickFix(
   }
   if (editorTools.quickFixMarkersAfterApply !== 0) {
     errors.push(`editor quick fix left ${editorTools.quickFixMarkersAfterApply} markers`);
+  }
+
+  const danglingSource = "let f = sphere(1)\nf . \nreturn f";
+  const danglingDiagnostic = diagnosticForSource(danglingSource, errors, "editor dangling quick fix");
+  codeEditor.setValue(danglingSource);
+  codeEditor.setError(danglingDiagnostic);
+  if (codeEditor.runtimeDiagnosticCount() !== 1) {
+    errors.push(`dangling quick fix started with ${codeEditor.runtimeDiagnosticCount()} markers`);
+  }
+  if (!codeEditor.applyPreferredQuickFix()) {
+    errors.push("dangling quick fix did not apply");
+  }
+  editorTools.danglingQuickFixAppliedSource = codeEditor.getValue();
+  if (codeEditor.runtimeDiagnosticCount() !== 0) {
+    errors.push(`dangling quick fix left ${codeEditor.runtimeDiagnosticCount()} markers`);
+  }
+  if (editorTools.danglingQuickFixAppliedSource.includes("f .")) {
+    errors.push(`dangling quick fix source was ${editorTools.danglingQuickFixAppliedSource}`);
+  }
+  try {
+    const fixed = evaluateSource(editorTools.danglingQuickFixAppliedSource);
+    if (fixed.sdf.node.kind !== "sphere") {
+      errors.push(`dangling quick fix compiled ${fixed.sdf.node.kind}`);
+    }
+  } catch (error) {
+    errors.push(`dangling quick fix did not compile: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

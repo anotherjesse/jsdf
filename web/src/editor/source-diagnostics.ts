@@ -1,4 +1,5 @@
 import type { ApiCompletionScope } from "./api-reference-data";
+import { SDF_DANGLING_MEMBER_MARKER_CODE } from "./source-diagnostic-fixes";
 import { apiSuggestionForTypo } from "./source-diagnostic-suggestions";
 
 export interface SourceDiagnostic {
@@ -7,6 +8,7 @@ export interface SourceDiagnostic {
   column: number;
   endLineNumber: number;
   endColumn: number;
+  code?: string;
 }
 
 const GENERATED_FUNCTION_LINE_OFFSETS = [3, 2, 1, 0] as const;
@@ -25,6 +27,11 @@ export function sourceDiagnosticFromError(error: unknown, source: string): Sourc
   }
   const stackRange = rangeFromStack(stack, source);
   if (stackRange) return { message, ...stackRange };
+  const danglingMemberAccess = rangeFromDanglingMemberAccess(source);
+  if (danglingMemberAccess) {
+    return { message, code: SDF_DANGLING_MEMBER_MARKER_CODE, ...danglingMemberAccess };
+  }
+
   const syntaxRange = rangeFromSyntaxMessage(message, source);
   if (syntaxRange) return { message, ...syntaxRange };
   return {
@@ -110,9 +117,6 @@ function rangeForToken(
 }
 
 function rangeFromSyntaxMessage(message: string, source: string): Omit<SourceDiagnostic, "message"> | null {
-  const danglingMemberAccess = rangeFromDanglingMemberAccess(source);
-  if (danglingMemberAccess) return danglingMemberAccess;
-
   const token = message.match(/Unexpected (?:token|identifier) ['"]?([^'"]+)['"]?/i)?.[1];
   if (!token || token === "}") return endOfSourceRange(source);
   const lines = sourceLines(source);

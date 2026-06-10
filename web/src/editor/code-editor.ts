@@ -19,6 +19,8 @@ import {
   markerCodeValue,
   replacementTextForSuggestionTarget,
   SDF_API_TYPO_MARKER_CODE,
+  SDF_DANGLING_MEMBER_FIX_TITLE,
+  SDF_DANGLING_MEMBER_MARKER_CODE,
   titleForSuggestionTarget,
 } from "./source-diagnostic-fixes";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
@@ -123,10 +125,6 @@ monaco.languages.registerCodeActionProvider("javascript", {
   provideCodeActions(model, range, context) {
     const actions: monaco.languages.CodeAction[] = [];
     for (const marker of context.markers) {
-      if (markerCodeValue(marker.code) !== SDF_API_TYPO_MARKER_CODE) continue;
-      const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
-      if (!target) continue;
-
       const markerRange = new monaco.Range(
         marker.startLineNumber,
         marker.startColumn,
@@ -135,6 +133,30 @@ monaco.languages.registerCodeActionProvider("javascript", {
       );
       if (!monaco.Range.areIntersectingOrTouching(markerRange, range)) continue;
 
+      const code = markerCodeValue(marker.code);
+      if (code === SDF_DANGLING_MEMBER_MARKER_CODE) {
+        actions.push({
+          title: SDF_DANGLING_MEMBER_FIX_TITLE,
+          kind: "quickfix",
+          diagnostics: [marker],
+          isPreferred: true,
+          edit: {
+            edits: [{
+              resource: model.uri,
+              versionId: model.getVersionId(),
+              textEdit: {
+                range: markerRange,
+                text: "",
+              },
+            }],
+          },
+        });
+        continue;
+      }
+
+      if (code !== SDF_API_TYPO_MARKER_CODE) continue;
+      const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
+      if (!target) continue;
       const replacement = replacementTextForSuggestionTarget(target);
       if (!replacement || model.getValueInRange(markerRange) === replacement) continue;
       actions.push({
@@ -615,6 +637,14 @@ export function createCodeEditor(
     );
   };
 
+  const preferredQuickFixText = (marker: monaco.editor.IMarker): string | null => {
+    const code = markerCodeValue(marker.code);
+    if (code === SDF_DANGLING_MEMBER_MARKER_CODE) return "";
+    if (code !== SDF_API_TYPO_MARKER_CODE) return null;
+    const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
+    return target ? replacementTextForSuggestionTarget(target) : null;
+  };
+
   const preferredQuickFixMarker = (): monaco.editor.IMarker | null => {
     const model = editor.getModel();
     if (!model) return null;
@@ -622,8 +652,7 @@ export function createCodeEditor(
       owner: SDF_RUNTIME_MARKER_OWNER,
       resource: model.uri,
     }).filter((marker) => {
-      return markerCodeValue(marker.code) === SDF_API_TYPO_MARKER_CODE
-        && Boolean(apiSuggestionTargetFromDiagnosticMessage(marker.message));
+      return preferredQuickFixText(marker) != null;
     });
     if (markers.length === 0) return null;
 
@@ -644,9 +673,8 @@ export function createCodeEditor(
     const model = editor.getModel();
     const marker = preferredQuickFixMarker();
     if (!model || !marker) return false;
-    const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
-    const replacement = target ? replacementTextForSuggestionTarget(target) : "";
-    if (!replacement) return false;
+    const replacement = preferredQuickFixText(marker);
+    if (replacement == null) return false;
 
     const range = markerRange(marker);
     if (model.getValueInRange(range) === replacement) return false;
@@ -1025,7 +1053,9 @@ function markerForEditorError(
     endLineNumber,
     endColumn,
   };
-  if (apiSuggestionTargetFromDiagnosticMessage(error.message)) {
+  if (error.code) {
+    marker.code = error.code;
+  } else if (apiSuggestionTargetFromDiagnosticMessage(error.message)) {
     marker.code = SDF_API_TYPO_MARKER_CODE;
   }
   return marker;
