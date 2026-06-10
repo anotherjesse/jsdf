@@ -336,7 +336,7 @@ button:disabled {
 
 .graph-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
   gap: 10px;
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -359,12 +359,17 @@ button:disabled {
   white-space: nowrap;
 }
 
+.graph-match-nav,
 .graph-map-toggle,
 .graph-show-all {
   min-height: 30px;
   border-radius: 6px;
   padding: 4px 9px;
   font-size: 12px;
+}
+
+.graph-match-nav[hidden] {
+  display: none;
 }
 
 .graph-map-toggle[aria-pressed="true"] {

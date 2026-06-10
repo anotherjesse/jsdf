@@ -45,6 +45,8 @@ export class GraphInspector {
   private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
+  private readonly previousMatchButton = document.createElement("button");
+  private readonly nextMatchButton = document.createElement("button");
   private readonly mapButton = document.createElement("button");
   private readonly showAllButton = document.createElement("button");
   private readonly summary = document.createElement("span");
@@ -61,6 +63,18 @@ export class GraphInspector {
     this.filterInput.type = "search";
     this.filterInput.placeholder = "Filter";
     this.filterInput.setAttribute("aria-label", "Filter graph nodes");
+    this.previousMatchButton.type = "button";
+    this.previousMatchButton.className = "graph-match-nav";
+    this.previousMatchButton.textContent = "Prev";
+    this.previousMatchButton.title = "Previous matching node";
+    this.previousMatchButton.setAttribute("aria-label", "Previous matching graph node");
+    this.previousMatchButton.hidden = true;
+    this.nextMatchButton.type = "button";
+    this.nextMatchButton.className = "graph-match-nav";
+    this.nextMatchButton.textContent = "Next";
+    this.nextMatchButton.title = "Next matching node";
+    this.nextMatchButton.setAttribute("aria-label", "Next matching graph node");
+    this.nextMatchButton.hidden = true;
     this.mapButton.type = "button";
     this.mapButton.className = "graph-map-toggle";
     this.mapButton.textContent = "Map";
@@ -78,6 +92,20 @@ export class GraphInspector {
       this.filter = this.filterInput.value;
       this.render();
     });
+    this.filterInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.selectFilterMatch(event.shiftKey ? -1 : 1);
+      }
+      if (event.key === "Escape" && this.filter) {
+        event.preventDefault();
+        this.filter = "";
+        this.filterInput.value = "";
+        this.render();
+      }
+    });
+    this.previousMatchButton.addEventListener("click", () => this.selectFilterMatch(-1));
+    this.nextMatchButton.addEventListener("click", () => this.selectFilterMatch(1));
     this.mapButton.addEventListener("click", () => {
       this.showMap = !this.showMap;
       this.mapButton.setAttribute("aria-pressed", String(this.showMap));
@@ -99,7 +127,14 @@ export class GraphInspector {
       this.clearHover();
       this.clearSolo();
     });
-    this.toolbar.append(this.filterInput, this.mapButton, this.showAllButton, this.summary);
+    this.toolbar.append(
+      this.filterInput,
+      this.previousMatchButton,
+      this.nextMatchButton,
+      this.mapButton,
+      this.showAllButton,
+      this.summary,
+    );
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
     this.params.className = "param-editor";
@@ -187,6 +222,7 @@ export class GraphInspector {
     if (!this.sdf) return;
     const model = buildGraphModel(this.sdf.node, this.filter);
     this.renderSummary(model);
+    this.updateMatchNavigation(model);
     this.showAllButton.hidden = this.hiddenNodeIds.size === 0;
     this.map.hidden = !this.showMap;
     if (this.showMap) this.renderMap(model);
@@ -264,11 +300,36 @@ export class GraphInspector {
   private renderSummary(model: GraphModel): void {
     const total = model.nodes.length;
     const visible = model.visibleNodeIds.size;
+    const matched = this.matchingNodes(model).length;
     const hidden = this.hiddenNodeIds.size;
     const suffix = hidden > 0 ? `, ${hidden} hidden` : "";
     this.summary.textContent = this.filter
-      ? `${visible}/${total} nodes${suffix}`
+      ? `${matched} ${matched === 1 ? "match" : "matches"}, ${visible}/${total} shown${suffix}`
       : `${total} nodes, ${model.edges.length} edges${suffix}`;
+  }
+
+  private updateMatchNavigation(model: GraphModel): void {
+    const show = this.filter.trim() !== "" && this.matchingNodes(model).length > 0;
+    const enabled = show && this.matchingNodes(model).length > 1;
+    this.previousMatchButton.hidden = !show;
+    this.nextMatchButton.hidden = !show;
+    this.previousMatchButton.disabled = !enabled;
+    this.nextMatchButton.disabled = !enabled;
+  }
+
+  private selectFilterMatch(direction: 1 | -1): void {
+    if (!this.sdf || this.filter.trim() === "") return;
+    const matches = this.matchingNodes(buildGraphModel(this.sdf.node, this.filter));
+    if (matches.length === 0) return;
+    const currentIndex = this.selected ? matches.findIndex((view) => view.node.id === this.selected?.id) : -1;
+    const nextIndex = currentIndex < 0
+      ? direction > 0 ? 0 : matches.length - 1
+      : (currentIndex + direction + matches.length) % matches.length;
+    this.select(matches[nextIndex].node);
+  }
+
+  private matchingNodes(model: GraphModel): GraphNodeView[] {
+    return model.nodes.filter((view) => view.matched);
   }
 
   private renderMap(model: GraphModel): void {
