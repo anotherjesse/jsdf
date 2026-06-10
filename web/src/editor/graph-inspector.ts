@@ -19,6 +19,11 @@ export interface GraphParamEdit {
   editSessionId?: string;
 }
 
+export interface GraphDirtyParam {
+  nodeId: number;
+  path: ParamPath;
+}
+
 export interface GraphInspectorOptions {
   onSelect(node: Node | null): void;
   onHover(node: Node | null, options: GraphHoverOptions): void;
@@ -46,6 +51,8 @@ export class GraphInspector {
   private focusSelectedAfterRender = false;
   private readonly hiddenNodeIds = new Set<number>();
   private readonly customMatrixNodeIds = new Set<number>();
+  private readonly dirtyNodeIds = new Set<number>();
+  private readonly dirtyParamKeys = new Set<string>();
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
   private readonly previousMatchButton = document.createElement("button");
@@ -185,6 +192,16 @@ export class GraphInspector {
     this.render();
   }
 
+  setDirtyParams(params: readonly GraphDirtyParam[]): void {
+    this.dirtyNodeIds.clear();
+    this.dirtyParamKeys.clear();
+    for (const param of params) {
+      this.dirtyNodeIds.add(param.nodeId);
+      this.dirtyParamKeys.add(paramKey(param.nodeId, param.path));
+    }
+    this.render();
+  }
+
   selectNodeById(id: number): Node | null {
     if (!this.sdf) return null;
     const node = findNode(this.sdf.node, id);
@@ -282,13 +299,14 @@ export class GraphInspector {
     if (this.filter && view?.matched) button.classList.add("matched");
     if (this.hovered?.id === node.id) button.classList.add("hovered");
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
+    if (this.dirtyNodeIds.has(node.id)) button.classList.add("edited");
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
     button.dataset.nodeId = String(node.id);
     const label = document.createElement("span");
     label.textContent = node.kind;
     const meta = document.createElement("small");
     const shared = (view?.parents.size ?? 0) > 1;
-    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}${directlyHidden ? " hidden" : inheritedHidden ? " parent hidden" : ""}`;
+    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}${this.dirtyNodeIds.has(node.id) ? " edited" : ""}${directlyHidden ? " hidden" : inheritedHidden ? " parent hidden" : ""}`;
     button.append(label, meta);
     button.addEventListener("click", () => this.select(node));
     button.addEventListener("keydown", (event) => this.handleNodeKeyDown(event, node));
@@ -408,6 +426,7 @@ export class GraphInspector {
     if (this.selected?.id === view.node.id) group.classList.add("selected");
     if (this.hovered?.id === view.node.id) group.classList.add("hovered");
     if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
+    if (this.dirtyNodeIds.has(view.node.id)) group.classList.add("edited");
     const directlyHidden = this.hiddenNodeIds.has(view.node.id);
     if (directlyHidden) group.classList.add("hidden-node");
     if (!directlyHidden && !effectiveVisibleNodeIds.has(view.node.id)) group.classList.add("inherited-hidden");
@@ -688,6 +707,7 @@ export class GraphInspector {
 
     const title = document.createElement("div");
     title.className = "param-title";
+    if (this.dirtyNodeIds.has(node.id)) title.classList.add("edited");
     const titleText = document.createElement("div");
     titleText.className = "param-title-text";
     const kind = document.createElement("strong");
@@ -811,6 +831,7 @@ export class GraphInspector {
     const showCustom = activeAxis === "custom" || this.customMatrixNodeIds.has(node.id);
     const group = document.createElement("div");
     group.className = "axis-control";
+    if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
 
     const label = document.createElement("span");
     label.className = "axis-label";
@@ -872,6 +893,7 @@ export class GraphInspector {
   private renderNumberField(node: Node, field: NumericParam): HTMLElement {
     const row = document.createElement("div");
     row.className = "param-row";
+    if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
 
     const sourceLink = this.sourceLinkForParam(node.id, field.path);
     const nameGroup = document.createElement("span");
@@ -1065,6 +1087,10 @@ function getAtPath(root: Record<string, unknown>, path: ParamPath): ParamValue {
 
 function pathsEqual(a: ParamPath, b: ParamPath): boolean {
   return a.length === b.length && a.every((part, index) => part === b[index]);
+}
+
+function paramKey(nodeId: number, path: ParamPath): string {
+  return `${nodeId}:${path.map(String).join("/")}`;
 }
 
 function pathStartsWith(path: ParamPath, prefix: ParamPath): boolean {

@@ -450,6 +450,11 @@ button:disabled {
   stroke-width: 2;
 }
 
+.graph-map-node.edited rect {
+  stroke: var(--accent-2);
+  stroke-dasharray: 5 2;
+}
+
 .graph-map-node.matched rect {
   stroke: var(--accent-2);
 }
@@ -597,6 +602,10 @@ button:disabled {
   background: color-mix(in srgb, var(--accent-2) 18%, transparent);
 }
 
+.graph-node.edited:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 48%, transparent);
+}
+
 .graph-node.hidden-node,
 .graph-map-node.hidden-node,
 .graph-node.inherited-hidden,
@@ -652,6 +661,15 @@ button:disabled {
   justify-content: space-between;
   gap: 10px;
   color: var(--text);
+}
+
+.param-title.edited strong::after {
+  margin-left: 6px;
+  color: var(--accent-2);
+  content: "edited";
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .param-title-text {
@@ -750,6 +768,16 @@ button:disabled {
   grid-template-columns: minmax(88px, 1fr) 96px;
   gap: 6px 10px;
   align-items: center;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+
+.param-row.edited {
+  border-left-color: var(--accent-2);
+}
+
+.param-row.edited .param-name {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
 }
 
 .param-row input[type="number"] {
@@ -803,6 +831,16 @@ button:disabled {
 .axis-control {
   display: grid;
   gap: 6px;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+
+.axis-control.edited {
+  border-left-color: var(--accent-2);
+}
+
+.axis-control.edited .axis-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
 }
 
 .axis-label {

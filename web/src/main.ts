@@ -702,6 +702,7 @@ function updateGraphHistoryControls(): void {
   undoGraphButton.disabled = !graphHistory.canUndo;
   redoGraphButton.disabled = !graphHistory.canRedo;
   resetGraphButton.disabled = !graphHistory.canUndo;
+  graphInspector?.setDirtyParams(graphHistory.current());
   renderGraphChangeJournal();
 }
 
