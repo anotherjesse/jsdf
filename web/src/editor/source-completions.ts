@@ -14,6 +14,12 @@ export interface SourceCompletionEntry {
   sortText: string;
 }
 
+interface CompletionParam {
+  label: string;
+  optional: boolean;
+  optionsObject: boolean;
+}
+
 export function sourceCompletionContextAt(source: string, lineNumber: number, column: number): SourceCompletionContext {
   const line = sourceLine(source, lineNumber);
   const beforeCursor = line.slice(0, Math.max(0, column - 1));
@@ -91,11 +97,11 @@ function sourceCompletionInsert(
 function callableParamsForEntry(entry: ApiReferenceEntry, context: SourceCompletionContext): string[] | null {
   const signatureParams = paramsFromSignature(entry.signature, entry.name);
   if (!signatureParams) return null;
-  const params = signatureParams.map(cleanParamLabel).filter((param) => param.length > 0);
+  let params = signatureParams.map(parseCompletionParam).filter((param): param is CompletionParam => param != null);
   if (context.scope === "method" && !entry.signature.includes(`.${entry.name}(`) && entry.completionScopes.includes("global")) {
-    return params.slice(1);
+    params = params.slice(1);
   }
-  return params;
+  return snippetParams(params);
 }
 
 function paramsFromSignature(signature: string, name: string): string[] | null {
@@ -137,6 +143,33 @@ function splitParams(value: string): string[] {
   const tail = value.slice(start);
   if (tail.trim()) params.push(tail);
   return params;
+}
+
+function parseCompletionParam(param: string): CompletionParam | null {
+  const raw = param.trim();
+  const label = cleanParamLabel(raw);
+  if (!label) return null;
+  const optionsObject = raw.startsWith("{") && raw.endsWith("}");
+  return {
+    label,
+    optional: isOptionalSnippetParam(raw),
+    optionsObject,
+  };
+}
+
+function snippetParams(params: readonly CompletionParam[]): string[] {
+  const required = params.filter((param) => !param.optional);
+  if (required.length > 0) return required.map((param) => param.label);
+
+  const primaryOptional = params.find((param) => !param.optionsObject);
+  return primaryOptional ? [primaryOptional.label] : [];
+}
+
+function isOptionalSnippetParam(param: string): boolean {
+  if (param.startsWith("...")) return false;
+  return param.includes("=")
+    || /^[$A-Z_a-z][$\w]*\?$/.test(param)
+    || /^\{\s*[$A-Z_a-z][$\w]*\?\s*\}$/.test(param);
 }
 
 function cleanParamLabel(param: string): string {

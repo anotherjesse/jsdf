@@ -81,6 +81,7 @@ export interface EditorRuntimeVerification {
     easingPartialCompletion: string;
     easingPartialSnippet: string;
     easingPartialScope: string;
+    slabSnippet: string;
     sphereSnippet: string;
     signatureChecks: number;
     sphere: string;
@@ -381,13 +382,18 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (!linear?.signature.includes("ease.linear")) errors.push("api hints missing ease.linear signature");
   const spherePartial = firstCompletionForSource("return sph", 1, 11);
   if (spherePartial.first !== "sphere") errors.push(`sph completion first offered ${spherePartial.first || "nothing"}`);
-  if (spherePartial.insertText !== "sphere(${1:radius}, ${2:center})$0") {
+  if (spherePartial.insertText !== "sphere(${1:radius})$0") {
     errors.push(`sphere snippet rendered ${spherePartial.insertText || "nothing"}`);
+  }
+  const slabPartial = firstCompletionForSource("return sla", 1, 11);
+  if (slabPartial.first !== "slab") errors.push(`sla completion first offered ${slabPartial.first || "nothing"}`);
+  if (slabPartial.insertText !== "slab(${1:{ x0, x1, y0, y1, z0, z1, k \\}})$0") {
+    errors.push(`slab snippet rendered ${slabPartial.insertText || "nothing"}`);
   }
   const methodPartial = firstCompletionForSource("const f = sphere(1)\nreturn f.diffe", 2, 15);
   if (methodPartial.context.scope !== "method") errors.push(`f.diffe completion used ${methodPartial.context.scope} scope`);
   if (methodPartial.first !== "difference") errors.push(`f.diffe completion first offered ${methodPartial.first || "nothing"}`);
-  if (methodPartial.insertText !== "difference(${1:rest}, ${2:{ k? \\}})$0") {
+  if (methodPartial.insertText !== "difference(${1:rest})$0") {
     errors.push(`f.diffe snippet rendered ${methodPartial.insertText || "nothing"}`);
   }
   const easingPartial = firstCompletionForSource("return sphere(ease.lin)", 1, 23);
@@ -409,6 +415,7 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     easingPartialCompletion: easingPartial.first,
     easingPartialSnippet: easingPartial.insertText,
     easingPartialScope: easingPartial.context.scope,
+    slabSnippet: slabPartial.insertText,
     sphereSnippet: spherePartial.insertText,
     signatureChecks,
     sphere: sphere?.signature ?? "",
