@@ -10,40 +10,214 @@ export interface GraphSourceEdit {
 }
 
 interface CallPatch {
-  fn: string;
+  fns: string[];
   arg: number;
+  element?: number;
 }
 
+const patch = (fns: string | string[], arg: number, element?: number): CallPatch => ({
+  fns: Array.isArray(fns) ? fns : [fns],
+  arg,
+  ...(element == null ? {} : { element }),
+});
+
 const CALL_PATCHES: Record<string, Record<string, CallPatch>> = {
-  sphere: { radius: { fn: "sphere", arg: 0 } },
-  cylinder: { radius: { fn: "cylinder", arg: 0 } },
+  circle: {
+    radius: patch("circle", 0),
+    "center[0]": patch("circle", 1, 0),
+    "center[1]": patch("circle", 1, 1),
+  },
+  line: {
+    "normal[0]": patch("line", 0, 0),
+    "normal[1]": patch("line", 0, 1),
+    "point[0]": patch("line", 1, 0),
+    "point[1]": patch("line", 1, 1),
+  },
+  rectangle: {
+    "size[0]": patch("rectangle", 0, 0),
+    "size[1]": patch("rectangle", 0, 1),
+    "center[0]": patch("rectangle", 1, 0),
+    "center[1]": patch("rectangle", 1, 1),
+  },
+  roundedRectangle: {
+    "size[0]": patch("rounded_rectangle", 0, 0),
+    "size[1]": patch("rounded_rectangle", 0, 1),
+    "radius[0]": patch("rounded_rectangle", 1, 0),
+    "radius[1]": patch("rounded_rectangle", 1, 1),
+    "radius[2]": patch("rounded_rectangle", 1, 2),
+    "radius[3]": patch("rounded_rectangle", 1, 3),
+    "center[0]": patch("rounded_rectangle", 2, 0),
+    "center[1]": patch("rounded_rectangle", 2, 1),
+  },
+  hexagon: { r: patch("hexagon", 0) },
+  roundedX: {
+    w: patch("rounded_x", 0),
+    r: patch("rounded_x", 1),
+  },
+  vesica: {
+    r: patch("vesica", 0),
+    d: patch("vesica", 1),
+  },
+  sphere: {
+    radius: patch("sphere", 0),
+    "center[0]": patch("sphere", 1, 0),
+    "center[1]": patch("sphere", 1, 1),
+    "center[2]": patch("sphere", 1, 2),
+  },
+  plane: {
+    "normal[0]": patch("plane", 0, 0),
+    "normal[1]": patch("plane", 0, 1),
+    "normal[2]": patch("plane", 0, 2),
+    "point[0]": patch("plane", 1, 0),
+    "point[1]": patch("plane", 1, 1),
+    "point[2]": patch("plane", 1, 2),
+  },
+  box: {
+    "size[0]": patch("box", 0, 0),
+    "size[1]": patch("box", 0, 1),
+    "size[2]": patch("box", 0, 2),
+    "center[0]": patch("box", 1, 0),
+    "center[1]": patch("box", 1, 1),
+    "center[2]": patch("box", 1, 2),
+  },
+  roundedBox: {
+    "size[0]": patch("rounded_box", 0, 0),
+    "size[1]": patch("rounded_box", 0, 1),
+    "size[2]": patch("rounded_box", 0, 2),
+    radius: patch("rounded_box", 1),
+  },
+  wireframeBox: {
+    "size[0]": patch("wireframe_box", 0, 0),
+    "size[1]": patch("wireframe_box", 0, 1),
+    "size[2]": patch("wireframe_box", 0, 2),
+    thickness: patch("wireframe_box", 1),
+  },
+  cylinder: { radius: patch("cylinder", 0) },
   roundedCylinder: {
-    ra: { fn: "rounded_cylinder", arg: 0 },
-    rb: { fn: "rounded_cylinder", arg: 1 },
-    h: { fn: "rounded_cylinder", arg: 2 },
+    ra: patch("rounded_cylinder", 0),
+    rb: patch("rounded_cylinder", 1),
+    h: patch("rounded_cylinder", 2),
   },
-  roundedBox: { radius: { fn: "rounded_box", arg: 1 } },
+  cappedCylinder: {
+    "a[0]": patch("capped_cylinder", 0, 0),
+    "a[1]": patch("capped_cylinder", 0, 1),
+    "a[2]": patch("capped_cylinder", 0, 2),
+    "b[0]": patch("capped_cylinder", 1, 0),
+    "b[1]": patch("capped_cylinder", 1, 1),
+    "b[2]": patch("capped_cylinder", 1, 2),
+    radius: patch("capped_cylinder", 2),
+  },
   torus: {
-    r1: { fn: "torus", arg: 0 },
-    r2: { fn: "torus", arg: 1 },
+    r1: patch("torus", 0),
+    r2: patch("torus", 1),
   },
-  capsule: { radius: { fn: "capsule", arg: 2 } },
-  cappedCylinder: { radius: { fn: "capped_cylinder", arg: 2 } },
+  capsule: {
+    "a[0]": patch("capsule", 0, 0),
+    "a[1]": patch("capsule", 0, 1),
+    "a[2]": patch("capsule", 0, 2),
+    "b[0]": patch("capsule", 1, 0),
+    "b[1]": patch("capsule", 1, 1),
+    "b[2]": patch("capsule", 1, 2),
+    radius: patch("capsule", 2),
+  },
   cappedCone: {
-    ra: { fn: "capped_cone", arg: 2 },
-    rb: { fn: "capped_cone", arg: 3 },
+    "a[0]": patch("capped_cone", 0, 0),
+    "a[1]": patch("capped_cone", 0, 1),
+    "a[2]": patch("capped_cone", 0, 2),
+    "b[0]": patch("capped_cone", 1, 0),
+    "b[1]": patch("capped_cone", 1, 1),
+    "b[2]": patch("capped_cone", 1, 2),
+    ra: patch("capped_cone", 2),
+    rb: patch("capped_cone", 3),
   },
   roundedCone: {
-    r1: { fn: "rounded_cone", arg: 0 },
-    r2: { fn: "rounded_cone", arg: 1 },
-    h: { fn: "rounded_cone", arg: 2 },
+    r1: patch("rounded_cone", 0),
+    r2: patch("rounded_cone", 1),
+    h: patch("rounded_cone", 2),
   },
-  ellipsoid: { "size[0]": { fn: "ellipsoid", arg: 0 } },
-  pyramid: { h: { fn: "pyramid", arg: 0 } },
-  tetrahedron: { r: { fn: "tetrahedron", arg: 0 } },
-  octahedron: { r: { fn: "octahedron", arg: 0 } },
-  dodecahedron: { r: { fn: "dodecahedron", arg: 0 } },
-  icosahedron: { r: { fn: "icosahedron", arg: 0 } },
+  ellipsoid: {
+    "size[0]": patch("ellipsoid", 0, 0),
+    "size[1]": patch("ellipsoid", 0, 1),
+    "size[2]": patch("ellipsoid", 0, 2),
+  },
+  pyramid: { h: patch("pyramid", 0) },
+  tetrahedron: { r: patch("tetrahedron", 0) },
+  octahedron: { r: patch("octahedron", 0) },
+  dodecahedron: { r: patch("dodecahedron", 0) },
+  icosahedron: { r: patch("icosahedron", 0) },
+  dilate: { r: patch("dilate", 0) },
+  erode: { r: patch("erode", 0) },
+  shell: { thickness: patch("shell", 0) },
+  translate: {
+    "offset[0]": patch("translate", 0, 0),
+    "offset[1]": patch("translate", 0, 1),
+    "offset[2]": patch("translate", 0, 2),
+  },
+  scale: {
+    "factor[0]": patch("scale", 0, 0),
+    "factor[1]": patch("scale", 0, 1),
+    "factor[2]": patch("scale", 0, 2),
+  },
+  circularArray2: { count: patch(["circular_array", "circularArray"], 0) },
+  circularArray3: {
+    count: patch(["circular_array", "circularArray"], 0),
+    offset: patch(["circular_array", "circularArray"], 1),
+  },
+  elongate2: {
+    "size[0]": patch("elongate", 0, 0),
+    "size[1]": patch("elongate", 0, 1),
+  },
+  elongate3: {
+    "size[0]": patch("elongate", 0, 0),
+    "size[1]": patch("elongate", 0, 1),
+    "size[2]": patch("elongate", 0, 2),
+  },
+  twist: { k: patch("twist", 0) },
+  bend: { k: patch("bend", 0) },
+  bendLinear: {
+    "p0[0]": patch(["bend_linear", "bendLinear"], 0, 0),
+    "p0[1]": patch(["bend_linear", "bendLinear"], 0, 1),
+    "p0[2]": patch(["bend_linear", "bendLinear"], 0, 2),
+    "p1[0]": patch(["bend_linear", "bendLinear"], 1, 0),
+    "p1[1]": patch(["bend_linear", "bendLinear"], 1, 1),
+    "p1[2]": patch(["bend_linear", "bendLinear"], 1, 2),
+  },
+  bendRadial: {
+    r0: patch(["bend_radial", "bendRadial"], 0),
+    r1: patch(["bend_radial", "bendRadial"], 1),
+    dz: patch(["bend_radial", "bendRadial"], 2),
+  },
+  transitionLinear: {
+    "p0[0]": patch(["transition_linear", "transitionLinear"], 1, 0),
+    "p0[1]": patch(["transition_linear", "transitionLinear"], 1, 1),
+    "p0[2]": patch(["transition_linear", "transitionLinear"], 1, 2),
+    "p1[0]": patch(["transition_linear", "transitionLinear"], 2, 0),
+    "p1[1]": patch(["transition_linear", "transitionLinear"], 2, 1),
+    "p1[2]": patch(["transition_linear", "transitionLinear"], 2, 2),
+  },
+  transitionRadial: {
+    r0: patch(["transition_radial", "transitionRadial"], 1),
+    r1: patch(["transition_radial", "transitionRadial"], 2),
+  },
+  wrapAround: {
+    x0: patch(["wrap_around", "wrapAround"], 0),
+    x1: patch(["wrap_around", "wrapAround"], 1),
+    r: patch(["wrap_around", "wrapAround"], 2),
+  },
+  repeat: {
+    "spacing[0]": patch("repeat", 0, 0),
+    "spacing[1]": patch("repeat", 0, 1),
+    "spacing[2]": patch("repeat", 0, 2),
+    "count[0]": patch("repeat", 1, 0),
+    "count[1]": patch("repeat", 1, 1),
+    "count[2]": patch("repeat", 1, 2),
+    "padding[0]": patch("repeat", 2, 0),
+    "padding[1]": patch("repeat", 2, 1),
+    "padding[2]": patch("repeat", 2, 2),
+  },
+  extrude: { h: patch("extrude", 0) },
+  extrudeTo: { h: patch(["extrude_to", "extrudeTo"], 1) },
+  revolve: { offset: patch("revolve", 0) },
 };
 
 export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
@@ -120,12 +294,16 @@ function labelToPath(label: string): ParamPath {
 }
 
 function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number): string | null {
-  const calls = findCalls(source, patch.fn);
+  const calls = findCalls(source, patch.fns);
   const call = calls[ordinal];
   if (!call) return null;
   const arg = call.args[patch.arg];
-  if (!arg || !isNumericLiteral(arg.text)) return null;
-  return `${source.slice(0, arg.start)}${formatNumber(value)}${source.slice(arg.end)}`;
+  if (!arg) return null;
+  if (patch.element == null) {
+    if (!isNumericLiteral(arg.text)) return null;
+    return replaceRange(source, arg.start, arg.end, formatNumberLike(arg.text, value));
+  }
+  return patchVectorElement(source, arg, patch.element, value);
 }
 
 function patchNthOrientArgument(source: string, ordinal: number, axis: OrientationAxis): string | null {
@@ -134,7 +312,7 @@ function patchNthOrientArgument(source: string, ordinal: number, axis: Orientati
   if (!call || call.args.length === 0) return null;
   const arg = call.args[0];
   if (!isAxisExpression(arg.text)) return null;
-  return `${source.slice(0, arg.start)}${axis.toUpperCase()}${source.slice(arg.end)}`;
+  return replaceRange(source, arg.start, arg.end, axis.toUpperCase());
 }
 
 interface CallArg {
@@ -144,20 +322,23 @@ interface CallArg {
 }
 
 interface CallMatch {
+  start: number;
   args: CallArg[];
 }
 
-function findCalls(source: string, fn: string): CallMatch[] {
+function findCalls(source: string, fns: string | string[]): CallMatch[] {
   const calls: CallMatch[] = [];
-  const pattern = new RegExp(`\\b${escapeRegExp(fn)}\\s*\\(`, "g");
-  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
-    const open = source.indexOf("(", match.index);
-    const close = findMatchingParen(source, open);
-    if (close < 0) continue;
-    calls.push({ args: splitArgs(source, open + 1, close) });
-    pattern.lastIndex = close + 1;
+  for (const fn of Array.isArray(fns) ? fns : [fns]) {
+    const pattern = new RegExp(`\\b${escapeRegExp(fn)}\\s*\\(`, "g");
+    for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+      const open = source.indexOf("(", match.index);
+      const close = findMatchingParen(source, open);
+      if (close < 0) continue;
+      calls.push({ start: match.index, args: splitArgs(source, open + 1, close) });
+      pattern.lastIndex = close + 1;
+    }
   }
-  return calls;
+  return calls.sort((a, b) => a.start - b.start);
 }
 
 function findMatchingParen(source: string, open: number): number {
@@ -214,6 +395,45 @@ function splitArgs(source: string, start: number, end: number): CallArg[] {
   return args;
 }
 
+function patchVectorElement(source: string, arg: CallArg, element: number, value: number): string | null {
+  return patchArrayElement(source, arg, element, value) ?? patchAxisScaledElement(source, arg, element, value);
+}
+
+function patchArrayElement(source: string, arg: CallArg, element: number, value: number): string | null {
+  const open = firstNonWhitespace(source, arg.start, arg.end);
+  if (open < 0 || source[open] !== "[") return null;
+  const close = findMatchingParen(source, open);
+  if (close < 0 || close > arg.end) return null;
+  if (source.slice(arg.start, open).trim() || source.slice(close + 1, arg.end).trim()) return null;
+
+  const elements = splitArgs(source, open + 1, close);
+  const target = elements[element];
+  if (!target || !isNumericLiteral(target.text)) return null;
+  return replaceRange(source, target.start, target.end, formatNumberLike(target.text, value));
+}
+
+function patchAxisScaledElement(source: string, arg: CallArg, element: number, value: number): string | null {
+  const match = /^(\s*mul\(\s*([XYZ])\s*,\s*)(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(\s*\)\s*)$/i.exec(arg.text);
+  if (!match) return null;
+  if (axisElement(match[2].toUpperCase()) !== element) return null;
+  const start = arg.start + match[1].length;
+  const end = start + match[3].length;
+  return replaceRange(source, start, end, formatNumber(value));
+}
+
+function firstNonWhitespace(source: string, start: number, end: number): number {
+  for (let index = start; index < end; index += 1) {
+    if (!/\s/.test(source[index])) return index;
+  }
+  return -1;
+}
+
+function axisElement(axis: string): number {
+  if (axis === "X") return 0;
+  if (axis === "Y") return 1;
+  return 2;
+}
+
 function isNumericLiteral(value: string): boolean {
   return /^\s*-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$/i.test(value);
 }
@@ -253,6 +473,10 @@ function isAxisExpression(value: string): boolean {
   return /^\s*[XYZ]\s*$/.test(value);
 }
 
+function replaceRange(source: string, start: number, end: number, value: string): string {
+  return `${source.slice(0, start)}${value}${source.slice(end)}`;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -260,4 +484,9 @@ function escapeRegExp(value: string): string {
 function formatNumber(value: number): string {
   if (Object.is(value, -0)) return "0";
   return String(Number(value.toPrecision(12)));
+}
+
+function formatNumberLike(previous: string, value: number): string {
+  const match = /^(\s*)-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(\s*)$/i.exec(previous);
+  return `${match?.[1] ?? ""}${formatNumber(value)}${match?.[2] ?? ""}`;
 }
