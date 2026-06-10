@@ -34,6 +34,7 @@ export interface EditorRuntimeVerification {
   graphRevealEvents: string[];
   graphSourceHoverEvents: string[];
   graphSourceHoverDecorations: number;
+  recursiveDecorationWarnings: number;
   sourceScrub: {
     startValue: number | null;
     nextValue: number | null;
@@ -89,6 +90,8 @@ export async function runEditorRuntimeVerification(
   const graphSelections: string[] = [];
   const graphRevealEvents: string[] = [];
   const graphSourceHoverEvents: string[] = [];
+  const recursiveDecorationMessages: string[] = [];
+  const restoreConsole = captureRecursiveDecorationMessages(recursiveDecorationMessages);
   const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
     startValue: null,
     nextValue: null,
@@ -252,6 +255,9 @@ export async function runEditorRuntimeVerification(
     if (selectedSourceDecorations === 0) {
       errors.push("selected source decoration did not render");
     }
+    if (recursiveDecorationMessages.length > 0) {
+      errors.push("editor selection triggered recursive Monaco decoration warnings");
+    }
 
     return {
       ok: errors.length === 0,
@@ -265,6 +271,7 @@ export async function runEditorRuntimeVerification(
       graphRevealEvents,
       graphSourceHoverEvents,
       graphSourceHoverDecorations,
+      recursiveDecorationWarnings: recursiveDecorationMessages.length,
       sourceScrub,
       sourceLinkHitTest,
       apiHints,
@@ -273,6 +280,7 @@ export async function runEditorRuntimeVerification(
       errors,
     };
   } finally {
+    restoreConsole();
     codeEditor?.dispose();
   }
 
@@ -280,6 +288,29 @@ export async function runEditorRuntimeVerification(
     const node = graphInspector.selectNodeById(link.nodeId);
     if (node) codeEditor?.markSelectedSourceLink(link);
   }
+}
+
+function captureRecursiveDecorationMessages(messages: string[]): () => void {
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  const capture = (args: readonly unknown[]) => {
+    const message = args.map((arg) => String(arg)).join(" ");
+    if (message.includes("Invoking deltaDecorations recursively")) {
+      messages.push(message);
+    }
+  };
+  console.warn = (...args: unknown[]) => {
+    capture(args);
+    originalWarn.apply(console, args);
+  };
+  console.error = (...args: unknown[]) => {
+    capture(args);
+    originalError.apply(console, args);
+  };
+  return () => {
+    console.warn = originalWarn;
+    console.error = originalError;
+  };
 }
 
 function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"] {

@@ -493,7 +493,7 @@ function handleSourceLinkCursor(link: GraphSourceLink | null): void {
   }
   const node = graphInspector?.selectNodeById(link.nodeId);
   if (!node) return;
-  setSelectedSourceLink(link);
+  setSelectedSourceLink(link, { markCode: false });
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
   scheduleActivePreview(0);
 }

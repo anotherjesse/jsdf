@@ -155,6 +155,8 @@ export function createCodeEditor(
   let hoveredKey: string | null = null;
   let hoveredLink: GraphSourceLink | null = null;
   let hoverClearTimer = 0;
+  let cursorSyncFrame = 0;
+  let pendingCursorPosition: monaco.Position | null = null;
   let pointerLink: GraphSourceLink | null = null;
   let shiftDown = false;
   let pointerInside = false;
@@ -303,6 +305,25 @@ export function createCodeEditor(
     onSourceLinkCursor(link);
   };
 
+  const scheduleCursorSourceLinkSync = (position: monaco.Position | null | undefined) => {
+    if (suppress || activeScrub) return;
+    pendingCursorPosition = position ?? null;
+    if (cursorSyncFrame) return;
+    cursorSyncFrame = window.requestAnimationFrame(() => {
+      cursorSyncFrame = 0;
+      const nextPosition = pendingCursorPosition;
+      pendingCursorPosition = null;
+      syncCursorSourceLink(nextPosition);
+    });
+  };
+
+  const cancelCursorSourceLinkSync = () => {
+    if (!cursorSyncFrame) return;
+    window.cancelAnimationFrame(cursorSyncFrame);
+    cursorSyncFrame = 0;
+    pendingCursorPosition = null;
+  };
+
   const applyFocusedNodeDecorations = (reveal: boolean) => {
     const model = editor.getModel();
     if (!model || focusedNodeId == null) {
@@ -359,7 +380,7 @@ export function createCodeEditor(
     updateHover(pointerLink, event.event.browserEvent.shiftKey || shiftDown);
   });
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
-    syncCursorSourceLink(event.position);
+    scheduleCursorSourceLinkSync(event.position);
   });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
@@ -433,7 +454,7 @@ export function createCodeEditor(
         }));
       applyFocusedNodeDecorations(false);
       cursorLinkKey = null;
-      syncCursorSourceLink(editor.getPosition());
+      scheduleCursorSourceLinkSync(editor.getPosition());
     },
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;
@@ -481,6 +502,7 @@ export function createCodeEditor(
     dispose() {
       endScrub();
       clearHoverTimer();
+      cancelCursorSourceLinkSync();
       updateHover(null, false, { immediateClear: true });
       window.removeEventListener("keydown", keyDownListener);
       window.removeEventListener("keyup", keyUpListener);
