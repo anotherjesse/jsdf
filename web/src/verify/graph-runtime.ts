@@ -159,7 +159,17 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
         mapEye.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         if (hiddenEvents.at(-1)?.[0] !== sphere.id) verifyErrors.push("map eye visibility toggle did not hide sphere");
       }
-      graphRoot.querySelector<HTMLButtonElement>(".graph-show-all")?.click();
+      const showAll = graphRoot.querySelector<HTMLButtonElement>(".graph-show-all");
+      if (!showAll || showAll.hidden) {
+        verifyErrors.push("show-all visibility control did not appear after hiding a node");
+      } else {
+        const hiddenCount = showAll.querySelector(".visibility-count")?.textContent;
+        if (hiddenCount !== "1") verifyErrors.push(`show-all visibility badge rendered ${hiddenCount || "nothing"}`);
+        if (showAll.getAttribute("aria-label") !== "Show 1 hidden node") {
+          verifyErrors.push("show-all visibility control had unclear aria label");
+        }
+        showAll.click();
+      }
       if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("show-all after map eye did not clear hidden nodes");
     }
 

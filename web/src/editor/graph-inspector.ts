@@ -63,6 +63,7 @@ export class GraphInspector {
   private readonly nextMatchButton = document.createElement("button");
   private readonly mapButton = document.createElement("button");
   private readonly showAllButton = document.createElement("button");
+  private readonly showAllCount = document.createElement("span");
   private readonly summary = document.createElement("span");
   private readonly map = document.createElement("div");
   private readonly tree = document.createElement("div");
@@ -97,10 +98,12 @@ export class GraphInspector {
     this.mapButton.setAttribute("aria-pressed", "false");
     this.showAllButton.type = "button";
     this.showAllButton.className = "graph-show-all";
-    this.showAllButton.textContent = "Show all";
     this.showAllButton.title = "Show all hidden nodes (Shift+V)";
     this.showAllButton.setAttribute("aria-label", "Show all hidden graph nodes");
     this.showAllButton.hidden = true;
+    this.showAllCount.className = "visibility-count";
+    this.showAllCount.setAttribute("aria-hidden", "true");
+    this.showAllButton.append(renderEyeIcon("visible"), this.showAllCount);
     this.summary.className = "graph-summary";
     this.filterInput.addEventListener("input", () => {
       this.filter = this.filterInput.value;
@@ -269,7 +272,7 @@ export class GraphInspector {
     const model = buildGraphModel(this.sdf.node, this.filter);
     this.renderSummary(model);
     this.updateMatchNavigation(model);
-    this.showAllButton.hidden = this.hiddenNodeIds.size === 0;
+    this.renderShowAllControl();
     this.map.hidden = !this.showMap;
     if (this.showMap) this.renderMap(model);
     if (model.visibleNodeIds.size === 0) {
@@ -282,6 +285,15 @@ export class GraphInspector {
     }
     this.renderParams();
     this.revealSelectedNode();
+  }
+
+  private renderShowAllControl(): void {
+    const hidden = this.hiddenNodeIds.size;
+    this.showAllButton.hidden = hidden === 0;
+    this.showAllCount.textContent = hidden > 99 ? "99+" : String(hidden);
+    const label = hidden === 1 ? "Show 1 hidden node" : `Show ${hidden} hidden nodes`;
+    this.showAllButton.title = `${label} (Shift+V)`;
+    this.showAllButton.setAttribute("aria-label", label);
   }
 
   private renderTreeHeader(): HTMLElement {
