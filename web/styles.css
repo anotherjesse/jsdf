@@ -522,6 +522,41 @@ button:disabled {
   font-size: 12px;
 }
 
+.param-breadcrumb {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 26px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.param-breadcrumb button {
+  flex: 0 0 auto;
+  min-height: 26px;
+  max-width: 138px;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 3px 7px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.param-breadcrumb button[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  color: var(--accent);
+  cursor: default;
+}
+
+.param-breadcrumb-separator {
+  flex: 0 0 auto;
+  color: #65707c;
+  font-size: 11px;
+}
+
 .param-row {
   display: grid;
   grid-template-columns: minmax(88px, 1fr) 96px;

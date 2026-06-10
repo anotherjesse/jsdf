@@ -34,6 +34,7 @@ export class GraphInspector {
   private filter = "";
   private showMap = false;
   private soloKey: string | null = null;
+  private revealSelectedAfterRender = false;
   private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
@@ -99,6 +100,7 @@ export class GraphInspector {
 
   setSelected(node: Node | null): void {
     this.selected = node;
+    this.revealSelectedAfterRender = node != null;
     this.render();
   }
 
@@ -145,6 +147,7 @@ export class GraphInspector {
     if (!node) return null;
     setAtPath(node.params, path, value);
     this.selected = node;
+    this.revealSelectedAfterRender = true;
     this.render();
     this.options.onSelect(node);
     return node;
@@ -168,6 +171,7 @@ export class GraphInspector {
       this.tree.append(this.renderNode(this.sdf.node, 0, model, [this.sdf.node]));
     }
     this.renderParams();
+    this.revealSelectedNode();
   }
 
   private renderNode(node: Node, depth: number, model: GraphModel, path: Node[]): HTMLElement {
@@ -308,8 +312,18 @@ export class GraphInspector {
 
   private select(node: Node): void {
     this.selected = node;
+    this.revealSelectedAfterRender = true;
     this.render();
     this.options.onSelect(node);
+  }
+
+  private revealSelectedNode(): void {
+    if (!this.revealSelectedAfterRender || !this.selected) return;
+    this.revealSelectedAfterRender = false;
+    const target = this.tree.querySelector<HTMLElement>(`[data-node-id="${this.selected.id}"]`);
+    window.requestAnimationFrame(() => {
+      target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
   }
 
   private attachSoloHover(target: Element, path: Node[]): void {
@@ -386,6 +400,9 @@ export class GraphInspector {
     title.append(kind, id);
     this.params.append(title);
 
+    const breadcrumb = this.renderBreadcrumb(node);
+    if (breadcrumb) this.params.append(breadcrumb);
+
     const orientationControl = this.renderOrientationControl(node);
     if (orientationControl) this.params.append(orientationControl);
 
@@ -402,6 +419,37 @@ export class GraphInspector {
     for (const field of fields) {
       this.params.append(this.renderNumberField(node, field));
     }
+  }
+
+  private renderBreadcrumb(node: Node): HTMLElement | null {
+    const path = this.pathToNode(node.id);
+    if (path.length <= 1) return null;
+
+    const trail = document.createElement("div");
+    trail.className = "param-breadcrumb";
+    trail.setAttribute("aria-label", "Selected node path");
+
+    path.forEach((crumb, index) => {
+      if (index > 0) {
+        const separator = document.createElement("span");
+        separator.className = "param-breadcrumb-separator";
+        separator.textContent = "/";
+        trail.append(separator);
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${crumb.kind} #${crumb.id}`;
+      button.title = `${crumb.kind} #${crumb.id}`;
+      if (crumb.id === node.id) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.addEventListener("click", () => this.select(crumb));
+      }
+      trail.append(button);
+    });
+
+    return trail;
   }
 
   private renderOrientationControl(node: Node): HTMLElement | null {
