@@ -388,6 +388,7 @@ export class GraphInspector {
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
     if (this.dirtyNodeIds.has(node.id)) button.classList.add("edited");
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
+    button.setAttribute("aria-keyshortcuts", this.nodeKeyboardShortcuts(node));
     button.dataset.nodeId = String(node.id);
     const label = document.createElement("span");
     label.textContent = node.kind;
@@ -525,6 +526,7 @@ export class GraphInspector {
     group.setAttribute("role", "button");
     group.setAttribute("tabindex", "0");
     group.setAttribute("aria-label", `${view.node.kind} #${view.node.id}`);
+    group.setAttribute("aria-keyshortcuts", this.nodeKeyboardShortcuts(view.node));
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     rect.setAttribute("x", String(x - 50));
@@ -801,6 +803,15 @@ export class GraphInspector {
     return node.children.find((child) => childMatchesFilter(child.node, model.visibleNodeIds))?.node ?? null;
   }
 
+  private nodeKeyboardShortcuts(node: Node): string {
+    const shortcuts = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"];
+    if (this.sdf?.node.id !== node.id) shortcuts.push("V");
+    shortcuts.push("Shift+V");
+    if (this.soloPreviewForNode(node)) shortcuts.push("I");
+    if (this.sourceLinkForNode(node.id)) shortcuts.push("C");
+    return shortcuts.join(" ");
+  }
+
   private attachSoloHover(target: Element, path: Node[]): void {
     const sourceLink = this.sourceLinkForNode(path.at(-1)?.id ?? -1);
     target.addEventListener("pointerenter", (event) => {
@@ -973,7 +984,11 @@ export class GraphInspector {
     actions.append(visibility);
 
     if (nodeSourceLink) {
-      const source = renderCodeLinkButton(`Reveal ${node.kind} #${node.id} in code (C)`, "param-title-button param-code-link");
+      const source = renderCodeLinkButton(
+        `Reveal ${node.kind} #${node.id} in code (C)`,
+        "param-title-button param-code-link",
+        "C",
+      );
       source.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
       actions.append(source);
     }
@@ -1726,12 +1741,13 @@ function childRelationLabel(parentKind: string, childIndex: number): string {
   return childIndex === 0 ? "input" : `child ${childIndex + 1}`;
 }
 
-function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {
+function renderCodeLinkButton(label: string, className: string, shortcuts = ""): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = className;
   button.title = label;
   button.setAttribute("aria-label", label);
+  if (shortcuts) button.setAttribute("aria-keyshortcuts", shortcuts);
 
   const icon = document.createElement("span");
   icon.className = "code-link-icon";
@@ -1763,6 +1779,7 @@ function renderSourceStatusChip(sourceLink: GraphSourceLink | null): HTMLElement
     chip.textContent = "Code";
     chip.title = "Reveal this node in editable code";
     chip.setAttribute("aria-label", chip.title);
+    chip.setAttribute("aria-keyshortcuts", "C");
     return chip;
   }
 

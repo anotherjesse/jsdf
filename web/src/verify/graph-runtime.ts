@@ -213,6 +213,9 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (linkedChip?.getAttribute("aria-label") !== "Reveal this node in editable code") {
       verifyErrors.push("linked source chip had unclear label");
     }
+    if (linkedChip?.getAttribute("aria-keyshortcuts") !== "C") {
+      verifyErrors.push("linked source chip did not advertise code reveal shortcut");
+    }
     linkedChip?.click();
     if (revealedSource !== "sphere:call") {
       verifyErrors.push(`linked source chip emitted ${revealedSource || "nothing"}`);
@@ -225,6 +228,14 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     graphInspector.setSourceLinks(sourceLinks);
     graphInspector.selectNodeById(sphere.id);
     const sphereHoverLabel = `${sphere.kind} #${sphere.id}`;
+    const selectedNodeShortcutText = graphRoot
+      .querySelector<HTMLElement>(`.graph-node[data-node-id="${sphere.id}"]`)
+      ?.getAttribute("aria-keyshortcuts") ?? "";
+    for (const shortcut of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "V", "Shift+V", "I", "C"]) {
+      if (!selectedNodeShortcutText.split(/\s+/).includes(shortcut)) {
+        verifyErrors.push(`selected graph node shortcuts missed ${shortcut}: ${selectedNodeShortcutText || "nothing"}`);
+      }
+    }
 
     graphInspector.setFocusHoveredNodeById(sphere.id);
     if (!graphRoot.querySelector(`.graph-node[data-node-id="${sphere.id}"].focus-peek`)) {
@@ -285,6 +296,9 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!nodeCodeButton) {
       verifyErrors.push("selected node has no code icon button");
     } else {
+      if (nodeCodeButton.getAttribute("aria-keyshortcuts") !== "C") {
+        verifyErrors.push("node code icon did not advertise code reveal shortcut");
+      }
       nodeCodeButton.click();
       if (revealedSource !== "sphere:call") verifyErrors.push(`node code icon emitted ${revealedSource || "nothing"}`);
     }
@@ -342,6 +356,12 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     } else {
       mapToggle.click();
       const mapEye = graphRoot.querySelector<SVGElement>(`.graph-map-node[data-node-id="${sphere.id}"] .graph-map-eye`);
+      const mapNodeShortcuts = graphRoot
+        .querySelector<SVGElement>(`.graph-map-node[data-node-id="${sphere.id}"]`)
+        ?.getAttribute("aria-keyshortcuts") ?? "";
+      if (!mapNodeShortcuts.includes("C") || !mapNodeShortcuts.includes("I") || !mapNodeShortcuts.includes("Shift+V")) {
+        verifyErrors.push(`graph map node shortcuts rendered ${mapNodeShortcuts || "nothing"}`);
+      }
       if (!mapEye) {
         verifyErrors.push("selected sphere has no map eye visibility toggle");
       } else {
