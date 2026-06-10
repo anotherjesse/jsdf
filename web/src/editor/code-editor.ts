@@ -28,7 +28,7 @@ import {
 } from "./source-diagnostic-fixes";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
-import { adjacentSourceLink } from "./source-link-navigation";
+import { adjacentSourceLink, navigableSourceLinks, sourceLinkNavigationKey } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 import type { ScrubModifiers } from "./scrub-values";
 
@@ -334,7 +334,9 @@ export function createCodeEditor(
   sourceLinkNavigation.className = "source-link-status-navigation";
   const sourceLinkPreviousButton = renderSourceLinkNavigationButton("previous", "<");
   const sourceLinkNextButton = renderSourceLinkNavigationButton("next", ">");
-  sourceLinkNavigation.append(sourceLinkPreviousButton, sourceLinkNextButton);
+  const sourceLinkNavigationIndex = document.createElement("span");
+  sourceLinkNavigationIndex.className = "source-link-status-index";
+  sourceLinkNavigation.append(sourceLinkPreviousButton, sourceLinkNavigationIndex, sourceLinkNextButton);
   const sourceLinkStatusControls = document.createElement("span");
   sourceLinkStatusControls.className = "source-link-status-controls";
   sourceLinkStatusControls.hidden = true;
@@ -738,6 +740,9 @@ export function createCodeEditor(
       sourceLinkStatusTarget.removeAttribute("aria-label");
       sourceLinkPreviousButton.disabled = true;
       sourceLinkNextButton.disabled = true;
+      sourceLinkNavigationIndex.textContent = "";
+      sourceLinkNavigationIndex.removeAttribute("aria-label");
+      sourceLinkNavigationIndex.removeAttribute("title");
       sourceLinkStatusControls.hidden = true;
       sourceLinkDecreaseButton.disabled = true;
       sourceLinkIncreaseButton.disabled = true;
@@ -756,9 +761,16 @@ export function createCodeEditor(
     sourceLinkStatusTarget.disabled = false;
     sourceLinkStatusTarget.setAttribute("aria-label", `Reveal ${sourceLinkStatusTextForLink(link)} in Graph`);
     sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
-    const hasNavigation = navigableSourceLinkCount() > 1;
+    const navigationState = sourceLinkNavigationState(link);
+    const hasNavigation = navigationState.total > 1;
+    const navigationText = navigationState.total > 0
+      ? `${Math.max(0, navigationState.index) + 1}/${navigationState.total}`
+      : "";
     sourceLinkPreviousButton.disabled = !hasNavigation;
     sourceLinkNextButton.disabled = !hasNavigation;
+    sourceLinkNavigationIndex.textContent = navigationText;
+    sourceLinkNavigationIndex.setAttribute("aria-label", navigationText ? `Linked range ${navigationText}` : "No linked range");
+    sourceLinkNavigationIndex.title = navigationText ? `Linked range ${navigationText}` : "";
     sourceLinkPreviousButton.setAttribute("aria-label", `Previous graph-linked code range from ${sourceLinkStatusTextForLink(link)}`);
     sourceLinkNextButton.setAttribute("aria-label", `Next graph-linked code range from ${sourceLinkStatusTextForLink(link)}`);
     sourceLinkPreviousButton.title = "Previous linked range (Cmd/Ctrl+Alt+Up)";
@@ -778,8 +790,12 @@ export function createCodeEditor(
       ?? liveSourceLinkFor(hoveredLink);
   };
 
-  const navigableSourceLinkCount = (): number => {
-    return sourceLinks.filter((link) => link.end > link.start).length;
+  const sourceLinkNavigationState = (link: GraphSourceLink): { index: number; total: number } => {
+    const ordered = navigableSourceLinks(sourceLinks);
+    return {
+      index: ordered.findIndex((candidate) => sourceLinkNavigationKey(candidate) === sourceLinkNavigationKey(link)),
+      total: ordered.length,
+    };
   };
 
   const selectAdjacentSourceLink = (direction: -1 | 1): boolean => {

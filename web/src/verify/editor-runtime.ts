@@ -85,6 +85,9 @@ export interface EditorRuntimeVerification {
     radiusRevealTargetLabel: string;
     radiusRevealTargetLink: string;
     radiusNavigationButtons: number;
+    radiusNavigationIndex: string;
+    radiusNavigationNextIndex: string;
+    radiusNavigationPreviousIndex: string;
     radiusNavigationNextLink: string;
     radiusNavigationPreviousLink: string;
     radiusNavigationPreviousStatus: string;
@@ -226,6 +229,9 @@ export async function runEditorRuntimeVerification(
     radiusRevealTargetLabel: "",
     radiusRevealTargetLink: "",
     radiusNavigationButtons: 0,
+    radiusNavigationIndex: "",
+    radiusNavigationNextIndex: "",
+    radiusNavigationPreviousIndex: "",
     radiusNavigationNextLink: "",
     radiusNavigationPreviousLink: "",
     radiusNavigationPreviousStatus: "",
@@ -314,6 +320,10 @@ export async function runEditorRuntimeVerification(
       if (sourceLinkStatus.radiusNavigationButtons !== 2) {
         errors.push(`source link status rendered ${sourceLinkStatus.radiusNavigationButtons} navigation buttons`);
       }
+      sourceLinkStatus.radiusNavigationIndex = visibleSourceLinkNavigationIndex(codeRoot);
+      if (!/^\d+\/\d+$/.test(sourceLinkStatus.radiusNavigationIndex)) {
+        errors.push(`source link status rendered ${sourceLinkStatus.radiusNavigationIndex || "nothing"} navigation index`);
+      }
       onProgress("source link status: navigation");
       const nextButton = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-navigation .source-link-status-nav[data-direction='next']");
       const previousButton = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-navigation .source-link-status-nav[data-direction='previous']");
@@ -324,18 +334,26 @@ export async function runEditorRuntimeVerification(
         nextButton.click();
         await nextFrame();
         sourceLinkStatus.radiusNavigationNextLink = sourceSelectionEvents.at(-1) ?? "";
+        sourceLinkStatus.radiusNavigationNextIndex = visibleSourceLinkNavigationIndex(codeRoot);
         if (sourceSelectionEvents.length <= beforeNavigationEvents || !sourceLinkStatus.radiusNavigationNextLink || sourceLinkStatus.radiusNavigationNextLink === "sphere:radius") {
           errors.push(`source link status next selected ${sourceLinkStatus.radiusNavigationNextLink || "nothing"}`);
+        }
+        if (sourceLinkStatus.radiusNavigationNextIndex === sourceLinkStatus.radiusNavigationIndex) {
+          errors.push(`source link status next kept index ${sourceLinkStatus.radiusNavigationNextIndex || "nothing"}`);
         }
         previousButton.click();
         await nextFrame();
         sourceLinkStatus.radiusNavigationPreviousLink = sourceSelectionEvents.at(-1) ?? "";
+        sourceLinkStatus.radiusNavigationPreviousIndex = visibleSourceLinkNavigationIndex(codeRoot);
         sourceLinkStatus.radiusNavigationPreviousStatus = visibleSourceLinkStatus(codeRoot);
         if (sourceLinkStatus.radiusNavigationPreviousLink !== "sphere:radius") {
           errors.push(`source link status previous selected ${sourceLinkStatus.radiusNavigationPreviousLink || "nothing"}`);
         }
         if (sourceLinkStatus.radiusNavigationPreviousStatus !== sourceLinkStatus.radius) {
           errors.push(`source link status previous displayed ${sourceLinkStatus.radiusNavigationPreviousStatus || "nothing"}`);
+        }
+        if (sourceLinkStatus.radiusNavigationPreviousIndex !== sourceLinkStatus.radiusNavigationIndex) {
+          errors.push(`source link status previous restored index ${sourceLinkStatus.radiusNavigationPreviousIndex || "nothing"}`);
         }
       }
       onProgress("source link status: reveal graph");
@@ -1280,6 +1298,11 @@ function visibleSourceLinkStepperCount(root: HTMLElement): number {
 
 function visibleSourceLinkNavigationCount(root: HTMLElement): number {
   return root.querySelectorAll(".source-link-status:not([hidden]) .source-link-status-navigation .source-link-status-nav").length;
+}
+
+function visibleSourceLinkNavigationIndex(root: HTMLElement): string {
+  return root.querySelector<HTMLElement>(".source-link-status:not([hidden]) .source-link-status-navigation .source-link-status-index")
+    ?.textContent?.trim() ?? "";
 }
 
 function verifySourceScrubPath(

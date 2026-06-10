@@ -671,6 +671,7 @@ button:disabled {
 .source-link-status-navigation,
 .source-link-status-controls {
   display: inline-flex;
+  align-items: center;
   gap: 3px;
   flex: 0 0 auto;
 }
@@ -697,6 +698,15 @@ button:disabled {
 
 .source-link-status-nav {
   font-size: 15px;
+}
+
+.source-link-status-index {
+  min-width: 34px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
 }
 
 .source-link-status-nav:hover,
