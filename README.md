@@ -1,5 +1,7 @@
 # sdf
 
+This repository is derived from Michael Fogleman's original [`sdf`](https://github.com/fogleman/sdf) project and keeps the same MIT License. See [NOTICE.md](NOTICE.md) and [LICENSE.md](LICENSE.md).
+
 Generate 3D meshes based on SDFs (signed distance functions) with a
 dirt simple Python API.
 
