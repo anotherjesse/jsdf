@@ -405,6 +405,15 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       verifyErrors.push("selected sphere has no numeric input");
       return;
     }
+    const expectedRadiusValueLabel = `sphere #${sphere.id} radius value`;
+    if (radiusInput.getAttribute("aria-label") !== expectedRadiusValueLabel) {
+      verifyErrors.push(`radius input label rendered ${radiusInput.getAttribute("aria-label") || "nothing"}`);
+    }
+    const radiusRange = graphRoot.querySelector<HTMLInputElement>(".param-row input[type='range']");
+    const expectedRadiusRangeLabel = `sphere #${sphere.id} radius slider`;
+    if (radiusRange?.getAttribute("aria-label") !== expectedRadiusRangeLabel) {
+      verifyErrors.push(`radius slider label rendered ${radiusRange?.getAttribute("aria-label") || "nothing"}`);
+    }
     const paramCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-row .param-source-link");
     if (!paramCodeButton) {
       verifyErrors.push("selected sphere radius has no code icon button");
@@ -437,6 +446,10 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!paramName) {
       verifyErrors.push("selected sphere has no scrub handle");
     } else {
+      const expectedScrubLabel = `sphere #${sphere.id} radius scrub handle`;
+      if (paramName.getAttribute("aria-label") !== expectedScrubLabel) {
+        verifyErrors.push(`scrub handle label rendered ${paramName.getAttribute("aria-label") || "nothing"}`);
+      }
       if (paramName.getAttribute("aria-keyshortcuts") !== "ArrowLeft ArrowRight ArrowUp ArrowDown") {
         verifyErrors.push("scrub handle did not advertise arrow key shortcuts");
       }
@@ -938,6 +951,10 @@ function verifyOrientationControl(errors: string[]): void {
   }
   if (matrixInputs.length !== 9) {
     errors.push(`custom orientation rendered ${matrixInputs.length} matrix inputs`);
+  }
+  const expectedMatrixLabel = `rotate3 #${rotate.id} orientation matrix row 1 column 2`;
+  if (matrixInputs[1]?.getAttribute("aria-label") !== expectedMatrixLabel) {
+    errors.push(`custom matrix input label rendered ${matrixInputs[1]?.getAttribute("aria-label") || "nothing"}`);
   }
 
   const matrixSourceButton = matrixControl.querySelector<HTMLButtonElement>(".matrix-source-link");

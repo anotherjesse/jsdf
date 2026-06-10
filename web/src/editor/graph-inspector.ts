@@ -1170,7 +1170,10 @@ export class GraphInspector {
         input.min = "-1";
         input.max = "1";
         input.value = formatValue(value);
-        input.setAttribute("aria-label", `Matrix row ${rowIndex + 1} column ${columnIndex + 1}`);
+        input.setAttribute(
+          "aria-label",
+          `${formatNodeLabel(node)} orientation matrix row ${rowIndex + 1} column ${columnIndex + 1}`,
+        );
 
         let editSessionId: string | null = null;
         input.addEventListener("focus", () => {
@@ -1255,13 +1258,14 @@ export class GraphInspector {
     nameGroup.className = "param-name-group";
 
     const name = document.createElement("span");
+    const fieldLabel = `${formatNodeLabel(node)} ${field.label}`;
     name.className = "param-name";
     name.textContent = field.label;
     name.tabIndex = 0;
     name.title = "Drag horizontally, or use arrow keys, to scrub";
     name.setAttribute("role", "button");
     name.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
-    name.setAttribute("aria-label", `${field.label} scrub handle`);
+    name.setAttribute("aria-label", `${fieldLabel} scrub handle`);
     nameGroup.append(name);
 
     if (sourceLink) {
@@ -1277,11 +1281,13 @@ export class GraphInspector {
     input.type = "number";
     input.step = String(stepFor(field));
     input.value = formatValue(field.value);
+    input.setAttribute("aria-label", `${fieldLabel} value`);
 
     const range = document.createElement("input");
     range.type = "range";
     range.step = input.step;
     range.value = input.value;
+    range.setAttribute("aria-label", `${fieldLabel} slider`);
 
     const rangeGroup = document.createElement("div");
     rangeGroup.className = "param-range";
