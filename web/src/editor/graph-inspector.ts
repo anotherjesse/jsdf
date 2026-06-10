@@ -16,6 +16,7 @@ export interface GraphParamEdit {
   label: string;
   previousValue: ParamValue;
   nextValue: ParamValue;
+  editSessionId?: string;
 }
 
 export interface GraphInspectorOptions {
@@ -913,7 +914,18 @@ export class GraphInspector {
     };
     recenterRange(field.value);
 
-    const update = (value: number, options: { clampToRange?: boolean; recenterRange?: boolean } = {}) => {
+    let editSessionId: string | null = null;
+    const beginEditSession = () => {
+      editSessionId ??= nextEditSessionId("graph-param");
+    };
+    const endEditSession = () => {
+      editSessionId = null;
+    };
+
+    const update = (
+      value: number,
+      options: { clampToRange?: boolean; recenterRange?: boolean; editSessionId?: string | null } = {},
+    ) => {
       if (!Number.isFinite(value)) return;
       const nextValue = options.clampToRange
         ? clamp(value, Number(range.min), Number(range.max))
@@ -936,19 +948,29 @@ export class GraphInspector {
         label: field.label,
         previousValue,
         nextValue,
+        ...(options.editSessionId ? { editSessionId: options.editSessionId } : {}),
       });
     };
 
-    input.addEventListener("input", () => update(Number(input.value)));
-    range.addEventListener("input", () => update(Number(range.value), { recenterRange: false }));
+    input.addEventListener("focus", beginEditSession);
+    input.addEventListener("blur", endEditSession);
+    input.addEventListener("input", () => update(Number(input.value), { editSessionId }));
+    range.addEventListener("pointerdown", beginEditSession);
+    range.addEventListener("pointerup", endEditSession);
+    range.addEventListener("pointercancel", endEditSession);
+    range.addEventListener("blur", endEditSession);
+    range.addEventListener("change", endEditSession);
+    range.addEventListener("input", () => update(Number(range.value), { recenterRange: false, editSessionId }));
     attachScrubber(
       name,
       input,
       field.value,
-      (value) => update(value, { clampToRange: true, recenterRange: false }),
+      (value) => update(value, { clampToRange: true, recenterRange: false, editSessionId }),
       () => {
         range.value = formatValue(Number(input.value));
+        endEditSession();
       },
+      beginEditSession,
     );
 
     row.append(nameGroup, input, range);
@@ -1150,6 +1172,7 @@ function attachScrubber(
   initialValue: number,
   update: (value: number) => void,
   finish: () => void,
+  begin: () => void = () => {},
 ): void {
   let startX = 0;
   let startValue = initialValue;
@@ -1158,6 +1181,7 @@ function attachScrubber(
   label.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     dragging = true;
+    begin();
     startX = event.clientX;
     const value = Number(input.value);
     startValue = Number.isFinite(value) ? value : initialValue;
@@ -1193,4 +1217,12 @@ function mapLabel(kind: string): string {
 
 function visibilityShortcutTitle(title: string): string {
   return title === "Root stays visible" ? title : `${title} (V)`;
+}
+
+let nextGraphEditSession = 1;
+
+function nextEditSessionId(prefix: string): string {
+  const id = nextGraphEditSession;
+  nextGraphEditSession += 1;
+  return `${prefix}:${id}`;
 }

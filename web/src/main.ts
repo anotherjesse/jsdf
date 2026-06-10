@@ -1,7 +1,7 @@
 import type { Node, SDF3 } from "./core/nodes";
 import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
-import type { CodeEditor, SourceLinkHoverOptions } from "./editor/code-editor";
+import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
@@ -412,7 +412,11 @@ function handleSourceLinkSelect(link: GraphSourceLink): void {
   schedulePreview(0);
 }
 
-function handleSourceLinkValueChange(link: GraphSourceLink, nextValue: number): void {
+function handleSourceLinkValueChange(
+  link: GraphSourceLink,
+  nextValue: number,
+  options: SourceLinkValueChangeOptions = {},
+): void {
   if (!graphInspector) return;
   const previousValue = graphInspector.getParamValue(link.nodeId, link.path);
   if (typeof previousValue !== "number" || previousValue === nextValue) return;
@@ -426,6 +430,7 @@ function handleSourceLinkValueChange(link: GraphSourceLink, nextValue: number): 
     label: link.label,
     previousValue,
     nextValue,
+    ...(options.editSessionId ? { editSessionId: options.editSessionId } : {}),
   });
 }
 

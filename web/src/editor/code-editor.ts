@@ -53,7 +53,7 @@ export function createCodeEditor(
   initialValue: string,
   onChange: (value: string) => void,
   onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
-  onSourceLinkValueChange: (link: GraphSourceLink, value: number) => void = () => {},
+  onSourceLinkValueChange: (link: GraphSourceLink, value: number, options?: SourceLinkValueChangeOptions) => void = () => {},
   onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
 ): CodeEditor {
   const editor = monaco.editor.create(element, {
@@ -105,7 +105,7 @@ export function createCodeEditor(
     const nextValue = scrubSourceLinkValue(activeScrub.link, activeScrub.startValue, delta, event);
     if (nextValue === activeScrub.lastValue) return;
     activeScrub.lastValue = nextValue;
-    onSourceLinkValueChange(activeScrub.link, nextValue);
+    onSourceLinkValueChange(activeScrub.link, nextValue, { editSessionId: activeScrub.editSessionId });
   };
 
   const commitHover = (link: GraphSourceLink | null, shiftKey: boolean) => {
@@ -187,6 +187,7 @@ export function createCodeEditor(
     if (startValue == null) return;
     activeScrub = {
       link,
+      editSessionId: nextEditSessionId("source-scrub"),
       startX: event.event.browserEvent.clientX,
       startValue,
       lastValue: startValue,
@@ -315,8 +316,13 @@ export interface SourceLinkHoverOptions {
   shiftKey: boolean;
 }
 
+export interface SourceLinkValueChangeOptions {
+  editSessionId?: string;
+}
+
 interface ActiveSourceScrub {
   link: GraphSourceLink;
+  editSessionId: string;
   startX: number;
   startValue: number;
   lastValue: number;
@@ -325,6 +331,14 @@ interface ActiveSourceScrub {
 
 function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
+}
+
+let nextSourceEditSession = 1;
+
+function nextEditSessionId(prefix: string): string {
+  const id = nextSourceEditSession;
+  nextSourceEditSession += 1;
+  return `${prefix}:${id}`;
 }
 
 let completionNames: string[] | null = null;

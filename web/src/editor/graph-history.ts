@@ -8,6 +8,7 @@ export interface GraphHistoryEntry {
   label: string;
   previousValue: ParamValue;
   nextValue: ParamValue;
+  editSessionId?: string;
   timestamp: number;
 }
 
@@ -35,7 +36,7 @@ export class GraphEditHistory {
   record(edit: GraphParamEdit, now = performance.now()): void {
     const last = this.undoStack.at(-1);
     this.redoStack.length = 0;
-    if (last && last.nodeId === edit.nodeId && samePath(last.path, edit.path) && now - last.timestamp < 700) {
+    if (last && last.nodeId === edit.nodeId && samePath(last.path, edit.path) && shouldMergeEdits(last, edit, now)) {
       last.nextValue = edit.nextValue;
       last.timestamp = now;
       return;
@@ -49,6 +50,7 @@ export class GraphEditHistory {
       label: edit.label,
       previousValue: edit.previousValue,
       nextValue: edit.nextValue,
+      ...(edit.editSessionId ? { editSessionId: edit.editSessionId } : {}),
       timestamp: now,
     });
     this.nextId += 1;
@@ -80,6 +82,11 @@ export class GraphEditHistory {
     this.undoStack.length = 0;
     this.redoStack.length = 0;
   }
+}
+
+function shouldMergeEdits(last: GraphHistoryEntry, edit: GraphParamEdit, now: number): boolean {
+  if (last.editSessionId || edit.editSessionId) return last.editSessionId === edit.editSessionId;
+  return now - last.timestamp < 700;
 }
 
 export function samePath(a: ParamPath, b: ParamPath): boolean {
