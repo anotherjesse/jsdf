@@ -86,7 +86,7 @@ export class GraphInspector {
     this.showAllButton.type = "button";
     this.showAllButton.className = "graph-show-all";
     this.showAllButton.textContent = "Show all";
-    this.showAllButton.title = "Show all hidden nodes";
+    this.showAllButton.title = "Show all hidden nodes (Shift+V)";
     this.showAllButton.setAttribute("aria-label", "Show all hidden graph nodes");
     this.showAllButton.hidden = true;
     this.summary.className = "graph-summary";
@@ -264,7 +264,7 @@ export class GraphInspector {
     visibility.disabled = visibilityMeta.disabled;
     visibility.dataset.state = visibilityMeta.state;
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
-    visibility.title = visibilityMeta.title;
+    visibility.title = visibilityShortcutTitle(visibilityMeta.title);
     visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
     visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
     visibility.append(renderEyeIcon(visibilityMeta.state));
@@ -443,19 +443,28 @@ export class GraphInspector {
     return group;
   }
 
-  private toggleNodeVisibility(node: Node): void {
+  private toggleNodeVisibility(node: Node, options: { focus?: boolean } = {}): void {
     if (this.hiddenNodeIds.has(node.id)) {
       this.hiddenNodeIds.delete(node.id);
     } else {
       this.hiddenNodeIds.add(node.id);
     }
+    if (options.focus) {
+      this.selected = node;
+      this.revealSelectedAfterRender = true;
+      this.focusSelectedAfterRender = true;
+    }
     this.render();
     this.options.onVisibilityChange([...this.hiddenNodeIds]);
   }
 
-  private showAllNodes(): void {
+  private showAllNodes(options: { focus?: boolean } = {}): void {
     if (this.hiddenNodeIds.size === 0) return;
     this.hiddenNodeIds.clear();
+    if (options.focus && this.selected) {
+      this.revealSelectedAfterRender = true;
+      this.focusSelectedAfterRender = true;
+    }
     this.render();
     this.options.onVisibilityChange([]);
   }
@@ -495,10 +504,41 @@ export class GraphInspector {
   }
 
   private handleNodeKeyDown(event: KeyboardEvent, node: Node): void {
+    if (this.handleNodeActionKey(event, node)) return;
     const target = this.nodeForKeyboardNavigation(event.key, node);
     if (!target) return;
     event.preventDefault();
     this.select(target, { focus: true });
+  }
+
+  private handleNodeActionKey(event: KeyboardEvent, node: Node): boolean {
+    if (event.metaKey || event.ctrlKey || event.altKey) return false;
+    const key = event.key.toLowerCase();
+    if (key === "v") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        this.showAllNodes({ focus: true });
+      } else if (this.sdf?.node.id !== node.id) {
+        this.toggleNodeVisibility(node, { focus: true });
+      }
+      return true;
+    }
+
+    if (key === "i") {
+      event.preventDefault();
+      this.toggleLockedSolo(node, { focus: true });
+      return true;
+    }
+
+    if (key === "c") {
+      const link = this.sourceLinkForNode(node.id);
+      if (!link) return false;
+      event.preventDefault();
+      this.options.onRevealSource(link);
+      return true;
+    }
+
+    return false;
   }
 
   private nodeForKeyboardNavigation(key: string, node: Node): Node | null {
@@ -586,7 +626,7 @@ export class GraphInspector {
     this.options.onSolo(null);
   }
 
-  private toggleLockedSolo(node: Node): void {
+  private toggleLockedSolo(node: Node, options: { focus?: boolean } = {}): void {
     const preview = this.soloPreviewForNode(node);
     if (!preview) return;
 
@@ -599,6 +639,11 @@ export class GraphInspector {
       this.lockedSoloKey = preview.key;
       this.lockedSoloNodeId = node.id;
       this.options.onSolo(preview);
+    }
+    if (options.focus) {
+      this.selected = node;
+      this.revealSelectedAfterRender = true;
+      this.focusSelectedAfterRender = true;
     }
     this.render();
   }
@@ -663,7 +708,7 @@ export class GraphInspector {
     visibility.disabled = visibilityMeta.disabled;
     visibility.dataset.state = visibilityMeta.state;
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
-    visibility.title = visibilityMeta.title;
+    visibility.title = visibilityShortcutTitle(visibilityMeta.title);
     visibility.setAttribute("aria-label", `${visibility.title} selected ${node.kind} #${node.id}`);
     visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
     visibility.append(renderEyeIcon(visibilityMeta.state));
@@ -676,7 +721,7 @@ export class GraphInspector {
       source.type = "button";
       source.className = "param-title-button";
       source.textContent = "Code";
-      source.title = `Reveal ${node.kind} #${node.id} in code`;
+      source.title = `Reveal ${node.kind} #${node.id} in code (C)`;
       source.setAttribute("aria-label", `Reveal ${node.kind} #${node.id} in code`);
       source.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
       actions.append(source);
@@ -688,7 +733,7 @@ export class GraphInspector {
       isolate.type = "button";
       isolate.className = "param-title-button param-isolate";
       isolate.textContent = "Isolate";
-      isolate.title = "Isolate selected node in preview";
+      isolate.title = "Isolate selected node in preview (I)";
       isolate.setAttribute("aria-label", "Isolate selected node in preview");
       isolate.setAttribute("aria-pressed", String(node.id === this.lockedSoloNodeId));
       isolate.addEventListener("click", () => this.toggleLockedSolo(node));
@@ -1144,4 +1189,8 @@ function attachScrubber(
 
 function mapLabel(kind: string): string {
   return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
+}
+
+function visibilityShortcutTitle(title: string): string {
+  return title === "Root stays visible" ? title : `${title} (V)`;
 }
