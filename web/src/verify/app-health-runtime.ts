@@ -19,6 +19,10 @@ export interface AppHealthRuntimeVerification {
     during: string;
     after: string;
   };
+  sourceDialogFocus: {
+    onOpen: string;
+    afterClose: string;
+  };
   errors: string[];
 }
 
@@ -39,6 +43,7 @@ export async function runAppHealthRuntimeVerification(
   const loadMs = performance.now() - start;
   const dom = summarizeFrameDom(frame);
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
+  const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
 
   if (!health) {
     errors.push("app health hook never became available");
@@ -53,6 +58,7 @@ export async function runAppHealthRuntimeVerification(
     health,
     dom,
     graphHoverStatus,
+    sourceDialogFocus,
     errors,
   };
 }
@@ -202,6 +208,50 @@ async function verifyGraphHoverKeepsStatus(
   }
 
   return { before, during, after };
+}
+
+async function verifySourceDialogFocus(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["sourceDialogFocus"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = { onOpen: "", afterClose: "" };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for source dialog focus verification");
+    return empty;
+  }
+
+  const loadButton = frameDocument.querySelector<HTMLButtonElement>("#loadSourceButton");
+  const closeButton = frameDocument.querySelector<HTMLButtonElement>("#closeSourceDialogButton");
+  if (!loadButton || !closeButton) {
+    errors.push("app frame missing source dialog focus controls");
+    return empty;
+  }
+
+  loadButton.click();
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  const onOpen = activeElementToken(frameDocument);
+  if (onOpen !== "source-search-input") {
+    errors.push(`source dialog focused ${onOpen || "nothing"} on open`);
+  }
+
+  closeButton.click();
+  await nextFrame(frameWindow);
+  const afterClose = activeElementToken(frameDocument);
+  if (afterClose !== "loadSourceButton") {
+    errors.push(`source dialog restored focus to ${afterClose || "nothing"}`);
+  }
+
+  return { onOpen, afterClose };
+}
+
+function activeElementToken(document: Document): string {
+  const active = document.activeElement;
+  if (!active) return "";
+  const candidate = active as Element & { id?: string; className?: unknown };
+  return candidate.id || String(candidate.className ?? "") || active.tagName;
 }
 
 function dispatchPointer(target: HTMLElement, type: string): void {

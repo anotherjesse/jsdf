@@ -16,13 +16,17 @@ export interface SourceDialogActions {
   deleteVersion(documentId: string, versionId: string): void;
 }
 
+export interface SourceDialogController {
+  focusSearch(): void;
+}
+
 const LOAD_BUTTON_SELECTOR = ".source-card, .source-version-button";
 
 export function renderSourceDialog(
   root: HTMLElement,
   state: SourceDialogState,
   actions: SourceDialogActions,
-): void {
+): SourceDialogController {
   const search = document.createElement("input");
   search.type = "search";
   search.className = "source-search-input";
@@ -103,6 +107,13 @@ export function renderSourceDialog(
   });
   renderResults();
   root.replaceChildren(searchBar, results);
+
+  return {
+    focusSearch() {
+      search.focus({ preventScroll: true });
+      search.select();
+    },
+  };
 }
 
 function firstVisibleLoadAction(

@@ -195,6 +195,9 @@ closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
 sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
 });
+sourceDialog.addEventListener("close", () => {
+  loadSourceButton.focus({ preventScroll: true });
+});
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
 undoGraphButton.addEventListener("click", undoGraphEdit);
@@ -1301,13 +1304,17 @@ function gridLabel(): string {
 }
 
 function openSourceDialog(): void {
-  renderLoadDialog();
-  if (sourceDialog.open) return;
+  const dialog = renderLoadDialog();
+  if (sourceDialog.open) {
+    dialog.focusSearch();
+    return;
+  }
   sourceDialog.showModal();
+  window.requestAnimationFrame(() => dialog.focusSearch());
 }
 
-function renderLoadDialog(): void {
-  renderSourceDialog(sourceDialogList, {
+function renderLoadDialog(): ReturnType<typeof renderSourceDialog> {
+  return renderSourceDialog(sourceDialogList, {
     examples,
     savedDocuments: listSavedSourceDocuments(),
     activeExampleId,
