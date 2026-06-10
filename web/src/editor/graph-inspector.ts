@@ -1,15 +1,24 @@
 import type { Node, SDF3 } from "../core/nodes";
+import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
+import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
 type ParamPath = Array<string | number>;
 
 export interface GraphInspectorOptions {
   onSelect(node: Node | null): void;
   onEdit(): void;
+  onSolo(preview: SoloPreview | null): void;
 }
 
 export class GraphInspector {
   private sdf: SDF3 | null = null;
   private selected: Node | null = null;
+  private filter = "";
+  private soloKey: string | null = null;
+  private readonly toolbar = document.createElement("div");
+  private readonly filterInput = document.createElement("input");
+  private readonly summary = document.createElement("span");
+  private readonly map = document.createElement("div");
   private readonly tree = document.createElement("div");
   private readonly params = document.createElement("div");
 
@@ -18,9 +27,28 @@ export class GraphInspector {
     private readonly options: GraphInspectorOptions,
   ) {
     root.replaceChildren();
+    this.toolbar.className = "graph-toolbar";
+    this.filterInput.type = "search";
+    this.filterInput.placeholder = "Filter";
+    this.filterInput.setAttribute("aria-label", "Filter graph nodes");
+    this.summary.className = "graph-summary";
+    this.filterInput.addEventListener("input", () => {
+      this.filter = this.filterInput.value;
+      this.render();
+    });
+    window.addEventListener("pointermove", (event) => {
+      if (!event.shiftKey) this.clearSolo();
+    }, { capture: true });
+    window.addEventListener("pointerup", () => this.clearSolo(), { capture: true });
+    window.addEventListener("keyup", (event) => {
+      if (event.key === "Shift") this.clearSolo();
+    });
+    window.addEventListener("blur", () => this.clearSolo());
+    this.toolbar.append(this.filterInput, this.summary);
+    this.map.className = "graph-map";
     this.tree.className = "graph-tree";
     this.params.className = "param-editor";
-    root.append(this.tree, this.params);
+    root.append(this.toolbar, this.map, this.tree, this.params);
   }
 
   setSdf(sdf: SDF3): void {
@@ -40,35 +68,204 @@ export class GraphInspector {
   }
 
   private render(): void {
+    this.map.replaceChildren();
     this.tree.replaceChildren();
     this.params.replaceChildren();
     if (!this.sdf) return;
-    this.tree.append(this.renderNode(this.sdf.node, 0));
+    const model = buildGraphModel(this.sdf.node, this.filter);
+    this.renderSummary(model);
+    this.renderMap(model);
+    if (model.visibleNodeIds.size === 0) {
+      const empty = document.createElement("div");
+      empty.className = "param-empty graph-empty";
+      empty.textContent = "No matching nodes";
+      this.tree.append(empty);
+    } else {
+      this.tree.append(this.renderNode(this.sdf.node, 0, model, [this.sdf.node]));
+    }
     this.renderParams();
   }
 
-  private renderNode(node: Node, depth: number): HTMLElement {
+  private renderNode(node: Node, depth: number, model: GraphModel, path: Node[]): HTMLElement {
     const group = document.createElement("div");
     group.className = "graph-node-group";
+    const view = model.nodeById.get(node.id);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "graph-node";
+    if (this.filter && view?.matched) button.classList.add("matched");
     button.style.setProperty("--depth", String(depth));
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
     button.dataset.nodeId = String(node.id);
-    button.innerHTML = `<span>${node.kind}</span><small>#${node.id} ${node.dim}D</small>`;
-    button.addEventListener("click", () => {
-      this.selected = node;
-      this.render();
-      this.options.onSelect(node);
-    });
+    const label = document.createElement("span");
+    label.textContent = node.kind;
+    const meta = document.createElement("small");
+    const shared = (view?.parents.size ?? 0) > 1;
+    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}`;
+    button.append(label, meta);
+    button.addEventListener("click", () => this.select(node));
+    this.attachSoloHover(button, path);
     group.append(button);
 
     node.children.forEach((child) => {
-      group.append(this.renderNode(child.node, depth + 1));
+      if (childMatchesFilter(child.node, model.visibleNodeIds)) {
+        group.append(this.renderNode(child.node, depth + 1, model, [...path, child.node]));
+      }
     });
     return group;
+  }
+
+  private renderSummary(model: GraphModel): void {
+    const total = model.nodes.length;
+    const visible = model.visibleNodeIds.size;
+    this.summary.textContent = this.filter
+      ? `${visible}/${total} nodes`
+      : `${total} nodes, ${model.edges.length} edges`;
+  }
+
+  private renderMap(model: GraphModel): void {
+    const nodes = model.nodes.filter((view) => model.visibleNodeIds.has(view.node.id));
+    if (nodes.length === 0) {
+      this.map.textContent = "";
+      return;
+    }
+
+    const width = 390;
+    const levels = new Map<number, GraphNodeView[]>();
+    for (const view of nodes) {
+      const level = levels.get(view.depth) ?? [];
+      level.push(view);
+      levels.set(view.depth, level);
+    }
+    for (const level of levels.values()) level.sort((a, b) => a.node.id - b.node.id);
+
+    const maxRows = Math.max(...[...levels.values()].map((level) => level.length), 1);
+    const height = Math.max(148, Math.min(300, 42 + maxRows * 32));
+    const xSpan = width - 64;
+    const ySpan = height - 40;
+    const positions = new Map<number, { x: number; y: number }>();
+    for (const [depth, level] of levels) {
+      const x = 32 + (model.maxDepth === 0 ? 0 : xSpan * (depth / model.maxDepth));
+      level.forEach((view, index) => {
+        const y = 20 + (level.length === 1 ? ySpan / 2 : ySpan * (index / (level.length - 1)));
+        positions.set(view.node.id, { x, y });
+      });
+    }
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "SDF graph");
+    this.map.style.setProperty("--graph-map-height", `${height}px`);
+
+    for (const edge of model.edges) {
+      const from = positions.get(edge.from);
+      const to = positions.get(edge.to);
+      if (!from || !to) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      line.classList.add("graph-edge");
+      if (this.selected && (edge.from === this.selected.id || edge.to === this.selected.id)) {
+        line.classList.add("selected");
+      }
+      svg.append(line);
+    }
+
+    for (const view of nodes) {
+      const position = positions.get(view.node.id);
+      if (!position) continue;
+      svg.append(this.renderMapNode(view, position.x, position.y));
+    }
+
+    this.map.replaceChildren(svg);
+  }
+
+  private renderMapNode(view: GraphNodeView, x: number, y: number): SVGElement {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("graph-map-node");
+    if (this.selected?.id === view.node.id) group.classList.add("selected");
+    if (this.filter && view.matched) group.classList.add("matched");
+    if (view.parents.size > 1) group.classList.add("shared");
+    group.dataset.nodeId = String(view.node.id);
+    group.setAttribute("role", "button");
+    group.setAttribute("tabindex", "0");
+    group.setAttribute("aria-label", `${view.node.kind} #${view.node.id}`);
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", String(x - 38));
+    rect.setAttribute("y", String(y - 12));
+    rect.setAttribute("width", "76");
+    rect.setAttribute("height", "24");
+    rect.setAttribute("rx", "6");
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", String(x));
+    text.setAttribute("y", String(y + 4));
+    text.textContent = mapLabel(view.node.kind);
+
+    group.append(rect, text);
+    group.addEventListener("click", () => this.select(view.node));
+    this.attachSoloHover(group, this.pathToNode(view.node.id));
+    group.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.select(view.node);
+      }
+    });
+    return group;
+  }
+
+  private select(node: Node): void {
+    this.selected = node;
+    this.render();
+    this.options.onSelect(node);
+  }
+
+  private attachSoloHover(target: Element, path: Node[]): void {
+    target.addEventListener("pointerenter", (event) => this.updateSolo(path, event));
+    target.addEventListener("pointermove", (event) => this.updateSolo(path, event));
+    target.addEventListener("pointerleave", () => this.clearSolo());
+  }
+
+  private updateSolo(path: Node[], event: Event): void {
+    if (!(event instanceof PointerEvent) || !event.shiftKey) {
+      this.clearSolo();
+      return;
+    }
+    const preview = buildSoloPreview(path);
+    if (!preview) {
+      this.clearSolo();
+      return;
+    }
+    if (preview.key === this.soloKey) return;
+    this.soloKey = preview.key;
+    this.options.onSolo(preview);
+  }
+
+  private clearSolo(): void {
+    if (!this.soloKey) return;
+    this.soloKey = null;
+    this.options.onSolo(null);
+  }
+
+  private pathToNode(id: number): Node[] {
+    if (!this.sdf) return [];
+    const path: Node[] = [];
+    const visit = (node: Node): boolean => {
+      path.push(node);
+      if (node.id === id) return true;
+      for (const child of node.children) {
+        if (visit(child.node)) return true;
+      }
+      path.pop();
+      return false;
+    };
+    visit(this.sdf.node);
+    return path;
   }
 
   private renderParams(): void {
@@ -239,4 +436,8 @@ function attachScrubber(label: HTMLElement, input: HTMLInputElement, initialValu
     label.releasePointerCapture(event.pointerId);
     label.classList.remove("scrubbing");
   });
+}
+
+function mapLabel(kind: string): string {
+  return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
 }

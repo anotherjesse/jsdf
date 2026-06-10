@@ -207,10 +207,96 @@ button:disabled {
 
 .graph-inspector {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: calc(100vh - 103px);
   min-height: 0;
   border-top: 1px solid var(--line);
+}
+
+.graph-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.graph-toolbar input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+.graph-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.graph-map {
+  height: var(--graph-map-height, 170px);
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: #12151a;
+}
+
+.graph-map svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.graph-edge {
+  stroke: #47515d;
+  stroke-width: 1.4;
+}
+
+.graph-edge.selected {
+  stroke: var(--accent-2);
+  stroke-width: 2.1;
+}
+
+.graph-map-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.graph-map-node rect {
+  fill: #20262e;
+  stroke: #46515d;
+  stroke-width: 1;
+}
+
+.graph-map-node text {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.graph-map-node:hover rect,
+.graph-map-node:focus rect {
+  stroke: var(--accent);
+}
+
+.graph-map-node.selected rect {
+  fill: color-mix(in srgb, var(--accent) 24%, #20262e);
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.graph-map-node.matched rect {
+  stroke: var(--accent-2);
+}
+
+.graph-map-node.shared rect {
+  stroke-dasharray: 3 2;
 }
 
 .graph-tree {
@@ -239,9 +325,14 @@ button:disabled {
 }
 
 .graph-node:hover,
-.graph-node[aria-pressed="true"] {
+.graph-node[aria-pressed="true"],
+.graph-node.matched {
   border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
   background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.graph-node.matched:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 64%, var(--line));
 }
 
 .graph-node span {
@@ -286,7 +377,8 @@ button:disabled {
 }
 
 .param-title span,
-.param-empty {
+.param-empty,
+.graph-empty {
   color: var(--muted);
   font-size: 12px;
 }

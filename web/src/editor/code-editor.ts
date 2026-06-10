@@ -38,6 +38,7 @@ monaco.languages.registerCompletionItemProvider("javascript", {
 export interface CodeEditor {
   setValue(value: string): void;
   getValue(): string;
+  setError(message: string | null): void;
   layout(): void;
   dispose(): void;
 }
@@ -73,6 +74,20 @@ export function createCodeEditor(element: HTMLElement, initialValue: string, onC
     },
     getValue() {
       return editor.getValue();
+    },
+    setError(message: string | null) {
+      const model = editor.getModel();
+      if (!model) return;
+      monaco.editor.setModelMarkers(model, "sdf-runtime", message
+        ? [{
+          severity: monaco.MarkerSeverity.Error,
+          message,
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 1,
+          endColumn: Math.max(2, model.getLineLength(1) + 1),
+        }]
+        : []);
     },
     layout() {
       editor.layout();

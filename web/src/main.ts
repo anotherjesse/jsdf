@@ -3,6 +3,7 @@ import type { CodeEditor } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
 import { GraphInspector } from "./editor/graph-inspector";
+import type { SoloPreview } from "./editor/solo-preview";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { type Bounds3 } from "./mesh/bounds";
@@ -45,6 +46,7 @@ let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
 let activeSdf: SDF3 | null = null;
 let selectedNode: Node | null = null;
+let soloPreview: SoloPreview | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
 let lastBlob: Blob | null = null;
@@ -119,6 +121,7 @@ async function boot(): Promise<void> {
     graphInspector = new GraphInspector(graphInspectorElement, {
       onSelect: selectNode,
       onEdit: handleGraphEdit,
+      onSolo: handleSoloPreview,
     });
     setViewMode("shader");
     compileEditorSource({ status: "Loaded example", invalidateMesh: false });
@@ -151,14 +154,17 @@ function compileEditorSource(options: { status: string; invalidateMesh?: boolean
   const source = codeEditor?.getValue() ?? sourceForExample(exampleSelect.value);
   try {
     const { sdf } = evaluateSource(source);
+    soloPreview = null;
     activeSdf = sdf;
     graphInspector?.setSdf(sdf);
+    codeEditor?.setError(null);
     setEditorStatus(options.status, "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
     schedulePreview(0);
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    codeEditor?.setError(message);
     setEditorStatus(message, "error");
     overlay.textContent = `Code error: ${message}`;
     return false;
@@ -175,8 +181,28 @@ function selectNode(node: Node | null): void {
 
 function handleGraphEdit(): void {
   if (!activeSdf) return;
+  soloPreview = null;
   setEditorStatus(selectedNode ? `Edited ${selectedNode.kind} #${selectedNode.id}` : "Graph edit", "ok");
   invalidateMeshForActiveSdf();
+  schedulePreview(0);
+}
+
+function handleSoloPreview(preview: SoloPreview | null): void {
+  soloPreview = preview;
+  if (preview) {
+    meshRenderer?.setActive(false);
+    rayRenderer?.setActive(true);
+    schedulePreview(0);
+    return;
+  }
+
+  if (viewMode === "mesh") {
+    rayRenderer?.setActive(false);
+    meshRenderer?.setActive(true);
+    meshRenderer?.redraw();
+    setViewMode("mesh");
+    return;
+  }
   schedulePreview(0);
 }
 
@@ -271,7 +297,8 @@ function scheduleMeshBuild(delay = 300): void {
 
 async function renderCurrent(): Promise<void> {
   if (!rayRenderer) return;
-  const sdf = activeSdf;
+  const preview = soloPreview;
+  const sdf = preview?.sdf ?? activeSdf;
   if (!sdf) {
     previewStat.textContent = "-";
     overlay.textContent = "Write editor code that returns an SDF3.";
@@ -286,9 +313,11 @@ async function renderCurrent(): Promise<void> {
   const start = performance.now();
   try {
     if (job !== renderJob) return;
-    rayRenderer.render(sdf, currentBounds(), steps, selectedNode);
+    rayRenderer.render(sdf, currentBounds(), steps, preview?.node ?? selectedNode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
-    if (viewMode === "shader") {
+    if (preview) {
+      overlay.textContent = `Solo preview: ${preview.label}${preview.preservedWrappers ? ` with ${preview.preservedWrappers} context wrapper${preview.preservedWrappers === 1 ? "" : "s"}` : ""}.`;
+    } else if (viewMode === "shader") {
       overlay.textContent = `Shader preview: direct SDF raymarching with ${steps} steps.${selectionLabel()}`;
     }
   } catch (error) {
