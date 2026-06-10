@@ -239,6 +239,7 @@ async function boot(): Promise<void> {
       handleSourceLinkValueChange,
       handleSourceLinkHover,
       handleSourceLinkCursor,
+      prettifyCurrentSource,
     );
     if (healthCheckMode || !restoreSourceDraft()) refreshSourceLinks();
     draftPersistenceEnabled = !healthCheckMode;

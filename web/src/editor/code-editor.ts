@@ -118,6 +118,7 @@ export function createCodeEditor(
   onSourceLinkValueChange: (link: GraphSourceLink, value: number, options?: SourceLinkValueChangeOptions) => void = () => {},
   onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
   onSourceLinkCursor: (link: GraphSourceLink | null) => void = () => {},
+  onPrettify: () => void = () => {},
 ): CodeEditor {
   const editor = monaco.editor.create(element, {
     value: initialValue,
@@ -382,6 +383,16 @@ export function createCodeEditor(
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
     scheduleCursorSourceLinkSync(event.position);
   });
+  const prettifyAction = editor.addAction({
+    id: "sdf.prettifySource",
+    label: "Prettify SDF Source",
+    keybindings: [monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF],
+    contextMenuGroupId: "sdf",
+    contextMenuOrder: 1,
+    run() {
+      onPrettify();
+    },
+  });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
     pointerLink = null;
@@ -510,6 +521,7 @@ export function createCodeEditor(
       linkSubscription.dispose();
       hoverSubscription.dispose();
       cursorSubscription.dispose();
+      prettifyAction.dispose();
       leaveSubscription.dispose();
       editor.dispose();
     },
