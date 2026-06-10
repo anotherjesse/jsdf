@@ -140,7 +140,8 @@ export function createCodeEditor(
     const model = editor.getModel();
     if (!model || !position) return null;
     const offset = model.getOffsetAt(position);
-    return sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end) ?? null;
+    const containing = sourceLinks.filter((candidate) => offset >= candidate.start && offset <= candidate.end);
+    return containing.sort((a, b) => (a.end - a.start) - (b.end - b.start) || b.start - a.start)[0] ?? null;
   };
 
   const rangeForSourceLink = (link: GraphSourceLink): monaco.Range | null => {

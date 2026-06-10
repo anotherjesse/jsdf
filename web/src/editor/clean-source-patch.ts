@@ -274,17 +274,34 @@ export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink
   links.push(...findGraphCallLinks(source, sdf));
   links.push(...findGraphEntryKLinks(source, sdf));
 
-  const scalarVectorLinks = new Set<string>();
+  const vectorExpressionLinks = new Set<string>();
   for (const [nodeKind, labels] of Object.entries(CALL_PATCHES)) {
     for (const [label, patch] of Object.entries(labels)) {
       const nodes = patchableNodes(sdf.node, nodeKind, label);
       nodes.forEach((node, ordinal) => {
         const range = findNthCallArgumentRange(source, patch, ordinal);
-        if (!range) return;
+        if (!range) {
+          if (patch.element == null) return;
+          const vectorRange = findNthCallArgumentVectorRange(source, patch, ordinal);
+          if (!vectorRange) return;
+          const key = `${node.id}:${vectorRange.start}:${vectorRange.end}`;
+          if (vectorExpressionLinks.has(key)) return;
+          vectorExpressionLinks.add(key);
+          links.push({
+            nodeId: node.id,
+            nodeKind,
+            path: vectorBasePath(label),
+            label: vectorBaseLabel(label),
+            start: vectorRange.start,
+            end: vectorRange.end,
+            scrubbable: false,
+          });
+          return;
+        }
         if (range.scalarVector) {
           const key = `${node.id}:${range.start}:${range.end}`;
-          if (scalarVectorLinks.has(key)) return;
-          scalarVectorLinks.add(key);
+          if (vectorExpressionLinks.has(key)) return;
+          vectorExpressionLinks.add(key);
           links.push({
             nodeId: node.id,
             nodeKind,
@@ -524,13 +541,41 @@ function vectorValueForLabel(node: Node, label: string): number[] | null {
 
 function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number, node: Node, label: string): string | null {
   const range = findNthCallArgumentRange(source, patch, ordinal);
-  if (!range) return materializeMissingCallArguments(source, patch, ordinal, node, label);
+  if (!range) {
+    const materialized = materializeExistingVectorArgument(source, patch, ordinal, value, node, label);
+    return materialized ?? materializeMissingCallArguments(source, patch, ordinal, node, label);
+  }
   if (range.scalarVector) {
     const vector = vectorValueForLabel(node, label);
     if (!vector) return null;
     return replaceRange(source, range.start, range.end, `[${vector.map(formatNumber).join(", ")}]`);
   }
   return replaceRange(source, range.start, range.end, formatNumberLike(source.slice(range.start, range.end), value));
+}
+
+function materializeExistingVectorArgument(
+  source: string,
+  patch: CallPatch,
+  ordinal: number,
+  value: number,
+  node: Node,
+  label: string,
+): string | null {
+  if (patch.element == null) return null;
+  const calls = findCalls(source, patch.fns);
+  const call = calls[ordinal];
+  const arg = call?.args[patch.arg];
+  if (!arg) return null;
+
+  const directAxis = directAxisArgument(arg);
+  if (directAxis && axisElement(directAxis.axis) === patch.element) {
+    return replaceRange(source, directAxis.start, directAxis.end, formatAxisVectorExpression(directAxis.axis, value));
+  }
+
+  const range = findVectorArgumentRange(source, arg);
+  const vector = vectorValueForLabel(node, label);
+  if (!range || !vector) return null;
+  return replaceRange(source, range.start, range.end, `[${vector.map(formatNumber).join(", ")}]`);
 }
 
 function materializeMissingCallArguments(source: string, patch: CallPatch, ordinal: number, node: Node, label: string): string | null {
@@ -559,6 +604,13 @@ function findNthCallArgumentRange(source: string, patch: CallPatch, ordinal: num
   return findVectorElementRange(source, arg, patch.element);
 }
 
+function findNthCallArgumentVectorRange(source: string, patch: CallPatch, ordinal: number): SourceRange | null {
+  const calls = findCalls(source, patch.fns);
+  const call = calls[ordinal];
+  const arg = call?.args[patch.arg];
+  return arg ? findVectorArgumentRange(source, arg) : null;
+}
+
 function patchNthOrientArgument(source: string, ordinal: number, axis: OrientationAxis): string | null {
   const range = findNthOrientArgumentRange(source, ordinal);
   if (!range) return null;
@@ -582,6 +634,13 @@ function findKMethodCalls(source: string): CallMatch[] {
 
 function findVectorElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
   return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element) ?? findScalarVectorRange(source, arg);
+}
+
+function findVectorArgumentRange(source: string, arg: CallArg): SourceRange | null {
+  return findArrayArgumentRange(source, arg)
+    ?? findAxisScaledArgumentRange(arg)
+    ?? findDirectAxisArgumentRange(arg)
+    ?? findScalarVectorRange(source, arg);
 }
 
 function materializedArgumentValue(node: Node, patch: CallPatch, arg: number, fallbackLabel: string): string | null {
@@ -638,6 +697,15 @@ function findArrayElementRange(source: string, arg: CallArg, element: number): S
   return trimRange(source, target.start, target.end);
 }
 
+function findArrayArgumentRange(source: string, arg: CallArg): SourceRange | null {
+  const open = firstNonWhitespace(source, arg.start, arg.end);
+  if (open < 0 || source[open] !== "[") return null;
+  const close = findMatchingParen(source, open);
+  if (close < 0 || close > arg.end) return null;
+  if (source.slice(arg.start, open).trim() || source.slice(close + 1, arg.end).trim()) return null;
+  return trimRange(source, arg.start, arg.end);
+}
+
 function findAxisScaledElementRange(arg: CallArg, element: number): SourceRange | null {
   const match = /^(\s*mul\(\s*([XYZ])\s*,\s*)(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(\s*\)\s*)$/i.exec(arg.text);
   if (!match) return null;
@@ -645,6 +713,24 @@ function findAxisScaledElementRange(arg: CallArg, element: number): SourceRange 
   const start = arg.start + match[1].length;
   const end = start + match[3].length;
   return { start, end };
+}
+
+function findAxisScaledArgumentRange(arg: CallArg): SourceRange | null {
+  return /^\s*mul\(\s*[XYZ]\s*,\s*-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*\)\s*$/i.test(arg.text)
+    ? { start: arg.start, end: arg.end }
+    : null;
+}
+
+function findDirectAxisArgumentRange(arg: CallArg): SourceRange | null {
+  const direct = directAxisArgument(arg);
+  return direct ? { start: direct.start, end: direct.end } : null;
+}
+
+function directAxisArgument(arg: CallArg): { axis: string; start: number; end: number } | null {
+  const direct = /^(\s*)([XYZ])(\s*)$/i.exec(arg.text);
+  if (!direct) return null;
+  const start = arg.start + direct[1].length;
+  return { axis: direct[2].toUpperCase(), start, end: start + direct[2].length };
 }
 
 function findScalarVectorRange(source: string, arg: CallArg): SourceRange | null {
@@ -669,6 +755,10 @@ function axisElement(axis: string): number {
   if (axis === "X") return 0;
   if (axis === "Y") return 1;
   return 2;
+}
+
+function formatAxisVectorExpression(axis: string, value: number): string {
+  return value === 1 ? axis : `mul(${axis}, ${formatNumber(value)})`;
 }
 
 type OrientationAxis = "x" | "y" | "z";

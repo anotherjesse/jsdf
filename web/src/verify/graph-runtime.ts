@@ -16,6 +16,7 @@ export interface GraphRuntimeVerification {
   revealedSource: string;
   soloLabels: string[];
   sourcePatch: string;
+  vectorSourcePatches: string[];
   history: {
     sameSessionCount: number;
     separateSessionCount: number;
@@ -83,6 +84,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     revealedSource,
     soloLabels,
     sourcePatch: verifySourcePatch(lastEdit, sdf, errors),
+    vectorSourcePatches: verifyVectorSourcePatches(errors),
     history,
     errors,
   };
@@ -196,6 +198,106 @@ function verifySourcePatch(edit: GraphParamEdit | null, sdf: SDF3, errors: strin
     errors.push("source patch verification radius link points at wrong text");
   }
   return nextSource.trim();
+}
+
+function verifyVectorSourcePatches(errors: string[]): string[] {
+  const patches = [
+    verifyMulAxisScalarPatch(errors),
+    verifyMulOffAxisMaterialization(errors),
+    verifyDirectAxisExpansion(errors),
+  ].filter((source): source is string => Boolean(source));
+  return patches;
+}
+
+function verifyMulAxisScalarPatch(errors: string[]): string | null {
+  const source = "return sphere(1).translate(mul(Z, -3))";
+  const { sdf } = evaluateSource(source);
+  const translate = findNodeByKind(sdf.node, "translate");
+  const offset = vectorParam(translate, "offset");
+  if (!translate || !offset) {
+    errors.push("mul axis scalar fixture did not produce translate offset");
+    return null;
+  }
+  offset[2] = -2.5;
+  const patched = patchGraphEditSource(source, sdf, graphEdit(translate, ["offset", 2], "offset[2]", -3, -2.5), -2.5);
+  if (!patched) {
+    errors.push("mul axis scalar patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("mul(Z, -2.5)")) {
+    errors.push("mul axis scalar patch did not preserve mul(Z, value)");
+  }
+  return patched;
+}
+
+function verifyMulOffAxisMaterialization(errors: string[]): string | null {
+  const source = "return sphere(1).translate(mul(Z, -3))";
+  const { sdf } = evaluateSource(source);
+  const translate = findNodeByKind(sdf.node, "translate");
+  const offset = vectorParam(translate, "offset");
+  if (!translate || !offset) {
+    errors.push("mul off-axis fixture did not produce translate offset");
+    return null;
+  }
+  offset[0] = 1.25;
+  const patched = patchGraphEditSource(source, sdf, graphEdit(translate, ["offset", 0], "offset[0]", 0, 1.25), 1.25);
+  if (!patched) {
+    errors.push("mul off-axis patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("translate([1.25, 0, -3])")) {
+    errors.push("mul off-axis patch did not materialize full vector");
+  }
+  const links = findGraphSourceLinks(patched, sdf);
+  const link = links.find((candidate) => candidate.nodeId === translate.id && candidate.label === "offset[0]");
+  if (!link || patched.slice(link.start, link.end) !== "1.25") {
+    errors.push("mul off-axis patch did not rediscover materialized offset[0]");
+  }
+  return patched;
+}
+
+function verifyDirectAxisExpansion(errors: string[]): string | null {
+  const source = "return sphere(1).translate(X)";
+  const { sdf } = evaluateSource(source);
+  const translate = findNodeByKind(sdf.node, "translate");
+  const offset = vectorParam(translate, "offset");
+  if (!translate || !offset) {
+    errors.push("direct axis fixture did not produce translate offset");
+    return null;
+  }
+  offset[0] = 2;
+  const patched = patchGraphEditSource(source, sdf, graphEdit(translate, ["offset", 0], "offset[0]", 1, 2), 2);
+  if (!patched) {
+    errors.push("direct axis patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("translate(mul(X, 2))")) {
+    errors.push("direct axis patch did not expand to mul(X, value)");
+  }
+  return patched;
+}
+
+function vectorParam(node: Node | null, key: string): number[] | null {
+  const value = node?.params[key];
+  return Array.isArray(value) && value.every((item) => typeof item === "number") ? value : null;
+}
+
+function graphEdit(
+  node: Node,
+  path: Array<string | number>,
+  label: string,
+  previousValue: number,
+  nextValue: number,
+): GraphParamEdit {
+  return {
+    node,
+    nodeId: node.id,
+    nodeKind: node.kind,
+    path,
+    label,
+    previousValue,
+    nextValue,
+  };
 }
 
 function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["history"] {
