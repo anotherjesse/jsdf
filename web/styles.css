@@ -1621,6 +1621,7 @@ canvas:active {
 }
 
 .status-message {
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 52vw;
   overflow: hidden;
@@ -1632,6 +1633,25 @@ canvas:active {
 
 .status-message:empty {
   display: none;
+}
+
+.footer-status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.footer-link {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--accent);
 }
 
 .source-dialog {
@@ -1946,5 +1966,9 @@ canvas:active {
 
   .status-message {
     max-width: none;
+  }
+
+  .footer-status {
+    justify-content: flex-start;
   }
 }
