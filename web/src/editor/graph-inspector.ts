@@ -2,11 +2,21 @@ import type { Node, SDF3 } from "../core/nodes";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
-type ParamPath = Array<string | number>;
+export type ParamPath = Array<string | number>;
+
+export interface GraphParamEdit {
+  node: Node;
+  nodeId: number;
+  nodeKind: string;
+  path: ParamPath;
+  label: string;
+  previousValue: number;
+  nextValue: number;
+}
 
 export interface GraphInspectorOptions {
   onSelect(node: Node | null): void;
-  onEdit(): void;
+  onEdit(edit: GraphParamEdit): void;
   onSolo(preview: SoloPreview | null): void;
 }
 
@@ -65,6 +75,17 @@ export class GraphInspector {
 
   getSelected(): Node | null {
     return this.selected;
+  }
+
+  setParamValue(nodeId: number, path: ParamPath, value: number): Node | null {
+    if (!this.sdf) return null;
+    const node = findNode(this.sdf.node, nodeId);
+    if (!node) return null;
+    setAtPath(node.params, path, value);
+    this.selected = node;
+    this.render();
+    this.options.onSelect(node);
+    return node;
   }
 
   private render(): void {
@@ -294,11 +315,11 @@ export class GraphInspector {
     }
 
     for (const field of fields) {
-      this.params.append(this.renderNumberField(node.params, field));
+      this.params.append(this.renderNumberField(node, field));
     }
   }
 
-  private renderNumberField(params: Record<string, unknown>, field: NumericParam): HTMLElement {
+  private renderNumberField(node: Node, field: NumericParam): HTMLElement {
     const row = document.createElement("label");
     row.className = "param-row";
 
@@ -320,12 +341,22 @@ export class GraphInspector {
 
     const update = (value: number) => {
       if (!Number.isFinite(value)) return;
-      setAtPath(params, field.path, value);
+      const previousValue = getAtPath(node.params, field.path);
+      if (previousValue === value) return;
+      setAtPath(node.params, field.path, value);
       input.value = formatValue(value);
       range.min = String(value - rangeRadius(value));
       range.max = String(value + rangeRadius(value));
       range.value = formatValue(value);
-      this.options.onEdit();
+      this.options.onEdit({
+        node,
+        nodeId: node.id,
+        nodeKind: node.kind,
+        path: [...field.path],
+        label: field.label,
+        previousValue,
+        nextValue: value,
+      });
     };
 
     input.addEventListener("input", () => update(Number(input.value)));
@@ -380,6 +411,27 @@ function setAtPath(root: Record<string, unknown>, path: ParamPath, value: number
   } else {
     target[key as string] = value;
   }
+}
+
+function getAtPath(root: Record<string, unknown>, path: ParamPath): number {
+  let target: unknown = root;
+  for (const part of path) {
+    target = Array.isArray(target)
+      ? target[part as number]
+      : (target as Record<string, unknown>)[part as string];
+  }
+  return typeof target === "number" ? target : Number.NaN;
+}
+
+function findNode(root: Node, id: number, visited = new Set<number>()): Node | null {
+  if (root.id === id) return root;
+  if (visited.has(root.id)) return null;
+  visited.add(root.id);
+  for (const child of root.children) {
+    const match = findNode(child.node, id, visited);
+    if (match) return match;
+  }
+  return null;
 }
 
 function formatPath(path: ParamPath): string {
