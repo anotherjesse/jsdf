@@ -43,12 +43,15 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry, options: GraphChangeJo
   button.type = "button";
   button.className = "change-entry";
   const sourceLink = options.sourceLinkForEntry(entry);
-  const sourceHint = sourceLink ? "; Cmd/Ctrl-click to show code" : "";
+  const sourceHint = sourceLink ? "; Cmd/Ctrl-click or Cmd/Ctrl+Enter to reveal edited code" : "";
   const changeLabel = formatGraphChangeValue(entry);
   button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${changeLabel}${sourceHint}`;
   button.setAttribute("aria-label", button.title);
   button.dataset.nodeId = String(entry.nodeId);
-  if (sourceLink) button.dataset.hasSource = "true";
+  if (sourceLink) {
+    button.dataset.hasSource = "true";
+    button.setAttribute("aria-keyshortcuts", "Control+Enter Meta+Enter");
+  }
 
   const node = document.createElement("span");
   node.className = "change-entry-node";
@@ -61,6 +64,11 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry, options: GraphChangeJo
   button.append(node, value);
   button.addEventListener("click", (event) => {
     options.onSelect(entry, { revealSource: event.metaKey || event.ctrlKey });
+  });
+  button.addEventListener("keydown", (event) => {
+    if (!sourceLink || (!event.metaKey && !event.ctrlKey) || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    options.onSelect(entry, { revealSource: true });
   });
   row.append(button);
   row.addEventListener("pointerenter", (event) => options.onHover(entry, { shiftKey: event.shiftKey }));
@@ -76,7 +84,7 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry, options: GraphChangeJo
     const source = document.createElement("button");
     source.type = "button";
     source.className = "change-entry-source icon-button";
-    source.title = `Reveal ${entry.nodeKind} ${entry.label} in code`;
+    source.title = `Reveal edited ${entry.nodeKind} ${entry.label} in Code`;
     source.setAttribute("aria-label", source.title);
     const icon = document.createElement("span");
     icon.className = "code-link-icon";

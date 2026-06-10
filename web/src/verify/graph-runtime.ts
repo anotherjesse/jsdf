@@ -54,6 +54,10 @@ export interface GraphRuntimeVerification {
     hoverShift: boolean;
     clearCount: number;
     revealSource: boolean;
+    keyboardRevealSource: boolean;
+    rowTitle: string;
+    rowShortcuts: string;
+    sourceButtonLabel: string;
   };
   sourceDialog: {
     initialCards: number;
@@ -1266,13 +1270,34 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
   const firstRow = root.querySelector<HTMLElement>(".change-entry-row");
   firstRow?.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true, shiftKey: true }));
   firstRow?.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
-  root.querySelector<HTMLButtonElement>(".change-entry-source")?.click();
+  const firstEntry = root.querySelector<HTMLButtonElement>(".change-entry");
+  const sourceButton = root.querySelector<HTMLButtonElement>(".change-entry-source");
+  const rowTitle = firstEntry?.title ?? "";
+  const rowShortcuts = firstEntry?.getAttribute("aria-keyshortcuts") ?? "";
+  const sourceButtonLabel = sourceButton?.getAttribute("aria-label") ?? "";
+  sourceButton?.click();
+  const revealSource = selections.at(-1)?.revealSource === true;
+  firstEntry?.dispatchEvent(new KeyboardEvent("keydown", {
+    bubbles: true,
+    key: "Enter",
+    metaKey: true,
+  }));
 
   const hoverShift = hoverEvents.at(-1)?.shiftKey === true;
-  const revealSource = selections.at(-1)?.revealSource === true;
+  const keyboardRevealSource = selections.at(-1)?.revealSource === true;
   if (!hoverShift) errors.push("graph change journal hover did not preserve shift focus");
   if (clearCount !== 1) errors.push(`graph change journal clear count ${clearCount} !== 1`);
   if (!revealSource) errors.push("graph change journal source button did not request reveal");
+  if (!keyboardRevealSource) errors.push("graph change journal keyboard shortcut did not request reveal");
+  if (!rowTitle.includes("Cmd/Ctrl-click or Cmd/Ctrl+Enter to reveal edited code")) {
+    errors.push(`graph change journal row title rendered ${rowTitle || "nothing"}`);
+  }
+  if (rowShortcuts !== "Control+Enter Meta+Enter") {
+    errors.push(`graph change journal shortcuts rendered ${rowShortcuts || "nothing"}`);
+  }
+  if (!sourceButtonLabel.includes("Reveal edited sphere radius in Code")) {
+    errors.push(`graph change journal source label rendered ${sourceButtonLabel || "nothing"}`);
+  }
 
   return {
     hiddenWhenEmpty,
@@ -1281,6 +1306,10 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
     hoverShift,
     clearCount,
     revealSource,
+    keyboardRevealSource,
+    rowTitle,
+    rowShortcuts,
+    sourceButtonLabel,
   };
 }
 
