@@ -46,6 +46,8 @@ export interface EditorRuntimeVerification {
   sourceScrub: {
     startValue: number | null;
     nextValue: number | null;
+    keyboardNextValue: number | null;
+    keyboardEditSession: string;
     graphValue: unknown;
     patchedSource: string;
     editedSourceDecorations: number;
@@ -133,6 +135,8 @@ export async function runEditorRuntimeVerification(
   const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
     startValue: null,
     nextValue: null,
+    keyboardNextValue: null,
+    keyboardEditSession: "",
     graphValue: null,
     patchedSource: "",
     editedSourceDecorations: 0,
@@ -174,7 +178,11 @@ export async function runEditorRuntimeVerification(
     fixtureSource,
     () => {},
     (link) => selectFromSource(link),
-    () => {},
+    (link, value, options) => {
+      if (link.nodeKind !== "sphere" || link.label !== "radius") return;
+      sourceScrub.keyboardNextValue = value;
+      sourceScrub.keyboardEditSession = options?.editSessionId ?? "";
+    },
     () => {},
     (link) => {
       if (!link) return;
@@ -195,6 +203,15 @@ export async function runEditorRuntimeVerification(
       await revealAndSettle(codeEditor, radiusLink);
       if (cursorEvents.at(-1) !== "sphere:radius") {
         errors.push(`cursor over radius emitted ${cursorEvents.at(-1) || "nothing"}`);
+      }
+      if (!codeEditor.nudgeCurrentSourceLink(1)) {
+        errors.push("keyboard source nudge did not find current radius link");
+      }
+      if (Math.abs((sourceScrub.keyboardNextValue ?? 0) - 1.1) > 0.000001) {
+        errors.push(`keyboard source nudge emitted ${sourceScrub.keyboardNextValue ?? "nothing"}`);
+      }
+      if (!sourceScrub.keyboardEditSession.startsWith("source-key-nudge:")) {
+        errors.push(`keyboard source nudge session was ${sourceScrub.keyboardEditSession || "missing"}`);
       }
       if (!selectedNode.startsWith("sphere #")) {
         errors.push(`radius cursor selected ${selectedNode || "nothing"}`);

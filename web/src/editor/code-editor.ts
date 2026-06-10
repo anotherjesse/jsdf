@@ -19,7 +19,8 @@ import {
 } from "./source-diagnostic-fixes";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
-import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
+import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
+import type { ScrubModifiers } from "./scrub-values";
 
 interface MonacoEnvironment {
   getWorker(): Worker;
@@ -213,6 +214,7 @@ export interface CodeEditor {
   markHoveredSourceLink(link: GraphSourceLink | null): void;
   markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
+  nudgeCurrentSourceLink(direction: -1 | 1, modifiers?: ScrubModifiers, options?: { editSessionId?: string }): boolean;
   layout(): void;
   dispose(): void;
 }
@@ -269,6 +271,10 @@ export function createCodeEditor(
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
   let hoveredLink: GraphSourceLink | null = null;
+  let selectedSourceLink: GraphSourceLink | null = null;
+  let keyboardNudgeSessionId: string | null = null;
+  let keyboardNudgeLinkKey: string | null = null;
+  let keyboardNudgeClearTimer = 0;
   let hoverClearTimer = 0;
   let cursorSyncFrame = 0;
   let pendingCursorPosition: monaco.Position | null = null;
@@ -373,6 +379,7 @@ export function createCodeEditor(
   };
 
   const markSelectedSourceLink = (link: GraphSourceLink | null, options: { reveal?: boolean } = {}) => {
+    selectedSourceLink = link;
     const range = link ? rangeForSourceLink(link) : null;
     if (!range) {
       selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
@@ -454,6 +461,64 @@ export function createCodeEditor(
     onSourceLinkCursor(link);
   };
 
+  const liveSourceLinkForNudge = (candidate: GraphSourceLink | null): GraphSourceLink | null => {
+    if (!candidate) return null;
+    const exact = sourceLinks.find((link) => sourceLinkKey(link) === sourceLinkKey(candidate));
+    if (exact) return exact;
+    return sourceLinks.find((link) => {
+      return link.nodeId === candidate.nodeId
+        && link.label === candidate.label
+        && paramPathsEqual(link.path, candidate.path)
+        && link.end > link.start;
+    }) ?? null;
+  };
+
+  const currentSourceLinkForNudge = (): GraphSourceLink | null => {
+    return liveSourceLinkForNudge(linkAtPosition(editor.getPosition(), { sticky: true }))
+      ?? liveSourceLinkForNudge(selectedSourceLink)
+      ?? liveSourceLinkForNudge(hoveredLink);
+  };
+
+  const clearKeyboardNudgeSession = () => {
+    if (keyboardNudgeClearTimer) {
+      window.clearTimeout(keyboardNudgeClearTimer);
+      keyboardNudgeClearTimer = 0;
+    }
+    keyboardNudgeSessionId = null;
+    keyboardNudgeLinkKey = null;
+  };
+
+  const keyboardNudgeSessionFor = (link: GraphSourceLink): string => {
+    const key = sourceLinkKey(link);
+    if (!keyboardNudgeSessionId || keyboardNudgeLinkKey !== key) {
+      keyboardNudgeSessionId = nextEditSessionId("source-key-nudge");
+      keyboardNudgeLinkKey = key;
+    }
+    if (keyboardNudgeClearTimer) window.clearTimeout(keyboardNudgeClearTimer);
+    keyboardNudgeClearTimer = window.setTimeout(clearKeyboardNudgeSession, 450);
+    return keyboardNudgeSessionId;
+  };
+
+  const nudgeCurrentSourceLink = (
+    direction: -1 | 1,
+    modifiers: ScrubModifiers = { altKey: false, shiftKey: false },
+    options: { editSessionId?: string } = {},
+  ): boolean => {
+    const link = currentSourceLinkForNudge();
+    if (!link || !isScrubbableSourceLink(link)) return false;
+    const startValue = readSourceLinkNumber(editor.getValue(), link);
+    if (startValue == null) return false;
+    const nextValue = nudgeSourceLinkValue(link, startValue, direction, modifiers);
+    if (nextValue === startValue) return false;
+    cursorLinkKey = sourceLinkKey(link);
+    markSelectedSourceLink(link);
+    onSourceLinkSelect(link);
+    onSourceLinkValueChange(link, nextValue, {
+      editSessionId: options.editSessionId ?? keyboardNudgeSessionFor(link),
+    });
+    return true;
+  };
+
   const scheduleCursorSourceLinkSync = (position: monaco.Position | null | undefined) => {
     if (suppress || activeScrub) return;
     pendingCursorPosition = position ?? null;
@@ -531,6 +596,14 @@ export function createCodeEditor(
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
     scheduleCursorSourceLinkSync(event.position);
   });
+  const sourceNudgeSubscription = editor.onKeyDown((event) => {
+    const browserEvent = event.browserEvent;
+    const direction = sourceNudgeDirectionForKey(browserEvent.key);
+    if (!direction || !browserEvent.altKey || browserEvent.metaKey || browserEvent.ctrlKey) return;
+    if (!nudgeCurrentSourceLink(direction, { altKey: browserEvent.shiftKey, shiftKey: false })) return;
+    event.preventDefault();
+    event.stopPropagation();
+  });
   const prettifyAction = editor.addAction({
     id: "sdf.prettifySource",
     label: "Prettify SDF Source",
@@ -593,7 +666,6 @@ export function createCodeEditor(
       if (!model) return;
       updateSourceInlayHintState(sourceLinks);
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
-      selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
       localHoveredSourceDecorations = editor.deltaDecorations(localHoveredSourceDecorations, []);
       hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
       editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
@@ -614,6 +686,8 @@ export function createCodeEditor(
           };
         }));
       applyFocusedNodeDecorations(false);
+      selectedSourceLink = liveSourceLinkForNudge(selectedSourceLink);
+      markSelectedSourceLink(selectedSourceLink);
       cursorLinkKey = null;
       scheduleCursorSourceLinkSync(editor.getPosition());
     },
@@ -657,6 +731,7 @@ export function createCodeEditor(
     revealSourceLink(link: GraphSourceLink) {
       const range = rangeForSourceLink(link);
       if (!range) return;
+      selectedSourceLink = link;
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{
         range,
         options: {
@@ -667,11 +742,15 @@ export function createCodeEditor(
       editor.revealRangeInCenterIfOutsideViewport(range);
       editor.focus();
     },
+    nudgeCurrentSourceLink(direction, modifiers, options) {
+      return nudgeCurrentSourceLink(direction, modifiers, options);
+    },
     layout() {
       editor.layout();
     },
     dispose() {
       endScrub();
+      clearKeyboardNudgeSession();
       clearHoverTimer();
       cancelCursorSourceLinkSync();
       updateHover(null, false, { immediateClear: true });
@@ -681,6 +760,7 @@ export function createCodeEditor(
       linkSubscription.dispose();
       hoverSubscription.dispose();
       cursorSubscription.dispose();
+      sourceNudgeSubscription.dispose();
       prettifyAction.dispose();
       leaveSubscription.dispose();
       deleteSourceInlayHintState();
@@ -708,6 +788,16 @@ interface ActiveSourceScrub {
 
 function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
+}
+
+function sourceNudgeDirectionForKey(key: string): -1 | 1 | null {
+  if (key === "ArrowDown") return -1;
+  if (key === "ArrowUp") return 1;
+  return null;
+}
+
+function paramPathsEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((part, index) => part === b[index]);
 }
 
 function markerForEditorError(
@@ -746,7 +836,7 @@ function markerForEditorError(
 function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
   const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
   return isNumber
-    ? `Graph: ${target}. Drag sideways to tweak; Shift or Alt slows it down.`
+    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak; Shift makes keyboard nudges finer.`
     : `Graph: ${target}. Click to inspect it in the graph.`;
 }
 
