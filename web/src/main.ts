@@ -15,10 +15,11 @@ import {
   loadSavedSourceVersion,
   saveSourceVersion,
   type SavedSourceDocument,
+  type SavedSourcePreview,
 } from "./editor/workspace-storage";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
-import { type Bounds3 } from "./mesh/bounds";
+import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
 import { OrbitCamera } from "./preview/orbit-camera";
 import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
@@ -38,6 +39,7 @@ const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButto
 const downloadButton = document.querySelector<HTMLButtonElement>("#downloadButton")!;
 const surfaceNetButton = document.querySelector<HTMLButtonElement>("#surfaceNetButton")!;
 const tetraMeshButton = document.querySelector<HTMLButtonElement>("#tetraMeshButton")!;
+const fitBoundsButton = document.querySelector<HTMLButtonElement>("#fitBoundsButton")!;
 const codeModeButton = document.querySelector<HTMLButtonElement>("#codeModeButton")!;
 const graphModeButton = document.querySelector<HTMLButtonElement>("#graphModeButton")!;
 const codePanel = document.querySelector<HTMLElement>("#codePanel")!;
@@ -62,6 +64,9 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 type RenderView = "shader" | "mesh";
 type EditorView = "code" | "graph";
 type EditorStatusState = "idle" | "ok" | "pending" | "error";
+type PreviewProfile = SavedSourcePreview;
+
+const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -84,11 +89,13 @@ let desiredViewMode: RenderView = "shader";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
+let activeBounds = boundsForExample(activeExampleId);
 let activeDocumentId: string | null = null;
 let activeSourceVersionId: string | null = null;
 let activeSourceName = currentExample(activeExampleId).name;
 let cleanSourceSnapshot = sourceForExample(activeExampleId);
 let cleanNameSnapshot = activeSourceName;
+let cleanPreviewSnapshot = "";
 let hasUnsavedChanges = false;
 const graphHistory = new GraphEditHistory();
 
@@ -96,15 +103,18 @@ apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b,
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
 documentNameInput.value = activeSourceName;
+cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
 updateSaveState();
 renderLoadDialog();
 
 stepsInput.addEventListener("input", () => {
   stepsOutput.value = stepsInput.value;
+  updateSaveState();
   schedulePreview();
 });
 gridInput.addEventListener("input", () => {
   gridOutput.value = gridInput.value;
+  updateSaveState();
   if (viewMode === "mesh") {
     clearMesh({ keepView: true, meshStatText: "queued" });
     scheduleMeshBuild();
@@ -123,6 +133,7 @@ meshViewButton.addEventListener("click", () => {
 });
 surfaceNetButton.addEventListener("click", () => setMeshAlgorithm("surface-net"));
 tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
+fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
 downloadButton.addEventListener("click", () => {
   if (lastBlob) downloadBlob(lastBlob, `${slugify(currentDocumentName())}.stl`);
 });
@@ -185,6 +196,7 @@ function loadExample(id: string): void {
   if (!confirmDiscardUnsavedChanges()) return;
   window.clearTimeout(sourceCompileTimer);
   activeExampleId = id;
+  activeBounds = boundsForExample(id);
   activeDocumentId = null;
   activeSourceVersionId = null;
   activeSourceName = currentExample(id).name;
@@ -206,14 +218,15 @@ function loadSavedSourceById(documentId: string, versionId: string): void {
     setEditorStatus("Saved source not found", "error");
     return;
   }
-  loadSavedSource(loaded.document, loaded.version.id, loaded.version.source);
+  loadSavedSource(loaded.document, loaded.version.id, loaded.version.source, loaded.version.preview);
 }
 
-function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string): void {
+function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string, preview?: SavedSourcePreview): void {
   window.clearTimeout(sourceCompileTimer);
   activeDocumentId = document.id;
   activeSourceVersionId = versionId;
   activeSourceName = document.name;
+  if (preview) applyPreviewProfile(preview);
   documentNameInput.value = document.name;
   selectedNode = null;
   hoveredNode = null;
@@ -227,7 +240,7 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
 function saveCurrentSource(): void {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
-    const saved = saveSourceVersion(currentDocumentName(), source, activeDocumentId);
+    const saved = saveSourceVersion(currentDocumentName(), source, activeDocumentId, currentPreviewProfile());
     const latest = latestSourceVersion(saved);
     activeDocumentId = saved.id;
     activeSourceVersionId = latest?.id ?? null;
@@ -600,10 +613,16 @@ function setEditorView(mode: EditorView): void {
 }
 
 function setMeshAlgorithm(algorithm: MeshAlgorithm): void {
+  setMeshAlgorithmMode(algorithm, { rebuild: true });
+}
+
+function setMeshAlgorithmMode(algorithm: MeshAlgorithm, options: { rebuild: boolean }): void {
   if (meshAlgorithm === algorithm) return;
   meshAlgorithm = algorithm;
   surfaceNetButton.setAttribute("aria-pressed", String(algorithm === "surface-net"));
   tetraMeshButton.setAttribute("aria-pressed", String(algorithm === "tetra"));
+  updateSaveState();
+  if (!options.rebuild) return;
   if (viewMode === "mesh") {
     clearMesh({ keepView: true, meshStatText: "queued" });
     scheduleMeshBuild();
@@ -753,7 +772,7 @@ function setEditorStatus(message: string, state: EditorStatusState): void {
 }
 
 function currentBounds(): Bounds3 {
-  return (currentExample(activeExampleId).bounds ?? [[-4, -4, -4], [4, 4, 4]]) as Bounds3;
+  return activeBounds;
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {
@@ -797,6 +816,7 @@ function currentSourceValue(): string {
 function markSourceClean(source: string, name: string): void {
   cleanSourceSnapshot = source;
   cleanNameSnapshot = name;
+  cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
   updateSaveState();
 }
 
@@ -810,10 +830,73 @@ function detachDeletedSource(): void {
 }
 
 function updateSaveState(): void {
-  const nextDirty = currentSourceValue() !== cleanSourceSnapshot || currentDocumentName() !== cleanNameSnapshot;
+  const nextDirty = currentSourceValue() !== cleanSourceSnapshot
+    || currentDocumentName() !== cleanNameSnapshot
+    || previewSnapshot(currentPreviewProfile()) !== cleanPreviewSnapshot;
   hasUnsavedChanges = nextDirty;
   saveSourceButton.disabled = !nextDirty;
   dirtyIndicator.hidden = !nextDirty;
+}
+
+function fitBoundsToCurrentSdf(): void {
+  if (!activeSdf) {
+    setEditorStatus("Fix code before fitting bounds", "error");
+    return;
+  }
+
+  fitBoundsButton.disabled = true;
+  overlay.textContent = "Fitting bounds...";
+  try {
+    activeBounds = paddedBounds(estimateBounds(activeSdf));
+    updateSaveState();
+    setEditorStatus("Fit bounds", "ok");
+    invalidateMeshForActiveSdf();
+    schedulePreview(0);
+  } catch (error) {
+    setEditorStatus(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    fitBoundsButton.disabled = false;
+  }
+}
+
+function applyPreviewProfile(profile: PreviewProfile): void {
+  activeBounds = cloneBounds(profile.bounds);
+  setRangeControl(stepsInput, stepsOutput, profile.raySteps);
+  setRangeControl(gridInput, gridOutput, profile.meshGrid);
+  setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
+  updateSaveState();
+}
+
+function currentPreviewProfile(): PreviewProfile {
+  return {
+    bounds: cloneBounds(activeBounds) as PreviewProfile["bounds"],
+    meshGrid: Number(gridInput.value),
+    raySteps: Number(stepsInput.value),
+    meshAlgorithm,
+  };
+}
+
+function previewSnapshot(profile: PreviewProfile): string {
+  return JSON.stringify(profile);
+}
+
+function boundsForExample(id: string): Bounds3 {
+  return cloneBounds((currentExample(id).bounds ?? FALLBACK_BOUNDS) as Bounds3);
+}
+
+function cloneBounds(bounds: Bounds3): Bounds3 {
+  return [
+    [bounds[0][0], bounds[0][1], bounds[0][2]],
+    [bounds[1][0], bounds[1][1], bounds[1][2]],
+  ];
+}
+
+function setRangeControl(input: HTMLInputElement, output: HTMLOutputElement, value: number): void {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const clamped = Math.min(max, Math.max(min, value));
+  input.value = String(clamped);
+  output.value = input.value;
 }
 
 function confirmDiscardUnsavedChanges(): boolean {

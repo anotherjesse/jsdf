@@ -1,7 +1,18 @@
+export type SavedMeshAlgorithm = "surface-net" | "tetra";
+export type SavedBounds3 = [[number, number, number], [number, number, number]];
+
+export interface SavedSourcePreview {
+  bounds: SavedBounds3;
+  meshGrid: number;
+  raySteps: number;
+  meshAlgorithm: SavedMeshAlgorithm;
+}
+
 export interface SavedSourceVersion {
   id: string;
   createdAt: string;
   source: string;
+  preview?: SavedSourcePreview;
 }
 
 export interface SavedSourceDocument {
@@ -45,6 +56,7 @@ export function saveSourceVersion(
   name: string,
   source: string,
   documentId: string | null = null,
+  preview: SavedSourcePreview | null = null,
   storage = globalThis.localStorage,
 ): SavedSourceDocument {
   const state = readState(storage);
@@ -68,6 +80,7 @@ export function saveSourceVersion(
     id: createId("version"),
     createdAt: now,
     source,
+    ...(preview ? { preview } : {}),
   });
   writeState(storage, state);
   return normalizeDocument(document) ?? document;
@@ -143,11 +156,47 @@ function normalizeVersion(value: unknown): SavedSourceVersion | null {
   if (typeof candidate.id !== "string" || typeof candidate.createdAt !== "string" || typeof candidate.source !== "string") {
     return null;
   }
+  const preview = normalizePreview(candidate.preview);
   return {
     id: candidate.id,
     createdAt: candidate.createdAt,
     source: candidate.source,
+    ...(preview ? { preview } : {}),
   };
+}
+
+function normalizePreview(value: unknown): SavedSourcePreview | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<SavedSourcePreview>;
+  const bounds = normalizeBounds(candidate.bounds);
+  if (!bounds) return null;
+
+  const meshGrid = normalizePositiveNumber(candidate.meshGrid);
+  const raySteps = normalizePositiveNumber(candidate.raySteps);
+  if (meshGrid == null || raySteps == null) return null;
+
+  const meshAlgorithm = candidate.meshAlgorithm === "tetra" ? "tetra" : "surface-net";
+  return { bounds, meshGrid, raySteps, meshAlgorithm };
+}
+
+function normalizeBounds(value: unknown): SavedBounds3 | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const lo = normalizeVector3(value[0]);
+  const hi = normalizeVector3(value[1]);
+  if (!lo || !hi) return null;
+  return [lo, hi];
+}
+
+function normalizeVector3(value: unknown): [number, number, number] | null {
+  if (!Array.isArray(value) || value.length < 3) return null;
+  const vector = value.slice(0, 3).map(Number);
+  if (!vector.every(Number.isFinite)) return null;
+  return [vector[0], vector[1], vector[2]];
+}
+
+function normalizePositiveNumber(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
 function createId(prefix: string): string {
