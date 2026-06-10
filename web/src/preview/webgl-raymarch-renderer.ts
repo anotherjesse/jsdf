@@ -1,6 +1,7 @@
-import type { SDF3 } from "../core/nodes";
+import type { Node, SDF3 } from "../core/nodes";
 import type { Bounds3 } from "../mesh/bounds";
 import { compileGLSLScene } from "../glsl/compiler";
+import { fnName } from "../glsl/format";
 import type { OrbitCamera } from "./orbit-camera";
 
 export class WebGLRaymarchRenderer {
@@ -29,14 +30,15 @@ export class WebGLRaymarchRenderer {
     if (active) this.redraw();
   }
 
-  render(sdf: SDF3, bounds: Bounds3, steps: number): void {
+  render(sdf: SDF3, bounds: Bounds3, steps: number, highlightNode: Node | null = null): void {
     const sceneSource = compileGLSLScene(sdf).source;
-    const fragment = fragmentShader(sceneSource);
+    const fragment = fragmentShader(sceneSource, highlightNode);
     if (fragment !== this.currentSource) {
       this.currentSource = fragment;
       this.program = createProgram(this.gl, vertexShader, fragment);
     }
     this.steps = steps;
+    this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
     this.setBounds(bounds);
     if (this.active) this.redraw();
   }
@@ -164,9 +166,10 @@ void main() {
 }
 `;
 
-function fragmentShader(sceneSource: string): string {
+function fragmentShader(sceneSource: string, highlightNode: Node | null): string {
   return `#version 300 es
 ${sceneSource}
+${selectedSceneFunction(highlightNode)}
 
 uniform vec2 u_resolution;
 uniform vec3 u_eye;
@@ -252,8 +255,17 @@ void main() {
   vec3 color = vec3(0.14, 0.70, 0.65) * (0.26 + diffuse * 0.88)
     + vec3(0.95, 0.63, 0.16) * soft * 0.16
     + vec3(0.55, 0.72, 0.85) * rim * 0.32;
+  float selectedBand = 1.0 - smoothstep(eps * 3.0, eps * 14.0, abs(selectedScene(p)));
+  color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.62);
 
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);
 }
 `;
+}
+
+function selectedSceneFunction(node: Node | null): string {
+  if (!node) return "float selectedScene(vec3 p) { return 1000000000.0; }";
+  const name = fnName(node);
+  if (node.dim === 2) return `float selectedScene(vec3 p) { return ${name}(p.xy); }`;
+  return `float selectedScene(vec3 p) { return ${name}(p); }`;
 }

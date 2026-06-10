@@ -65,6 +65,26 @@
         </section>
       </aside>
 
+      <aside class="editor-pane">
+        <header class="editor-header">
+          <h2>Editor</h2>
+          <span id="editorStatus" class="editor-status">Ready</span>
+        </header>
+
+        <div class="segmented editor-toggle" aria-label="Editor mode">
+          <button id="codeModeButton" type="button" aria-pressed="true">Code</button>
+          <button id="graphModeButton" type="button" aria-pressed="false">Graph</button>
+        </div>
+
+        <section id="codePanel" class="editor-panel">
+          <div id="codeEditor" class="code-editor"></div>
+        </section>
+
+        <section id="graphPanel" class="editor-panel hidden">
+          <div id="graphInspector" class="graph-inspector"></div>
+        </section>
+      </aside>
+
       <section class="viewport">
         <canvas id="canvas" width="1280" height="900"></canvas>
         <div id="overlay" class="overlay"></div>

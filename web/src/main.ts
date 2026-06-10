@@ -1,5 +1,11 @@
+import type { Node, SDF3 } from "./core/nodes";
+import type { CodeEditor } from "./editor/code-editor";
+import { evaluateSource } from "./editor/evaluate-source";
+import { sourceForExample } from "./editor/example-source";
+import { GraphInspector } from "./editor/graph-inspector";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
+import { type Bounds3 } from "./mesh/bounds";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
 import { OrbitCamera } from "./preview/orbit-camera";
 import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
@@ -13,6 +19,13 @@ const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButto
 const downloadButton = document.querySelector<HTMLButtonElement>("#downloadButton")!;
 const surfaceNetButton = document.querySelector<HTMLButtonElement>("#surfaceNetButton")!;
 const tetraMeshButton = document.querySelector<HTMLButtonElement>("#tetraMeshButton")!;
+const codeModeButton = document.querySelector<HTMLButtonElement>("#codeModeButton")!;
+const graphModeButton = document.querySelector<HTMLButtonElement>("#graphModeButton")!;
+const codePanel = document.querySelector<HTMLElement>("#codePanel")!;
+const graphPanel = document.querySelector<HTMLElement>("#graphPanel")!;
+const codeEditorElement = document.querySelector<HTMLElement>("#codeEditor")!;
+const graphInspectorElement = document.querySelector<HTMLElement>("#graphInspector")!;
+const editorStatus = document.querySelector<HTMLElement>("#editorStatus")!;
 const stepsInput = document.querySelector<HTMLInputElement>("#stepsInput")!;
 const stepsOutput = document.querySelector<HTMLOutputElement>("#stepsOutput")!;
 const gridInput = document.querySelector<HTMLInputElement>("#gridInput")!;
@@ -23,8 +36,15 @@ const triangleStat = document.querySelector<HTMLElement>("#triangleStat")!;
 const apiStat = document.querySelector<HTMLElement>("#apiStat")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
+type RenderView = "shader" | "mesh";
+type EditorView = "code" | "graph";
+
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
+let codeEditor: CodeEditor | null = null;
+let graphInspector: GraphInspector | null = null;
+let activeSdf: SDF3 | null = null;
+let selectedNode: Node | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
 let lastBlob: Blob | null = null;
@@ -32,9 +52,11 @@ let renderJob = 0;
 let meshJob = 0;
 let previewTimer = 0;
 let meshTimer = 0;
-let viewMode: "shader" | "mesh" = "shader";
-let desiredViewMode: "shader" | "mesh" = "shader";
+let sourceCompileTimer = 0;
+let viewMode: RenderView = "shader";
+let desiredViewMode: RenderView = "shader";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
+let editorView: EditorView = "code";
 
 for (const example of examples) {
   const option = document.createElement("option");
@@ -74,10 +96,9 @@ tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
 downloadButton.addEventListener("click", () => {
   if (lastBlob) downloadBlob(lastBlob, `${exampleSelect.value}.stl`);
 });
-exampleSelect.addEventListener("change", () => {
-  clearMesh();
-  schedulePreview(0);
-});
+exampleSelect.addEventListener("change", () => loadExample(exampleSelect.value));
+codeModeButton.addEventListener("click", () => setEditorView("code"));
+graphModeButton.addEventListener("click", () => setEditorView("graph"));
 window.addEventListener("resize", () => activeRenderer()?.redraw());
 
 void boot();
@@ -95,13 +116,77 @@ async function boot(): Promise<void> {
     const camera = new OrbitCamera(canvas, () => activeRenderer()?.redraw());
     rayRenderer = new WebGLRaymarchRenderer(canvas, camera);
     meshRenderer = new WebGLMeshRenderer(canvas, camera);
+    graphInspector = new GraphInspector(graphInspectorElement, {
+      onSelect: selectNode,
+      onEdit: handleGraphEdit,
+    });
     setViewMode("shader");
+    compileEditorSource({ status: "Loaded example", invalidateMesh: false });
     await renderCurrent();
+    const { createCodeEditor } = await import("./editor/code-editor");
+    codeEditor = createCodeEditor(codeEditorElement, sourceForExample(exampleSelect.value), scheduleSourceCompile);
   } catch (error) {
     gpuBadge.textContent = "Preview error";
     gpuBadge.classList.add("warn");
     overlay.textContent = error instanceof Error ? error.message : String(error);
   }
+}
+
+function loadExample(id: string): void {
+  window.clearTimeout(sourceCompileTimer);
+  selectedNode = null;
+  codeEditor?.setValue(sourceForExample(id));
+  compileEditorSource({ status: "Loaded example" });
+}
+
+function scheduleSourceCompile(): void {
+  window.clearTimeout(sourceCompileTimer);
+  setEditorStatus("Editing...", "pending");
+  sourceCompileTimer = window.setTimeout(() => {
+    compileEditorSource({ status: "Compiled" });
+  }, 350);
+}
+
+function compileEditorSource(options: { status: string; invalidateMesh?: boolean } = { status: "Compiled" }): boolean {
+  const source = codeEditor?.getValue() ?? sourceForExample(exampleSelect.value);
+  try {
+    const { sdf } = evaluateSource(source);
+    activeSdf = sdf;
+    graphInspector?.setSdf(sdf);
+    setEditorStatus(options.status, "ok");
+    if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
+    schedulePreview(0);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setEditorStatus(message, "error");
+    overlay.textContent = `Code error: ${message}`;
+    return false;
+  }
+}
+
+function selectNode(node: Node | null): void {
+  selectedNode = node;
+  if (node && activeSdf) {
+    setEditorStatus(`${node.kind} #${node.id}`, "ok");
+    schedulePreview(0);
+  }
+}
+
+function handleGraphEdit(): void {
+  if (!activeSdf) return;
+  setEditorStatus(selectedNode ? `Edited ${selectedNode.kind} #${selectedNode.id}` : "Graph edit", "ok");
+  invalidateMeshForActiveSdf();
+  schedulePreview(0);
+}
+
+function invalidateMeshForActiveSdf(): void {
+  if (desiredViewMode === "mesh" || viewMode === "mesh") {
+    clearMesh({ keepView: viewMode === "mesh", meshStatText: "queued" });
+    scheduleMeshBuild();
+    return;
+  }
+  clearMesh();
 }
 
 function clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}): void {
@@ -130,6 +215,17 @@ function activeRenderer(): { redraw(): void } | null {
   return viewMode === "shader" ? rayRenderer : meshRenderer;
 }
 
+function setEditorView(mode: EditorView): void {
+  editorView = mode;
+  codeModeButton.setAttribute("aria-pressed", String(mode === "code"));
+  graphModeButton.setAttribute("aria-pressed", String(mode === "graph"));
+  codePanel.classList.toggle("hidden", mode !== "code");
+  graphPanel.classList.toggle("hidden", mode !== "graph");
+  if (editorView === "code") {
+    window.requestAnimationFrame(() => codeEditor?.layout());
+  }
+}
+
 function setMeshAlgorithm(algorithm: MeshAlgorithm): void {
   if (meshAlgorithm === algorithm) return;
   meshAlgorithm = algorithm;
@@ -143,7 +239,7 @@ function setMeshAlgorithm(algorithm: MeshAlgorithm): void {
   }
 }
 
-function setViewMode(mode: "shader" | "mesh"): void {
+function setViewMode(mode: RenderView): void {
   desiredViewMode = mode;
   if (mode === "mesh" && (!mesh || mesh.triangles.length === 0)) {
     shaderViewButton.setAttribute("aria-pressed", "false");
@@ -159,7 +255,7 @@ function setViewMode(mode: "shader" | "mesh"): void {
   rayRenderer?.setActive(mode === "shader");
   meshRenderer?.setActive(mode === "mesh");
   overlay.textContent = mode === "shader"
-    ? `Shader preview: direct SDF raymarching with ${stepsInput.value} steps.`
+    ? `Shader preview: direct SDF raymarching with ${stepsInput.value} steps.${selectionLabel()}`
     : `Mesh preview: ${mesh?.triangles.length.toLocaleString() ?? 0} ${algorithmLabel(mesh?.algorithm ?? meshAlgorithm)} triangles from ${gridLabel()}.`;
 }
 
@@ -175,20 +271,25 @@ function scheduleMeshBuild(delay = 300): void {
 
 async function renderCurrent(): Promise<void> {
   if (!rayRenderer) return;
+  const sdf = activeSdf;
+  if (!sdf) {
+    previewStat.textContent = "-";
+    overlay.textContent = "Write editor code that returns an SDF3.";
+    return;
+  }
+
   const job = renderJob + 1;
   renderJob = job;
-  const example = currentExample(exampleSelect.value);
-  const sdf = example.build();
   const steps = Number(stepsInput.value);
-  overlay.textContent = `Compiling shader preview...`;
+  overlay.textContent = "Compiling shader preview...";
   stepsInput.disabled = true;
   const start = performance.now();
   try {
     if (job !== renderJob) return;
-    rayRenderer.render(sdf, example.bounds ?? [[-4, -4, -4], [4, 4, 4]], steps);
+    rayRenderer.render(sdf, currentBounds(), steps, selectedNode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
     if (viewMode === "shader") {
-      overlay.textContent = `Shader preview: direct SDF raymarching with ${steps} steps.`;
+      overlay.textContent = `Shader preview: direct SDF raymarching with ${steps} steps.${selectionLabel()}`;
     }
   } catch (error) {
     overlay.textContent = error instanceof Error ? error.message : String(error);
@@ -215,9 +316,13 @@ async function rebuildMeshView(): Promise<void> {
 async function buildMesh(): Promise<void> {
   if (mesh && mesh.triangles.length > 0) return;
   if (meshBuildPromise) return meshBuildPromise;
+  const sdf = activeSdf;
+  if (!sdf) {
+    overlay.textContent = "Fix the editor code before building mesh view.";
+    return;
+  }
 
   const example = currentExample(exampleSelect.value);
-  const sdf = example.build();
   const job = meshJob + 1;
   meshJob = job;
   meshViewButton.disabled = true;
@@ -230,7 +335,7 @@ async function buildMesh(): Promise<void> {
     try {
       const result = await generateMesh(sdf, {
         grid: Number(gridInput.value),
-        bounds: example.bounds,
+        bounds: currentBounds(),
         preferGPU: true,
         algorithm: meshAlgorithm,
       });
@@ -267,6 +372,20 @@ async function buildMesh(): Promise<void> {
   } finally {
     if (meshBuildPromise === buildPromise) meshBuildPromise = null;
   }
+}
+
+function setEditorStatus(message: string, state: "ok" | "pending" | "error"): void {
+  editorStatus.textContent = message;
+  editorStatus.dataset.state = state;
+  editorStatus.title = message;
+}
+
+function currentBounds(): Bounds3 {
+  return (currentExample(exampleSelect.value).bounds ?? [[-4, -4, -4], [4, 4, 4]]) as Bounds3;
+}
+
+function selectionLabel(): string {
+  return selectedNode ? ` Selected ${selectedNode.kind} #${selectedNode.id}.` : "";
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {
