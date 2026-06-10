@@ -541,20 +541,21 @@ function resetGraphEdits(): void {
 }
 
 function applyGraphMutationStatus(message: string, edit?: GraphSourceEdit, value?: unknown): void {
-  if (edit) syncCodeFromGraphEdit(edit, value);
-  setEditorStatus(message, "ok");
+  const synced = edit ? syncCodeFromGraphEdit(edit, value) : true;
+  setEditorStatus(synced ? message : `${message} (preview only)`, synced ? "ok" : "pending");
   invalidateMeshForActiveSdf();
   schedulePreview(0);
 }
 
-function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
-  if (!activeSdf || !codeEditor) return;
+function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
+  if (!activeSdf || !codeEditor) return false;
   const nextSource = patchGraphEditSource(codeEditor.getValue(), activeSdf, edit, value);
-  if (!nextSource) return;
+  if (!nextSource) return false;
   codeEditor.setValue(nextSource);
   codeEditor.setError(null);
   updateSaveState();
   refreshSourceLinks(nextSource, activeSdf);
+  return true;
 }
 
 function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
