@@ -1060,13 +1060,19 @@ function renderViewLabels(): void {
 }
 
 function setEditorView(mode: EditorView): void {
+  const previousMode = editorView;
   editorView = mode;
   codeModeButton.setAttribute("aria-pressed", String(mode === "code"));
   graphModeButton.setAttribute("aria-pressed", String(mode === "graph"));
   codePanel.classList.toggle("hidden", mode !== "code");
   graphPanel.classList.toggle("hidden", mode !== "graph");
   if (editorView === "code") {
-    window.requestAnimationFrame(() => codeEditor?.layout());
+    window.requestAnimationFrame(() => {
+      codeEditor?.layout();
+      if (previousMode === "graph" && selectedSourceLink) {
+        codeEditor?.revealSourceLink(selectedSourceLink);
+      }
+    });
   }
 }
 

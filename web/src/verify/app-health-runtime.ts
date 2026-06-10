@@ -26,6 +26,13 @@ export interface AppHealthRuntimeVerification {
     onOpen: string;
     afterClose: string;
   };
+  graphCodeReveal: {
+    selectedBefore: string;
+    selectedAfter: string;
+    editorView: string;
+    revealedMarks: number;
+    codeVisible: boolean;
+  };
   errors: string[];
 }
 
@@ -47,6 +54,7 @@ export async function runAppHealthRuntimeVerification(
   const dom = summarizeFrameDom(frame);
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
+  const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
 
   if (!health) {
     errors.push("app health hook never became available");
@@ -62,6 +70,7 @@ export async function runAppHealthRuntimeVerification(
     dom,
     graphHoverStatus,
     sourceDialogFocus,
+    graphCodeReveal,
     errors,
   };
 }
@@ -275,6 +284,63 @@ async function verifySourceDialogFocus(
   }
 
   return { loadShortcut, shortcutPreventedDefault, onOpen, afterClose };
+}
+
+async function verifyGraphCodeReveal(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["graphCodeReveal"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = { selectedBefore: "", selectedAfter: "", editorView: "", revealedMarks: 0, codeVisible: false };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for graph-to-code reveal verification");
+    return empty;
+  }
+
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const codeMode = frameDocument.querySelector<HTMLButtonElement>("#codeModeButton");
+  const codePanel = frameDocument.querySelector<HTMLElement>("#codePanel");
+  if (!graphMode || !codeMode || !codePanel) {
+    errors.push("app frame missing graph-to-code reveal controls");
+    return empty;
+  }
+
+  graphMode.click();
+  await nextFrame(frameWindow);
+  const graphNodes = Array.from(frameDocument.querySelectorAll<HTMLButtonElement>(".graph-node[data-node-id]"));
+  const target = graphNodes.find((node) => node.getAttribute("aria-pressed") !== "true") ?? graphNodes[0] ?? null;
+  if (!target) {
+    errors.push("app frame had no graph node for code reveal");
+    return empty;
+  }
+
+  target.click();
+  await nextFrame(frameWindow);
+  const selectedBefore = readAppHealth(frame)?.selectedSourceLink ?? "";
+  if (!selectedBefore) {
+    errors.push("graph node selection did not produce a selected source link");
+  }
+
+  codeMode.click();
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  const afterHealth = readAppHealth(frame);
+  const selectedAfter = afterHealth?.selectedSourceLink ?? "";
+  const editorView = afterHealth?.editorView ?? "";
+  const revealedMarks = frameDocument.querySelectorAll("#codeEditor .source-revealed-link").length;
+  const codeVisible = !codePanel.classList.contains("hidden");
+
+  if (editorView !== "code") errors.push(`graph-to-code reveal left editor in ${editorView || "unknown"} view`);
+  if (!codeVisible) errors.push("graph-to-code reveal left code panel hidden");
+  if (selectedAfter !== selectedBefore) {
+    errors.push(`graph-to-code reveal changed selected link from ${selectedBefore || "nothing"} to ${selectedAfter || "nothing"}`);
+  }
+  if (revealedMarks < 1) {
+    errors.push("graph-to-code reveal did not mark the selected source range");
+  }
+
+  return { selectedBefore, selectedAfter, editorView, revealedMarks, codeVisible };
 }
 
 function activeElementToken(document: Document): string {
