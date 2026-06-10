@@ -1,5 +1,5 @@
-import type { Node } from "../core/nodes";
-import { findGraphSourceLinks, type GraphSourceLink } from "../editor/clean-source-patch";
+import type { Node, SDF3 } from "../core/nodes";
+import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphEditHistory } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
@@ -15,6 +15,7 @@ export interface GraphRuntimeVerification {
   hiddenEvents: number[][];
   revealedSource: string;
   soloLabels: string[];
+  sourcePatch: string;
   history: {
     sameSessionCount: number;
     separateSessionCount: number;
@@ -81,6 +82,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     hiddenEvents,
     revealedSource,
     soloLabels,
+    sourcePatch: verifySourcePatch(lastEdit, sdf, errors),
     history,
     errors,
   };
@@ -169,6 +171,31 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     nodeButton.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
     if (revealedSource !== "sphere:call") verifyErrors.push(`keyboard code reveal emitted ${revealedSource || "nothing"}`);
   }
+}
+
+function verifySourcePatch(edit: GraphParamEdit | null, sdf: SDF3, errors: string[]): string {
+  if (!edit) {
+    errors.push("source patch verification had no graph edit");
+    return "";
+  }
+  const nextSource = patchGraphEditSource(fixtureSource, sdf, edit, edit.nextValue);
+  if (!nextSource) {
+    errors.push("source patch verification did not patch source");
+    return "";
+  }
+  if (!nextSource.includes("sphere(1.2)")) {
+    errors.push("source patch verification did not update sphere literal");
+  }
+  const patchedLinks = findGraphSourceLinks(nextSource, sdf);
+  const radiusLink = patchedLinks.find((link) => {
+    return link.nodeId === edit.nodeId && link.label === "radius" && link.end > link.start;
+  });
+  if (!radiusLink) {
+    errors.push("source patch verification did not rediscover edited radius link");
+  } else if (nextSource.slice(radiusLink.start, radiusLink.end) !== "1.2") {
+    errors.push("source patch verification radius link points at wrong text");
+  }
+  return nextSource.trim();
 }
 
 function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["history"] {

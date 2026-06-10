@@ -43,6 +43,7 @@ export interface CodeEditor {
   setError(message: string | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
+  markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
   layout(): void;
   dispose(): void;
@@ -78,6 +79,7 @@ export function createCodeEditor(
   let sourceLinkDecorations: string[] = [];
   let focusedNodeDecorations: string[] = [];
   let revealedSourceDecorations: string[] = [];
+  let editedSourceDecorations: string[] = [];
   let focusedNodeId: number | null = null;
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
@@ -259,6 +261,7 @@ export function createCodeEditor(
       const model = editor.getModel();
       if (!model) return;
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
+      editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
       sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
         .filter((link) => link.end > link.start)
         .map((link) => {
@@ -280,6 +283,22 @@ export function createCodeEditor(
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;
       applyFocusedNodeDecorations(Boolean(options.reveal));
+    },
+    markEditedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
+      const range = link ? rangeForSourceLink(link) : null;
+      if (!range) {
+        editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
+        return;
+      }
+      editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, [{
+        range,
+        options: {
+          inlineClassName: "source-edited-link",
+        },
+      }]);
+      if (options.reveal) {
+        editor.revealRangeInCenterIfOutsideViewport(range);
+      }
     },
     revealSourceLink(link: GraphSourceLink) {
       const range = rangeForSourceLink(link);

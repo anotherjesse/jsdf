@@ -669,10 +669,13 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
   if (!activeSdf || !codeEditor) return false;
   const nextSource = patchGraphEditSource(codeEditor.getValue(), activeSdf, edit, value);
   if (!nextSource) return false;
+  const nextSourceLinks = findGraphSourceLinks(nextSource, activeSdf);
+  const editedLink = sourceLinkForGraphEdit(nextSourceLinks, edit);
   codeEditor.setValue(nextSource);
   codeEditor.setError(null);
   updateSaveState();
-  refreshSourceLinks(nextSource, activeSdf);
+  refreshSourceLinks(nextSource, activeSdf, nextSourceLinks);
+  codeEditor.markEditedSourceLink(editedLink, { reveal: editorView === "code" });
   return true;
 }
 
@@ -691,6 +694,27 @@ function refreshSourceLinks(
 function sourceFocusNodeId(): number | null {
   const node = hoveredNode ?? selectedNode;
   return node && !isActiveRootNode(node) ? node.id : null;
+}
+
+function sourceLinkForGraphEdit(links: readonly GraphSourceLink[], edit: GraphSourceEdit): GraphSourceLink | null {
+  return links.find((link) => {
+    return link.nodeId === edit.nodeId && link.end > link.start && paramPathsEqual(link.path, edit.path);
+  }) ?? links.find((link) => {
+    return link.nodeId === edit.nodeId
+      && link.end > link.start
+      && link.scrubbable === false
+      && paramPathStartsWith(edit.path, link.path);
+  }) ?? links.find((link) => {
+    return link.nodeId === edit.nodeId && link.end > link.start;
+  }) ?? null;
+}
+
+function paramPathsEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((part, index) => part === b[index]);
+}
+
+function paramPathStartsWith(path: readonly unknown[], prefix: readonly unknown[]): boolean {
+  return prefix.length <= path.length && prefix.every((part, index) => path[index] === part);
 }
 
 function clearGraphHistory(): void {
