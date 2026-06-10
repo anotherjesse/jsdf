@@ -2,6 +2,7 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
+import { graphNodeSourceIdentityForNode, sourceLinkForGraphNodeIdentity } from "../editor/graph-source-identity";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "../editor/source-link-scrub";
 import type { SDF3 } from "../core/nodes";
 
@@ -31,6 +32,13 @@ export interface EditorRuntimeVerification {
     editedSourceDecorations: number;
     selectedGraphParamsAfterPatch: number;
   };
+  selectionRestore: {
+    previousNode: string;
+    restoredNode: string;
+    previousStart: number;
+    restoredStart: number;
+    selectedNode: string;
+  };
   errors: string[];
 }
 
@@ -51,6 +59,7 @@ export async function runEditorRuntimeVerification(
     editedSourceDecorations: 0,
     selectedGraphParamsAfterPatch: 0,
   };
+  const selectionRestore = verifySelectionRestore(errors);
   let selectedNode = "";
 
   const { sdf } = evaluateSource(fixtureSource);
@@ -216,6 +225,7 @@ export async function runEditorRuntimeVerification(
       graphSourceHoverEvents,
       graphSourceHoverDecorations,
       sourceScrub,
+      selectionRestore,
       errors,
     };
   } finally {
@@ -226,6 +236,54 @@ export async function runEditorRuntimeVerification(
     const node = graphInspector.selectNodeById(link.nodeId);
     if (node) codeEditor?.markSelectedSourceLink(link);
   }
+}
+
+function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["selectionRestore"] {
+  const { sdf } = evaluateSource(fixtureSource);
+  const links = findGraphSourceLinks(fixtureSource, sdf);
+  const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
+  const identity = boxCallLink ? graphNodeSourceIdentityForNode(links, boxCallLink.nodeId) : null;
+  const shiftedSource = fixtureSource.replace("sphere(1)", "sphere(1.25)");
+  const { sdf: shiftedSdf } = evaluateSource(shiftedSource);
+  const shiftedLinks = findGraphSourceLinks(shiftedSource, shiftedSdf);
+  const restoredLink = identity ? sourceLinkForGraphNodeIdentity(shiftedLinks, identity) : null;
+  const root = document.createElement("div");
+  let selectedNode = "";
+  const inspector = new GraphInspector(root, {
+    onSelect(node) {
+      selectedNode = node ? `${node.kind} #${node.id}` : "";
+    },
+    onHover() {},
+    onEdit() {},
+    onSolo() {},
+    onRevealSource() {},
+    onSourceHover() {},
+    onVisibilityChange() {},
+  });
+
+  inspector.setSdf(shiftedSdf);
+  inspector.setSourceLinks(shiftedLinks);
+  if (restoredLink) inspector.selectNodeById(restoredLink.nodeId);
+
+  if (!boxCallLink) errors.push("selection restore fixture has no box call link");
+  if (!identity) errors.push("selection restore could not capture box identity");
+  if (!restoredLink) {
+    errors.push("selection restore did not find shifted box link");
+  } else {
+    if (restoredLink.nodeKind !== "box") errors.push(`selection restore found ${restoredLink.nodeKind}`);
+    if (boxCallLink && restoredLink.start === boxCallLink.start) {
+      errors.push("selection restore fixture did not shift source offsets");
+    }
+  }
+  if (!selectedNode.startsWith("box #")) errors.push(`selection restore selected ${selectedNode || "nothing"}`);
+
+  return {
+    previousNode: boxCallLink ? `${boxCallLink.nodeKind}:${boxCallLink.label}` : "",
+    restoredNode: restoredLink ? `${restoredLink.nodeKind}:${restoredLink.label}` : "",
+    previousStart: boxCallLink?.start ?? -1,
+    restoredStart: restoredLink?.start ?? -1,
+    selectedNode,
+  };
 }
 
 function verifySourceScrubPath(

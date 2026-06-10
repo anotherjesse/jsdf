@@ -7,6 +7,11 @@ import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
 import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
+import {
+  graphNodeSourceIdentityForNode,
+  sourceLinkForGraphNodeIdentity,
+  type GraphNodeSourceIdentity,
+} from "./editor/graph-source-identity";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
 import { buildVisibleSdf } from "./editor/visible-sdf";
@@ -382,6 +387,9 @@ function compileEditorSource(
   options: { status: string; statusState?: EditorStatusState; invalidateMesh?: boolean } = { status: "Compiled" },
 ): boolean {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
+  const previousSelectedIdentity = selectedNode && !isActiveRootNode(selectedNode)
+    ? graphNodeSourceIdentityForNode(currentSourceLinks, selectedNode.id)
+    : null;
   try {
     const { sdf } = evaluateSource(source);
     const sourceLinks = findGraphSourceLinks(source, sdf);
@@ -395,6 +403,7 @@ function compileEditorSource(
     graphInspector?.setSdf(sdf, restoredHiddenNodeIds);
     codeEditor?.setError(null);
     refreshSourceLinks(source, sdf, sourceLinks);
+    restoreSelectedGraphNode(previousSelectedIdentity, sourceLinks);
     clearGraphHistory();
     setEditorStatus(options.status, options.statusState ?? "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
@@ -411,6 +420,19 @@ function compileEditorSource(
     overlay.textContent = `Code error: ${message}`;
     return false;
   }
+}
+
+function restoreSelectedGraphNode(
+  identity: GraphNodeSourceIdentity | null,
+  sourceLinks: readonly GraphSourceLink[],
+): void {
+  if (!identity || !graphInspector) return;
+  const link = sourceLinkForGraphNodeIdentity(sourceLinks, identity);
+  if (!link) return;
+  const node = graphInspector.selectNodeById(link.nodeId);
+  if (!node) return;
+  graphInspector.setSelectedSourceLink(link);
+  codeEditor?.markSelectedSourceLink(link);
 }
 
 function handleSourceLinkSelect(link: GraphSourceLink): void {
