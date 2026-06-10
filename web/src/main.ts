@@ -440,6 +440,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   if (!link) {
     hoveredNode = null;
     focusPreview = null;
+    graphInspector.setHoveredSourceLink(null);
     graphInspector.setHoveredNodeById(null);
     if (soloPreview) handleSoloPreview(null);
     else schedulePreview(0);
@@ -449,6 +450,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
     return;
   }
 
+  graphInspector.setHoveredSourceLink(link);
   const node = graphInspector.setHoveredNodeById(link.nodeId);
   hoveredNode = node;
   if (!node) return;

@@ -45,6 +45,7 @@ export class GraphInspector {
   private filter = "";
   private showMap = false;
   private sourceLinks: readonly GraphSourceLink[] = [];
+  private hoveredSourceLink: GraphSourceLink | null = null;
   private hoverSoloKey: string | null = null;
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
@@ -155,6 +156,7 @@ export class GraphInspector {
   setSdf(sdf: SDF3, hiddenNodeIds: readonly number[] = []): void {
     this.sdf = sdf;
     this.selected = sdf.node;
+    this.hoveredSourceLink = null;
     this.hoverSoloKey = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
@@ -190,6 +192,15 @@ export class GraphInspector {
 
   setSourceLinks(links: readonly GraphSourceLink[]): void {
     this.sourceLinks = [...links];
+    if (this.hoveredSourceLink && !this.sourceLinks.some((link) => sourceLinksEqual(link, this.hoveredSourceLink))) {
+      this.hoveredSourceLink = null;
+    }
+    this.render();
+  }
+
+  setHoveredSourceLink(link: GraphSourceLink | null): void {
+    if (sourceLinksEqual(this.hoveredSourceLink, link)) return;
+    this.hoveredSourceLink = link;
     this.render();
   }
 
@@ -893,6 +904,7 @@ export class GraphInspector {
     const group = document.createElement("div");
     group.className = "axis-control";
     if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
+    if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
 
     const label = document.createElement("span");
     label.className = "axis-label";
@@ -955,6 +967,7 @@ export class GraphInspector {
     const row = document.createElement("div");
     row.className = "param-row";
     if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
+    if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, field.path)) row.classList.add("source-hovered");
 
     const sourceLink = this.sourceLinkForParam(node.id, field.path);
     this.attachSourceHover(row, sourceLink);
@@ -1069,6 +1082,11 @@ export class GraphInspector {
     }) ?? null;
   }
 
+  private sourceLinkMatchesParam(link: GraphSourceLink | null, nodeId: number, path: ParamPath): boolean {
+    if (!link || link.nodeId !== nodeId || link.end <= link.start) return false;
+    return pathsEqual(link.path, path) || (link.scrubbable === false && pathStartsWith(path, link.path));
+  }
+
   private sourceLinkForNode(nodeId: number): GraphSourceLink | null {
     return this.sourceLinks.find((link) => {
       return link.nodeId === nodeId && link.label === "call" && link.end > link.start;
@@ -1163,6 +1181,17 @@ function paramKey(nodeId: number, path: ParamPath): string {
 
 function pathStartsWith(path: ParamPath, prefix: ParamPath): boolean {
   return prefix.length > 0 && prefix.length < path.length && prefix.every((part, index) => part === path[index]);
+}
+
+function sourceLinksEqual(a: GraphSourceLink | null, b: GraphSourceLink | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.nodeId === b.nodeId
+    && a.nodeKind === b.nodeKind
+    && a.label === b.label
+    && a.start === b.start
+    && a.end === b.end
+    && pathsEqual(a.path, b.path);
 }
 
 function matrixParam(value: unknown): number[][] | null {

@@ -162,6 +162,21 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       paramRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row blur did not clear source hover");
     }
+    const radiusSourceLink = sourceLinks.find((link) => {
+      return link.nodeId === sphere.id && link.label === "radius" && link.end > link.start;
+    });
+    if (!radiusSourceLink) {
+      verifyErrors.push("selected sphere radius has no source link");
+    } else {
+      graphInspector.setHoveredSourceLink(radiusSourceLink);
+      if (!graphRoot.querySelector(".param-row.source-hovered")) {
+        verifyErrors.push("source hover did not mark matching param row");
+      }
+      graphInspector.setHoveredSourceLink(null);
+      if (graphRoot.querySelector(".param-row.source-hovered")) {
+        verifyErrors.push("clearing source hover left a param row marked");
+      }
+    }
     radiusInput.dispatchEvent(new FocusEvent("focus"));
     radiusInput.value = "1.2";
     radiusInput.dispatchEvent(new Event("input", { bubbles: true }));
