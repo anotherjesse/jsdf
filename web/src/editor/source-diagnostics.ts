@@ -110,6 +110,9 @@ function rangeForToken(
 }
 
 function rangeFromSyntaxMessage(message: string, source: string): Omit<SourceDiagnostic, "message"> | null {
+  const danglingMemberAccess = rangeFromDanglingMemberAccess(source);
+  if (danglingMemberAccess) return danglingMemberAccess;
+
   const token = message.match(/Unexpected (?:token|identifier) ['"]?([^'"]+)['"]?/i)?.[1];
   if (!token || token === "}") return endOfSourceRange(source);
   const lines = sourceLines(source);
@@ -125,6 +128,24 @@ function rangeFromSyntaxMessage(message: string, source: string): Omit<SourceDia
     }
   }
   return endOfSourceRange(source);
+}
+
+function rangeFromDanglingMemberAccess(source: string): Omit<SourceDiagnostic, "message"> | null {
+  const lines = sourceLines(source);
+  for (let index = 0; index < lines.length; index += 1) {
+    const code = codeBeforeLineComment(lines[index]).trimEnd();
+    const dot = code.lastIndexOf(".");
+    if (dot < 0 || code.slice(dot + 1).trim() !== "") continue;
+    const next = nextCodeLine(lines, index + 1);
+    if (next && !startsStatement(next)) continue;
+    return {
+      lineNumber: index + 1,
+      column: dot + 1,
+      endLineNumber: index + 1,
+      endColumn: dot + 2,
+    };
+  }
+  return null;
 }
 
 function messageWithApiSuggestion(message: string, source: string, tokenRange: RuntimeTokenRange): string {
@@ -204,6 +225,39 @@ function previousNonWhitespaceChar(line: string, start: number): string {
   let index = start - 1;
   while (index >= 0 && /\s/.test(line[index])) index -= 1;
   return line[index] ?? "";
+}
+
+function nextCodeLine(lines: readonly string[], start: number): string {
+  for (let index = start; index < lines.length; index += 1) {
+    const line = codeBeforeLineComment(lines[index]).trim();
+    if (line) return line;
+  }
+  return "";
+}
+
+function startsStatement(line: string): boolean {
+  return /^(?:return|const|let|var|if|for|while|switch|try|catch|finally|else|throw|break|continue|function|class)\b/.test(line);
+}
+
+function codeBeforeLineComment(line: string): string {
+  let quote = "";
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "/" && line[index + 1] === "/") return line.slice(0, index);
+  }
+  return line;
 }
 
 function isIdentifierBoundary(char: string | undefined): boolean {

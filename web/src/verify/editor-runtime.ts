@@ -19,6 +19,7 @@ import {
 } from "../editor/source-diagnostic-fixes";
 import { sourceDiagnosticFromError } from "../editor/source-diagnostics";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "../editor/source-inlay-hints";
+import { sourceWithAutoReturnExpression } from "../editor/source-auto-return";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
@@ -105,6 +106,10 @@ export interface EditorRuntimeVerification {
     easing: string;
   };
   editorTools: {
+    autoReturnExpressionKind: string;
+    autoReturnVariableKind: string;
+    autoReturnTransform: string;
+    explicitReturnAutoReturned: boolean;
     prettifiedLines: number;
     runtimeErrorLine: number;
     runtimeErrorColumn: number;
@@ -116,6 +121,8 @@ export interface EditorRuntimeVerification {
     easingErrorSuggestion: string;
     propertyOnlyErrorLine: number;
     propertyOnlyErrorColumn: number;
+    danglingMemberErrorLine: number;
+    danglingMemberErrorColumn: number;
     quickFixTitle: string;
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
@@ -385,7 +392,9 @@ export async function runEditorRuntimeVerification(
 
   function selectFromSource(link: GraphSourceLink): void {
     const node = graphInspector.selectNodeById(link.nodeId);
-    if (node) codeEditor?.markSelectedSourceLink(link);
+    if (!node) return;
+    graphInspector.setSelectedSourceLink(link);
+    codeEditor?.markSelectedSourceLink(link);
   }
 }
 
@@ -505,6 +514,26 @@ function firstCompletionForSource(
 }
 
 function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorTools"] {
+  const autoReturnExpression = evaluateSource("sphere(0.75)");
+  if (!autoReturnExpression.autoReturned || autoReturnExpression.sdf.node.kind !== "sphere") {
+    errors.push("expression-only source did not auto-return a sphere");
+  }
+
+  const autoReturnVariableSource = "const f = sphere(0.4).translate([0.1, 0, 0])\nf";
+  const autoReturnVariable = evaluateSource(autoReturnVariableSource);
+  const autoReturnTransform = sourceWithAutoReturnExpression(autoReturnVariableSource)?.source ?? "";
+  if (!autoReturnVariable.autoReturned || autoReturnVariable.sdf.node.kind !== "translate") {
+    errors.push("final variable source did not auto-return the composed SDF");
+  }
+  if (!autoReturnTransform.includes("\nreturn f;")) {
+    errors.push("auto-return transform did not preserve final variable expression");
+  }
+
+  const explicitReturn = evaluateSource("return sphere(0.5)");
+  if (explicitReturn.autoReturned) {
+    errors.push("explicit return source was incorrectly marked as auto-returned");
+  }
+
   const pretty = prettifySource("return sphere(1).translate([1,2,3]).difference(box(0.5))");
   if (!pretty.includes("\n  .translate([1, 2, 3])")) {
     errors.push("prettify did not space vector args and wrap translate chain");
@@ -583,7 +612,21 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     errors.push(`syntax typo diagnostic column ${syntaxDiagnostic.column}`);
   }
 
+  const danglingMemberSource = "let f = sphere(1)\nf . \nreturn f";
+  const danglingMemberDiagnostic = diagnosticForSource(danglingMemberSource, errors, "dangling member access");
+  if (
+    danglingMemberDiagnostic.lineNumber !== 2
+    || danglingMemberDiagnostic.column !== 3
+    || danglingMemberDiagnostic.endColumn !== 4
+  ) {
+    errors.push(`dangling member diagnostic range ${danglingMemberDiagnostic.lineNumber}:${danglingMemberDiagnostic.column}-${danglingMemberDiagnostic.endColumn}`);
+  }
+
   return {
+    autoReturnExpressionKind: autoReturnExpression.sdf.node.kind,
+    autoReturnVariableKind: autoReturnVariable.sdf.node.kind,
+    autoReturnTransform,
+    explicitReturnAutoReturned: explicitReturn.autoReturned,
     prettifiedLines: pretty.split("\n").length,
     runtimeErrorLine: runtimeDiagnostic.lineNumber,
     runtimeErrorColumn: runtimeDiagnostic.column,
@@ -595,6 +638,8 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     easingErrorSuggestion: easingDiagnostic.message,
     propertyOnlyErrorLine: propertyOnlyDiagnostic.lineNumber,
     propertyOnlyErrorColumn: propertyOnlyDiagnostic.column,
+    danglingMemberErrorLine: danglingMemberDiagnostic.lineNumber,
+    danglingMemberErrorColumn: danglingMemberDiagnostic.column,
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,
