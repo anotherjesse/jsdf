@@ -19,7 +19,8 @@ export function prettifySource(source: string): string {
 
 function normalizeLine(line: string): string {
   return normalizeCommaSpacing(line.trim())
-    .replace(/^(const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*/, "$1 $2 = ")
+    .replace(/^(const|let|var)\s+([A-Za-z_$][\w$]*)\s*=(?!=)\s*/, "$1 $2 = ")
+    .replace(/^([A-Za-z_$][\w$]*)\s*=(?!=)\s*/, "$1 = ")
     .replace(/^return\s+/, "return ");
 }
 
@@ -59,11 +60,11 @@ function normalizeCommaSpacing(line: string): string {
 }
 
 function formatChainLine(line: string): string[] {
-  const assignment = line.match(/^((?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*)(.+)$/);
+  const assignment = line.match(/^((?:(?:const|let|var)\s+)?[A-Za-z_$][\w$]*\s*=\s*)(.+)$/);
   const returnStatement = line.match(/^(return\s+)(.+)$/);
   const prefix = assignment?.[1] ?? returnStatement?.[1] ?? "";
-  const expression = assignment?.[2] ?? returnStatement?.[2] ?? "";
-  if (!prefix || !expression) return [line];
+  const expression = assignment?.[2] ?? returnStatement?.[2] ?? line;
+  if (!expression) return [line];
   const parts = splitTopLevelChain(expression);
   if (parts.length < 2) return [line];
   return [`${prefix}${parts[0]}`, ...parts.slice(1).map((part) => `  .${part}`)];
@@ -114,5 +115,21 @@ function splitTopLevelChain(expression: string): string[] {
 function isChainDot(expression: string, index: number): boolean {
   const before = expression[index - 1] ?? "";
   const after = expression[index + 1] ?? "";
-  return /[)\]]/.test(before) && /[A-Za-z_$]/.test(after);
+  if (!/[A-Za-z_$]/.test(after)) return false;
+  if (/[)\]]/.test(before)) return true;
+  if (!/[$\w]/.test(before)) return false;
+
+  const receiver = identifierBefore(expression, index);
+  if (!receiver || receiver === "ease" || receiver === "Math") return false;
+
+  let cursor = index + 1;
+  while (/[$\w]/.test(expression[cursor] ?? "")) cursor += 1;
+  while (/\s/.test(expression[cursor] ?? "")) cursor += 1;
+  return expression[cursor] === "(";
+}
+
+function identifierBefore(expression: string, index: number): string {
+  let start = index;
+  while (start > 0 && /[$\w]/.test(expression[start - 1])) start -= 1;
+  return expression.slice(start, index);
 }

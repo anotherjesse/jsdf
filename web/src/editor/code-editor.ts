@@ -8,6 +8,7 @@ import {
 } from "./api-reference";
 import { apiSignatureHelpAt } from "./api-signature-help";
 import type { GraphSourceLink } from "./clean-source-patch";
+import { prettifySource } from "./prettify-source";
 import type { SourceDiagnostic } from "./source-diagnostics";
 import {
   SOURCE_COMPLETION_TRIGGER_CHARACTERS,
@@ -76,6 +77,18 @@ monaco.languages.registerCompletionItemProvider("javascript", {
         sortText,
       })),
     };
+  },
+});
+
+monaco.languages.registerDocumentFormattingEditProvider("javascript", {
+  provideDocumentFormattingEdits(model) {
+    const source = model.getValue();
+    const pretty = prettifySource(source);
+    if (pretty === source) return [];
+    return [{
+      range: model.getFullModelRange(),
+      text: pretty,
+    }];
   },
 });
 

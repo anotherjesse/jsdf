@@ -542,6 +542,17 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
   if (!pretty.includes("\n  .difference(box(0.5))")) {
     errors.push("prettify did not wrap difference chain");
   }
+  const expressionPretty = prettifySource("sphere(1).translate([1,2,3]).difference(box(0.5))");
+  if (!expressionPretty.startsWith("sphere(1)\n  .translate([1, 2, 3])")) {
+    errors.push(`prettify expression-only source rendered ${expressionPretty}`);
+  }
+  const assignmentPretty = prettifySource("let f=sphere(1)\nf=f.difference(box(0.5)).translate([0,1,0])\nf");
+  if (!assignmentPretty.includes("let f = sphere(1)")) {
+    errors.push(`prettify assignment declaration rendered ${assignmentPretty}`);
+  }
+  if (!assignmentPretty.includes("f = f\n  .difference(box(0.5))\n  .translate([0, 1, 0])")) {
+    errors.push(`prettify reassignment chain rendered ${assignmentPretty}`);
+  }
 
   const runtimeSource = "return sphere(1).diffe(sphere(2))";
   const runtimeDiagnostic = diagnosticForSource(runtimeSource, errors, "runtime typo");
