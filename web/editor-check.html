@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sdf editor check</title>
+    <link rel="stylesheet" href="./styles.css">
+    <style>
+      body {
+        min-height: 100vh;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(420px, 1fr) minmax(360px, 520px);
+        gap: 16px;
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      .check-panel {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+      }
+
+      #status {
+        color: var(--muted);
+      }
+
+      [data-status="pass"] #status {
+        color: var(--accent);
+      }
+
+      [data-status="fail"] #status {
+        color: var(--danger);
+      }
+
+      #codeEditor,
+      #graphInspector {
+        min-height: 620px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #15181d;
+      }
+
+      pre {
+        overflow: auto;
+        min-height: 180px;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="check-panel">
+        <h1>sdf editor check</h1>
+        <div id="status">Running editor integration verification...</div>
+        <div id="codeEditor" class="code-editor" aria-label="Code editor fixture"></div>
+        <pre id="report"></pre>
+      </section>
+      <section id="graphInspector" class="graph-inspector" aria-label="Graph inspector fixture"></section>
+    </main>
+    <script type="module" src="./src/editor-check.ts"></script>
+  </body>
+</html>
