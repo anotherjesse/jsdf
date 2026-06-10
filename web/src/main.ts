@@ -86,6 +86,8 @@ let hoveredNode: Node | null = null;
 let focusPreview: SoloPreview | null = null;
 let soloPreview: SoloPreview | null = null;
 let hiddenNodeIds = new Set<number>();
+let currentSourceLinks: readonly GraphSourceLink[] = [];
+let pendingHiddenNodeKeys: readonly string[] = [];
 let boundsEditor: BoundsEditor | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
@@ -237,6 +239,7 @@ function loadExample(id: string): void {
   hoveredNode = null;
   focusPreview = null;
   hiddenNodeIds = new Set();
+  pendingHiddenNodeKeys = [];
   codeEditor?.setValue(source);
   markSourceClean(source, activeSourceName);
   renderLoadDialog();
@@ -260,6 +263,7 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
   activeSourceVersionId = versionId;
   activeSourceName = document.name;
   if (preview) applyPreviewProfile(preview);
+  else pendingHiddenNodeKeys = [];
   documentNameInput.value = document.name;
   selectedNode = null;
   hoveredNode = null;
@@ -288,6 +292,7 @@ function restoreSourceDraft(): boolean {
   if (draft.preview) {
     applyPreviewProfile(draft.preview);
   } else {
+    pendingHiddenNodeKeys = [];
     activeBounds = boundsForExample(activeExampleId);
     boundsAreValid = true;
     boundsEditor?.setBounds(activeBounds);
@@ -355,6 +360,7 @@ function deleteSavedVersion(documentId: string, versionId: string): void {
 
 function scheduleSourceCompile(): void {
   window.clearTimeout(sourceCompileTimer);
+  pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
   updateSaveState();
   setEditorStatus("Editing...", "pending");
   codeEditor?.setSourceLinks([]);
@@ -370,16 +376,21 @@ function compileEditorSource(
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
     const { sdf } = evaluateSource(source);
+    const sourceLinks = findGraphSourceLinks(source, sdf);
+    const restoredHiddenNodeIds = hiddenNodeIdsFromKeys(pendingHiddenNodeKeys, sourceLinks, sdf);
+    pendingHiddenNodeKeys = [];
     soloPreview = null;
     focusPreview = null;
-    hiddenNodeIds = new Set();
+    hiddenNodeIds = new Set(restoredHiddenNodeIds);
     activeSdf = sdf;
-    graphInspector?.setSdf(sdf);
+    currentSourceLinks = sourceLinks;
+    graphInspector?.setSdf(sdf, restoredHiddenNodeIds);
     codeEditor?.setError(null);
-    refreshSourceLinks(source, sdf);
+    refreshSourceLinks(source, sdf, sourceLinks);
     clearGraphHistory();
     setEditorStatus(options.status, options.statusState ?? "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
+    updateSaveState();
     schedulePreview(0);
     return true;
   } catch (error) {
@@ -387,6 +398,7 @@ function compileEditorSource(
     codeEditor?.setError(message);
     codeEditor?.setSourceLinks([]);
     graphInspector?.setSourceLinks([]);
+    currentSourceLinks = [];
     setEditorStatus(message, "error");
     overlay.textContent = `Code error: ${message}`;
     return false;
@@ -525,6 +537,7 @@ function handleGraphVisibilityChange(hiddenIds: readonly number[]): void {
   hiddenNodeIds = new Set(hiddenIds);
   focusPreview = null;
   soloPreview = null;
+  updateSaveState();
   invalidateMeshForActiveSdf();
   schedulePreview(0);
 }
@@ -658,9 +671,13 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
   return true;
 }
 
-function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
+function refreshSourceLinks(
+  source = codeEditor?.getValue(),
+  sdf = activeSdf,
+  links = source && sdf ? findGraphSourceLinks(source, sdf) : [],
+): void {
   if (!codeEditor || !source || !sdf) return;
-  const links = findGraphSourceLinks(source, sdf);
+  currentSourceLinks = links;
   codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
   graphInspector?.setSourceLinks(links);
   codeEditor.setFocusedNode(sourceFocusNodeId());
@@ -1101,6 +1118,7 @@ function fitBoundsToCurrentSdf(): void {
 function applyPreviewProfile(profile: PreviewProfile): void {
   activeBounds = cloneBounds(profile.bounds);
   boundsAreValid = true;
+  pendingHiddenNodeKeys = profile.hiddenNodeKeys ?? [];
   boundsEditor?.setBounds(activeBounds);
   setRangeControl(stepsInput, stepsOutput, profile.raySteps);
   setRangeControl(gridInput, gridOutput, profile.meshGrid);
@@ -1124,12 +1142,48 @@ function handleBoundsInvalid(message: string): void {
 }
 
 function currentPreviewProfile(): PreviewProfile {
+  const hiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
   return {
     bounds: cloneBounds(activeBounds) as PreviewProfile["bounds"],
     meshGrid: Number(gridInput.value),
     raySteps: Number(stepsInput.value),
     meshAlgorithm,
+    ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
   };
+}
+
+function hiddenNodeKeysForCurrentGraph(): string[] {
+  if (hiddenNodeIds.size === 0) return [...pendingHiddenNodeKeys].sort();
+  const keys = [...hiddenNodeIds]
+    .map((nodeId) => sourceKeyForNodeId(nodeId))
+    .filter((key): key is string => key != null);
+  return [...new Set(keys)].sort();
+}
+
+function hiddenNodeIdsFromKeys(
+  keys: readonly string[],
+  links: readonly GraphSourceLink[],
+  sdf: SDF3,
+): number[] {
+  if (keys.length === 0) return [];
+  const wanted = new Set(keys);
+  const ids: number[] = [];
+  for (const link of links) {
+    if (link.nodeId === sdf.node.id || link.label !== "call") continue;
+    if (wanted.has(sourceKeyForLink(link))) ids.push(link.nodeId);
+  }
+  return [...new Set(ids)];
+}
+
+function sourceKeyForNodeId(nodeId: number): string | null {
+  const link = currentSourceLinks.find((candidate) => {
+    return candidate.nodeId === nodeId && candidate.label === "call" && candidate.end > candidate.start;
+  });
+  return link ? sourceKeyForLink(link) : null;
+}
+
+function sourceKeyForLink(link: GraphSourceLink): string {
+  return `${link.nodeKind}:${link.label}:${link.start}:${link.end}`;
 }
 
 function previewSnapshot(profile: PreviewProfile): string {

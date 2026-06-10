@@ -143,16 +143,18 @@ export class GraphInspector {
     root.append(this.toolbar, this.map, this.tree, this.params);
   }
 
-  setSdf(sdf: SDF3): void {
+  setSdf(sdf: SDF3, hiddenNodeIds: readonly number[] = []): void {
     this.sdf = sdf;
     this.selected = sdf.node;
     this.hoverSoloKey = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
     this.hiddenNodeIds.clear();
+    for (const nodeId of hiddenNodeIds) {
+      if (nodeId !== sdf.node.id) this.hiddenNodeIds.add(nodeId);
+    }
     this.render();
     this.options.onSelect(this.selected);
-    this.options.onVisibilityChange([]);
   }
 
   setSelected(node: Node | null): void {

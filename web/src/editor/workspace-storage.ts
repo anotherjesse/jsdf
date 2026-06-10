@@ -6,6 +6,7 @@ export interface SavedSourcePreview {
   meshGrid: number;
   raySteps: number;
   meshAlgorithm: SavedMeshAlgorithm;
+  hiddenNodeKeys?: string[];
 }
 
 export interface SavedSourceVersion {
@@ -231,7 +232,16 @@ function normalizePreview(value: unknown): SavedSourcePreview | null {
   if (meshGrid == null || raySteps == null) return null;
 
   const meshAlgorithm = candidate.meshAlgorithm === "tetra" ? "tetra" : "surface-net";
-  return { bounds, meshGrid, raySteps, meshAlgorithm };
+  const hiddenNodeKeys = Array.isArray(candidate.hiddenNodeKeys)
+    ? candidate.hiddenNodeKeys.filter((key): key is string => typeof key === "string" && key.length > 0)
+    : [];
+  return {
+    bounds,
+    meshGrid,
+    raySteps,
+    meshAlgorithm,
+    ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
+  };
 }
 
 function normalizeBounds(value: unknown): SavedBounds3 | null {
