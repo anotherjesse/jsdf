@@ -1,3 +1,4 @@
+import { apiCompletionEntries, apiReferenceForWord } from "../editor/api-reference";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
@@ -44,6 +45,12 @@ export interface EditorRuntimeVerification {
     preferredGap: string;
     farGap: string;
   };
+  apiHints: {
+    completions: number;
+    sphere: string;
+    translate: string;
+    fallback: string;
+  };
   selectionRestore: {
     previousNode: string;
     restoredNode: string;
@@ -77,6 +84,7 @@ export async function runEditorRuntimeVerification(
     selectedGraphParamsAfterPatch: 0,
   };
   const sourceLinkHitTest = verifySourceLinkHitTest(errors);
+  const apiHints = verifyApiHints(errors);
   const selectionRestore = verifySelectionRestore(errors);
   let selectedNode = "";
 
@@ -244,6 +252,7 @@ export async function runEditorRuntimeVerification(
       graphSourceHoverDecorations,
       sourceScrub,
       sourceLinkHitTest,
+      apiHints,
       selectionRestore,
       errors,
     };
@@ -255,6 +264,29 @@ export async function runEditorRuntimeVerification(
     const node = graphInspector.selectNodeById(link.nodeId);
     if (node) codeEditor?.markSelectedSourceLink(link);
   }
+}
+
+function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"] {
+  const completions = apiCompletionEntries();
+  const completionNames = new Set(completions.map((entry) => entry.name));
+  const sphere = apiReferenceForWord("sphere");
+  const translate = apiReferenceForWord("translate");
+  const asVec = apiReferenceForWord("asVec");
+
+  if (completions.length < 40) errors.push(`api hints only exposed ${completions.length} completions`);
+  if (!completionNames.has("sphere")) errors.push("api hints missing sphere completion");
+  if (!completionNames.has("translate")) errors.push("api hints missing translate method completion");
+  if (!completionNames.has("save")) errors.push("api hints missing save workflow completion");
+  if (!sphere?.signature.includes("sphere(")) errors.push("api hints missing sphere signature");
+  if (translate?.kind !== "method") errors.push(`api hints classified translate as ${translate?.kind ?? "missing"}`);
+  if (asVec?.kind !== "function") errors.push(`api hints fallback classified asVec as ${asVec?.kind ?? "missing"}`);
+
+  return {
+    completions: completions.length,
+    sphere: sphere?.signature ?? "",
+    translate: translate?.signature ?? "",
+    fallback: asVec?.signature ?? "",
+  };
 }
 
 function verifySourceLinkHitTest(errors: string[]): EditorRuntimeVerification["sourceLinkHitTest"] {

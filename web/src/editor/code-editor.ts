@@ -2,7 +2,7 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js";
 import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import * as api from "../api";
+import { apiCompletionEntries, apiReferenceForWord, type ApiReferenceEntry } from "./api-reference";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
@@ -29,14 +29,33 @@ monaco.languages.registerCompletionItemProvider("javascript", {
       endColumn: word.endColumn,
     };
     return {
-      suggestions: apiCompletionNames().map((name) => ({
-        label: name,
-        kind: /^[A-Z0-9_]+$/.test(name)
-          ? monaco.languages.CompletionItemKind.Variable
-          : monaco.languages.CompletionItemKind.Function,
-        insertText: name,
+      suggestions: apiCompletionEntries().map((entry) => ({
+        label: entry.name,
+        kind: completionKindForApiEntry(entry),
+        insertText: entry.name,
         range,
+        detail: entry.signature,
+        documentation: {
+          value: `${entry.description}\n\n_${entry.group}_`,
+        },
+        sortText: `${completionGroupRank(entry.group).toString().padStart(2, "0")}:${entry.name}`,
       })),
+    };
+  },
+});
+
+monaco.languages.registerHoverProvider("javascript", {
+  provideHover(model: monaco.editor.ITextModel, position: monaco.Position) {
+    const word = model.getWordAtPosition(position);
+    if (!word) return null;
+    const entry = apiReferenceForWord(word.word);
+    if (!entry) return null;
+    return {
+      range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
+      contents: [
+        { value: `\`\`\`ts\n${entry.signature}\n\`\`\`` },
+        { value: `${entry.description}\n\n_${entry.group}_` },
+      ],
     };
   },
 });
@@ -486,9 +505,28 @@ function nextEditSessionId(prefix: string): string {
   return `${prefix}:${id}`;
 }
 
-let completionNames: string[] | null = null;
+function completionKindForApiEntry(entry: ApiReferenceEntry): monaco.languages.CompletionItemKind {
+  if (entry.kind === "class") return monaco.languages.CompletionItemKind.Class;
+  if (entry.kind === "constant") return monaco.languages.CompletionItemKind.Constant;
+  if (entry.kind === "method") return monaco.languages.CompletionItemKind.Method;
+  if (entry.kind === "namespace") return monaco.languages.CompletionItemKind.Module;
+  return monaco.languages.CompletionItemKind.Function;
+}
 
-function apiCompletionNames(): string[] {
-  completionNames ??= Object.keys(api).sort();
-  return completionNames;
+function completionGroupRank(group: string): number {
+  const order = [
+    "3D Primitives",
+    "2D Primitives",
+    "CSG",
+    "Transforms",
+    "2D/3D",
+    "Workflow",
+    "Math",
+    "Easing",
+    "Classes",
+    "Namespaces",
+    "Helpers",
+  ];
+  const index = order.indexOf(group);
+  return index === -1 ? order.length : index;
 }
