@@ -8,6 +8,7 @@ import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";
 import {
   clearSourceDraft,
+  listSavedSourceDocuments,
   loadSavedSourceVersion,
   loadSourceDraft,
   saveSourceDraft,
@@ -65,6 +66,9 @@ export interface GraphRuntimeVerification {
     savedHiddenKeys: string[];
     draftHiddenKeys: string[];
     normalizedHiddenKeys: string[];
+    savedLayout: string;
+    draftLayout: string;
+    legacyLayout: string;
     draftCleared: boolean;
   };
   errors: string[];
@@ -547,15 +551,18 @@ function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["wor
     meshGrid: 128,
     raySteps: 192,
     meshAlgorithm: "surface-net",
+    layout: "quad",
     hiddenNodeKeys: [" sphere:call:6:15 ", "box:call:20:26", "sphere:call:6:15", "", " "],
   };
 
   const saved = saveSourceVersion("Visibility test", "return sphere(1)", null, preview, storage);
   const loaded = loadSavedSourceVersion(saved.id, null, storage);
   const savedHiddenKeys = loaded?.version.preview?.hiddenNodeKeys ?? [];
+  const savedLayout = loaded?.version.preview?.layout ?? "";
   if (!sameStrings(savedHiddenKeys, normalizedHiddenKeys)) {
     errors.push(`saved hidden keys normalized to ${savedHiddenKeys.join(",") || "nothing"}`);
   }
+  if (savedLayout !== "quad") errors.push(`saved layout normalized to ${savedLayout || "nothing"}`);
 
   saveSourceDraft({
     name: "Visibility draft",
@@ -565,10 +572,23 @@ function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["wor
     activeVersionId: loaded?.version.id ?? null,
     activeExampleId: "canonical",
   }, storage);
-  const draftHiddenKeys = loadSourceDraft(storage)?.preview?.hiddenNodeKeys ?? [];
+  const draftPreview = loadSourceDraft(storage)?.preview;
+  const draftHiddenKeys = draftPreview?.hiddenNodeKeys ?? [];
+  const draftLayout = draftPreview?.layout ?? "";
   if (!sameStrings(draftHiddenKeys, normalizedHiddenKeys)) {
     errors.push(`draft hidden keys normalized to ${draftHiddenKeys.join(",") || "nothing"}`);
   }
+  if (draftLayout !== "quad") errors.push(`draft layout normalized to ${draftLayout || "nothing"}`);
+
+  saveSourceVersion("Legacy layout", "return sphere(1)", null, {
+    bounds: [[-1, -1, -1], [1, 1, 1]],
+    meshGrid: 64,
+    raySteps: 176,
+    meshAlgorithm: "surface-net",
+  } as SavedSourcePreview, storage);
+  const legacy = listSavedSourceDocuments(storage).find((document) => document.name === "Legacy layout");
+  const legacyLayout = legacy ? loadSavedSourceVersion(legacy.id, null, storage)?.version.preview?.layout ?? "" : "";
+  if (legacyLayout !== "single") errors.push(`legacy layout normalized to ${legacyLayout || "nothing"}`);
 
   clearSourceDraft(storage);
   const draftCleared = loadSourceDraft(storage) == null;
@@ -578,6 +598,9 @@ function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["wor
     savedHiddenKeys,
     draftHiddenKeys,
     normalizedHiddenKeys,
+    savedLayout,
+    draftLayout,
+    legacyLayout,
     draftCleared,
   };
 }

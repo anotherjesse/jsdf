@@ -198,7 +198,7 @@ async function boot(): Promise<void> {
     const camera = new OrbitCamera(canvas, () => activeRenderer()?.redraw());
     rayRenderer = new WebGLRaymarchRenderer(canvas, camera);
     meshRenderer = new WebGLMeshRenderer(canvas, camera);
-    setPreviewLayout(previewLayout);
+    setPreviewLayout(previewLayout, { recordChange: false });
     graphInspector = new GraphInspector(graphInspectorElement, {
       onSelect: selectNode,
       onHover: handleGraphHover,
@@ -912,7 +912,7 @@ function activeRenderer(): { redraw(): void } | null {
   return viewMode === "shader" ? rayRenderer : meshRenderer;
 }
 
-function setPreviewLayout(layout: PreviewLayout): void {
+function setPreviewLayout(layout: PreviewLayout, options: { recordChange?: boolean } = {}): void {
   previewLayout = layout;
   layoutViewButton.setAttribute("aria-pressed", String(layout === "quad"));
   layoutViewButton.title = layout === "quad" ? "Use single view" : "Use 2x2 view";
@@ -920,6 +920,7 @@ function setPreviewLayout(layout: PreviewLayout): void {
   rayRenderer?.setLayout(layout);
   meshRenderer?.setLayout(layout);
   renderViewLabels();
+  if (options.recordChange !== false) updateSaveState();
   activeRenderer()?.redraw();
 }
 
@@ -1278,7 +1279,7 @@ function applyPreviewProfile(profile: PreviewProfile): void {
   setRangeControl(stepsInput, stepsOutput, profile.raySteps);
   setRangeControl(gridInput, gridOutput, profile.meshGrid);
   setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
-  updateSaveState();
+  setPreviewLayout(profile.layout ?? "single", { recordChange: false });
 }
 
 function handleBoundsChange(bounds: Bounds3): void {
@@ -1303,6 +1304,7 @@ function currentPreviewProfile(): PreviewProfile {
     meshGrid: Number(gridInput.value),
     raySteps: Number(stepsInput.value),
     meshAlgorithm,
+    layout: previewLayout,
     ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
   };
 }

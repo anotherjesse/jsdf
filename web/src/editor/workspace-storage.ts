@@ -1,4 +1,5 @@
 export type SavedMeshAlgorithm = "surface-net" | "tetra";
+export type SavedPreviewLayout = "single" | "quad";
 export type SavedBounds3 = [[number, number, number], [number, number, number]];
 
 export interface SavedSourcePreview {
@@ -6,6 +7,7 @@ export interface SavedSourcePreview {
   meshGrid: number;
   raySteps: number;
   meshAlgorithm: SavedMeshAlgorithm;
+  layout: SavedPreviewLayout;
   hiddenNodeKeys?: string[];
 }
 
@@ -232,12 +234,14 @@ function normalizePreview(value: unknown): SavedSourcePreview | null {
   if (meshGrid == null || raySteps == null) return null;
 
   const meshAlgorithm = candidate.meshAlgorithm === "tetra" ? "tetra" : "surface-net";
+  const layout = candidate.layout === "quad" ? "quad" : "single";
   const hiddenNodeKeys = normalizeHiddenNodeKeys(candidate.hiddenNodeKeys);
   return {
     bounds,
     meshGrid,
     raySteps,
     meshAlgorithm,
+    layout,
     ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
   };
 }
