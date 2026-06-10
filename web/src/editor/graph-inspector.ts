@@ -736,12 +736,17 @@ export class GraphInspector {
       this.clearHover();
       this.clearSolo();
     });
-    target.addEventListener("focusin", () => {
+    target.addEventListener("focusin", (event) => {
+      this.updateHover(path, event);
       if (sourceLink) this.options.onSourceHover(sourceLink);
     });
     target.addEventListener("focusout", (event) => {
       if (sourceLink && !containsEventTarget(target, relatedEventTarget(event))) {
         this.options.onSourceHover(null);
+      }
+      if (!containsEventTarget(target, relatedEventTarget(event))) {
+        this.clearHover();
+        this.clearSolo();
       }
     });
   }

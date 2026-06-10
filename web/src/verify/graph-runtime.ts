@@ -18,6 +18,7 @@ export interface GraphRuntimeVerification {
   selectedNode: string;
   editedRows: number;
   hiddenEvents: number[][];
+  hoverLabels: string[];
   sourceHoverLabels: string[];
   revealedSource: string;
   soloLabels: string[];
@@ -55,6 +56,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const hiddenEvents: number[][] = [];
+  const hoverLabels: string[] = [];
   const sourceHoverLabels: string[] = [];
   const soloLabels: string[] = [];
   let selectedNode = "";
@@ -65,7 +67,9 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     onSelect(node) {
       selectedNode = node ? `${node.kind} #${node.id}` : "";
     },
-    onHover() {},
+    onHover(node) {
+      hoverLabels.push(node ? `${node.kind} #${node.id}` : "");
+    },
     onEdit(edit) {
       lastEdit = edit;
     },
@@ -90,7 +94,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   if (!sphereNode) {
     errors.push("fixture has no sphere node");
   } else {
-    verifyInspector(root, inspector, sphereNode, links, errors);
+    verifyInspector(root, inspector, sphereNode, links, hoverLabels, errors);
   }
   verifyOrientationControl(errors);
 
@@ -108,6 +112,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     selectedNode,
     editedRows: root.querySelectorAll(".param-row.edited, .axis-control.edited").length,
     hiddenEvents,
+    hoverLabels,
     sourceHoverLabels,
     revealedSource,
     soloLabels,
@@ -124,6 +129,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     graphInspector: GraphInspector,
     sphere: Node,
     sourceLinks: GraphSourceLink[],
+    graphHoverLabels: string[],
     verifyErrors: string[],
   ): void {
     if (graphRoot.querySelectorAll(".graph-node").length < 4) {
@@ -139,20 +145,27 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       verifyErrors.push("could not select sphere node");
       return;
     }
+    const sphereHoverLabel = `${sphere.kind} #${sphere.id}`;
 
     const currentCrumb = graphRoot.querySelector<HTMLElement>(".param-breadcrumb button[aria-current='page']");
     if (!currentCrumb) {
       verifyErrors.push("selected sphere has no current breadcrumb crumb");
     } else {
       currentCrumb.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== sphereHoverLabel) {
+        verifyErrors.push(`breadcrumb hover focused ${graphHoverLabels.at(-1) || "nothing"}`);
+      }
       if (sourceHoverLabels.at(-1) !== "sphere:call") {
         verifyErrors.push(`breadcrumb hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
       }
       currentCrumb.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb leave did not clear graph hover");
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb leave did not clear source hover");
       currentCrumb.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== sphereHoverLabel) verifyErrors.push("breadcrumb focus did not inspect node");
       if (sourceHoverLabels.at(-1) !== "sphere:call") verifyErrors.push("breadcrumb focus did not emit source hover");
       currentCrumb.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb blur did not clear graph hover");
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("breadcrumb blur did not clear source hover");
     }
 
@@ -198,6 +211,12 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
         }
         mapNode.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
         if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("map node leave did not clear source hover");
+        mapNode.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        if (graphHoverLabels.at(-1) !== sphereHoverLabel) verifyErrors.push("map node focus did not inspect node");
+        if (sourceHoverLabels.at(-1) !== "sphere:call") verifyErrors.push("map node focus did not emit source hover");
+        mapNode.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+        if (graphHoverLabels.at(-1) !== "") verifyErrors.push("map node blur did not clear graph hover");
+        if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("map node blur did not clear source hover");
       }
     }
 
@@ -274,8 +293,10 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       nodeRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node leave did not clear source hover");
       nodeRow.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== sphereHoverLabel) verifyErrors.push("tree node focus did not inspect node");
       if (sourceHoverLabels.at(-1) !== "sphere:call") verifyErrors.push("tree node focus did not emit source hover");
       nodeRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      if (graphHoverLabels.at(-1) !== "") verifyErrors.push("tree node blur did not clear graph hover");
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node blur did not clear source hover");
     }
 
