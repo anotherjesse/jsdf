@@ -2,6 +2,7 @@ import type { Node, SDF3 } from "../core/nodes";
 import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
+import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
 export type ParamPath = Array<string | number>;
@@ -250,18 +251,21 @@ export class GraphInspector {
 
     const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
     const effectivelyHidden = directlyHidden || inheritedHidden;
+    const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
+    row.dataset.visibilityState = visibilityMeta.state;
     if (effectivelyHidden) row.classList.add("hidden-node-row");
     if (inheritedHidden && !directlyHidden) row.classList.add("inherited-hidden");
 
     const visibility = document.createElement("button");
     visibility.type = "button";
     visibility.className = "graph-visibility";
-    visibility.disabled = isRoot;
+    visibility.disabled = visibilityMeta.disabled;
+    visibility.dataset.state = visibilityMeta.state;
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
-    visibility.title = visibilityTitle(isRoot, directlyHidden, inheritedHidden);
+    visibility.title = visibilityMeta.title;
     visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
-    visibility.setAttribute("aria-pressed", String(!directlyHidden));
-    visibility.append(renderEyeIcon());
+    visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
+    visibility.append(renderEyeIcon(visibilityMeta.state));
     visibility.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleNodeVisibility(node);
@@ -650,15 +654,17 @@ export class GraphInspector {
 
     const path = this.pathToNode(node.id);
     const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
+    const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
     const visibility = document.createElement("button");
     visibility.type = "button";
     visibility.className = "graph-visibility param-visibility";
-    visibility.disabled = isRoot;
+    visibility.disabled = visibilityMeta.disabled;
+    visibility.dataset.state = visibilityMeta.state;
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
-    visibility.title = visibilityTitle(isRoot, directlyHidden, inheritedHidden);
+    visibility.title = visibilityMeta.title;
     visibility.setAttribute("aria-label", `${visibility.title} selected ${node.kind} #${node.id}`);
-    visibility.setAttribute("aria-pressed", String(!directlyHidden));
-    visibility.append(renderEyeIcon());
+    visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
+    visibility.append(renderEyeIcon(visibilityMeta.state));
     visibility.addEventListener("click", () => this.toggleNodeVisibility(node));
     actions.append(visibility);
 
@@ -1136,18 +1142,4 @@ function attachScrubber(
 
 function mapLabel(kind: string): string {
   return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
-}
-
-function visibilityTitle(isRoot: boolean, directlyHidden: boolean, inheritedHidden: boolean): string {
-  if (isRoot) return "Root stays visible";
-  if (directlyHidden) return "Show node";
-  if (inheritedHidden) return "Hide node; parent is already hidden";
-  return "Hide node";
-}
-
-function renderEyeIcon(): HTMLElement {
-  const icon = document.createElement("span");
-  icon.className = "eye-icon";
-  icon.setAttribute("aria-hidden", "true");
-  return icon;
 }

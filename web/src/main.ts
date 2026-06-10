@@ -10,11 +10,14 @@ import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
 import { buildVisibleSdf } from "./editor/visible-sdf";
 import {
+  clearSourceDraft,
   deleteSavedSourceDocument,
   deleteSavedSourceVersion,
   latestSourceVersion,
   listSavedSourceDocuments,
+  loadSourceDraft,
   loadSavedSourceVersion,
+  saveSourceDraft,
   saveSourceVersion,
   type SavedSourceDocument,
   type SavedSourcePreview,
@@ -107,6 +110,7 @@ let cleanSourceSnapshot = sourceForExample(activeExampleId);
 let cleanNameSnapshot = activeSourceName;
 let cleanPreviewSnapshot = "";
 let hasUnsavedChanges = false;
+let draftPersistenceEnabled = false;
 const graphHistory = new GraphEditHistory();
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
@@ -207,7 +211,9 @@ async function boot(): Promise<void> {
       handleSourceLinkValueChange,
       handleSourceLinkHover,
     );
-    refreshSourceLinks();
+    if (!restoreSourceDraft()) refreshSourceLinks();
+    draftPersistenceEnabled = true;
+    updateSaveState();
   } catch (error) {
     gpuBadge.textContent = "Preview error";
     gpuBadge.classList.add("warn");
@@ -264,6 +270,36 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
   renderLoadDialog();
   sourceDialog.close();
   compileEditorSource({ status: "Ready", statusState: "idle" });
+}
+
+function restoreSourceDraft(): boolean {
+  if (!codeEditor) return false;
+  const draft = loadSourceDraft();
+  if (!draft) return false;
+
+  window.clearTimeout(sourceCompileTimer);
+  if (examples.some((example) => example.id === draft.activeExampleId)) {
+    activeExampleId = draft.activeExampleId;
+  }
+  activeDocumentId = draft.activeDocumentId;
+  activeSourceVersionId = draft.activeVersionId;
+  activeSourceName = draft.name;
+  documentNameInput.value = draft.name;
+  if (draft.preview) {
+    applyPreviewProfile(draft.preview);
+  } else {
+    activeBounds = boundsForExample(activeExampleId);
+    boundsAreValid = true;
+    boundsEditor?.setBounds(activeBounds);
+  }
+  selectedNode = null;
+  hoveredNode = null;
+  focusPreview = null;
+  hiddenNodeIds = new Set();
+  codeEditor.setValue(draft.source);
+  renderLoadDialog();
+  compileEditorSource({ status: "Recovered draft", statusState: "pending" });
+  return true;
 }
 
 function saveCurrentSource(): void {
@@ -1014,6 +1050,27 @@ function updateSaveState(): void {
   hasUnsavedChanges = nextDirty;
   saveSourceButton.disabled = !nextDirty || !boundsAreValid;
   dirtyIndicator.hidden = !nextDirty;
+  syncSourceDraft();
+}
+
+function syncSourceDraft(): void {
+  if (!draftPersistenceEnabled) return;
+  try {
+    if (!hasUnsavedChanges) {
+      clearSourceDraft();
+      return;
+    }
+    saveSourceDraft({
+      name: currentDocumentName(),
+      source: currentSourceValue(),
+      preview: currentPreviewProfile(),
+      activeDocumentId,
+      activeVersionId: activeSourceVersionId,
+      activeExampleId,
+    });
+  } catch {
+    // Draft persistence is a fallback; the visible save/error flow stays authoritative.
+  }
 }
 
 function fitBoundsToCurrentSdf(): void {

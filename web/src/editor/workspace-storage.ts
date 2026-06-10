@@ -22,11 +22,22 @@ export interface SavedSourceDocument {
   versions: SavedSourceVersion[];
 }
 
+export interface SavedSourceDraft {
+  updatedAt: string;
+  name: string;
+  source: string;
+  preview?: SavedSourcePreview;
+  activeDocumentId: string | null;
+  activeVersionId: string | null;
+  activeExampleId: string;
+}
+
 interface SavedWorkspaceState {
   documents: SavedSourceDocument[];
 }
 
 const STORAGE_KEY = "sdf-browser-workspace-v1";
+const DRAFT_STORAGE_KEY = "sdf-browser-draft-v1";
 
 export function listSavedSourceDocuments(storage = globalThis.localStorage): SavedSourceDocument[] {
   return readState(storage).documents
@@ -117,6 +128,32 @@ export function deleteSavedSourceVersion(
   return normalizeDocument(document);
 }
 
+export function loadSourceDraft(storage = globalThis.localStorage): SavedSourceDraft | null {
+  try {
+    const raw = storage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizeDraft(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function saveSourceDraft(
+  draft: Omit<SavedSourceDraft, "updatedAt">,
+  storage = globalThis.localStorage,
+): SavedSourceDraft {
+  const next: SavedSourceDraft = {
+    ...draft,
+    updatedAt: new Date().toISOString(),
+  };
+  storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
+export function clearSourceDraft(storage = globalThis.localStorage): void {
+  storage.removeItem(DRAFT_STORAGE_KEY);
+}
+
 function readState(storage: Storage): SavedWorkspaceState {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -133,6 +170,24 @@ function writeState(storage: Storage, state: SavedWorkspaceState): void {
   storage.setItem(STORAGE_KEY, JSON.stringify({
     documents: state.documents.map(normalizeDocument).filter(Boolean),
   }));
+}
+
+function normalizeDraft(value: unknown): SavedSourceDraft | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<SavedSourceDraft>;
+  if (typeof candidate.updatedAt !== "string" || typeof candidate.name !== "string" || typeof candidate.source !== "string") {
+    return null;
+  }
+  const preview = normalizePreview(candidate.preview);
+  return {
+    updatedAt: candidate.updatedAt,
+    name: candidate.name,
+    source: candidate.source,
+    ...(preview ? { preview } : {}),
+    activeDocumentId: typeof candidate.activeDocumentId === "string" ? candidate.activeDocumentId : null,
+    activeVersionId: typeof candidate.activeVersionId === "string" ? candidate.activeVersionId : null,
+    activeExampleId: typeof candidate.activeExampleId === "string" ? candidate.activeExampleId : "",
+  };
 }
 
 function normalizeDocument(value: unknown): SavedSourceDocument | null {
