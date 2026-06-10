@@ -1,4 +1,5 @@
 import { apiCompletionEntriesForScope, apiReferenceForWord } from "../editor/api-reference";
+import { apiSignatureHelpAt } from "../editor/api-signature-help";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
@@ -49,6 +50,7 @@ export interface EditorRuntimeVerification {
     globalCompletions: number;
     methodCompletions: number;
     easeCompletions: number;
+    signatureChecks: number;
     sphere: string;
     translate: string;
     easing: string;
@@ -292,15 +294,51 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (!sphere?.signature.includes("sphere(")) errors.push("api hints missing sphere signature");
   if (translate?.kind !== "method") errors.push(`api hints classified translate as ${translate?.kind ?? "missing"}`);
   if (!linear?.signature.includes("ease.linear")) errors.push("api hints missing ease.linear signature");
+  const signatureChecks = verifyApiSignatureHelp(errors);
 
   return {
     globalCompletions: globalCompletions.length,
     methodCompletions: methodCompletions.length,
     easeCompletions: easeCompletions.length,
+    signatureChecks,
     sphere: sphere?.signature ?? "",
     translate: translate?.signature ?? "",
     easing: linear?.signature ?? "",
   };
+}
+
+function verifyApiSignatureHelp(errors: string[]): number {
+  const checks: Array<{ line: string; signature: string; active: number; params: number }> = [
+    { line: "return sphere(1, ^)", signature: "sphere(", active: 1, params: 2 },
+    { line: "return sphere(1).translate([0, ^])", signature: "shape.translate(", active: 0, params: 1 },
+    { line: "return left.union(sphere(1), ^)", signature: "union(", active: 1, params: 3 },
+    { line: "return ease.in_out_sine(^)", signature: "ease.in_out_sine(", active: 0, params: 1 },
+  ];
+
+  for (const check of checks) {
+    const column = check.line.indexOf("^") + 1;
+    const line = check.line.replace("^", "");
+    const help = apiSignatureHelpAt(line, column);
+    if (!help) {
+      errors.push(`signature help missing for ${line}`);
+      continue;
+    }
+    if (!help.entry.signature.includes(check.signature)) {
+      errors.push(`signature help for ${line} showed ${help.entry.signature}`);
+    }
+    if (help.activeParameter !== check.active) {
+      errors.push(`signature help for ${line} active param ${help.activeParameter}`);
+    }
+    if (help.parameters.length !== check.params) {
+      errors.push(`signature help for ${line} parameter count ${help.parameters.length}`);
+    }
+  }
+
+  const noHelp = apiSignatureHelpAt("return left + right", "return left + right".length + 1);
+  if (noHelp) errors.push(`signature help appeared outside a call: ${noHelp.entry.name}`);
+  const bareEase = apiSignatureHelpAt("return linear(", "return linear(".length + 1);
+  if (bareEase) errors.push(`signature help treated bare easing as ${bareEase.entry.name}`);
+  return checks.length;
 }
 
 function verifySourceLinkHitTest(errors: string[]): EditorRuntimeVerification["sourceLinkHitTest"] {

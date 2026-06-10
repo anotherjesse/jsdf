@@ -7,6 +7,7 @@ import {
   apiReferenceForWord,
   type ApiReferenceEntry,
 } from "./api-reference";
+import { apiSignatureHelpAt } from "./api-signature-help";
 import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
@@ -56,12 +57,38 @@ monaco.languages.registerHoverProvider("javascript", {
     if (!word) return null;
     const entry = apiReferenceForWord(word.word);
     if (!entry) return null;
+    if (entry.completionScopes.includes("ease") && wordQualifierBefore(model, position, word) !== "ease") {
+      return null;
+    }
     return {
       range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
       contents: [
         { value: `\`\`\`ts\n${entry.signature}\n\`\`\`` },
         { value: `${entry.description}\n\n_${entry.group}_` },
       ],
+    };
+  },
+});
+
+monaco.languages.registerSignatureHelpProvider("javascript", {
+  signatureHelpTriggerCharacters: ["(", ","],
+  signatureHelpRetriggerCharacters: [","],
+  provideSignatureHelp(model: monaco.editor.ITextModel, position: monaco.Position) {
+    const help = apiSignatureHelpAt(model.getLineContent(position.lineNumber), position.column);
+    if (!help) return null;
+    return {
+      value: {
+        activeSignature: 0,
+        activeParameter: help.activeParameter,
+        signatures: [{
+          label: help.entry.signature,
+          documentation: {
+            value: `${help.entry.description}\n\n_${help.entry.group}_`,
+          },
+          parameters: help.parameters.map((label) => ({ label })),
+        }],
+      },
+      dispose() {},
     };
   },
 });
@@ -528,6 +555,22 @@ function completionScopeAtPosition(
   if (!beforeWord.endsWith(".")) return "global";
   const beforeDot = beforeWord.slice(0, -1).trimEnd();
   return /\bease$/.test(beforeDot) ? "ease" : "method";
+}
+
+function wordQualifierBefore(
+  model: monaco.editor.ITextModel,
+  position: monaco.Position,
+  word: monaco.editor.IWordAtPosition,
+): string | null {
+  const beforeWord = model.getLineContent(position.lineNumber).slice(0, word.startColumn - 1);
+  let dotIndex = beforeWord.length;
+  while (dotIndex > 0 && /\s/.test(beforeWord[dotIndex - 1])) dotIndex -= 1;
+  if (beforeWord[dotIndex - 1] !== ".") return null;
+  let end = dotIndex - 1;
+  while (end > 0 && /\s/.test(beforeWord[end - 1])) end -= 1;
+  let start = end;
+  while (start > 0 && /[$\w]/.test(beforeWord[start - 1])) start -= 1;
+  return start < end ? beforeWord.slice(start, end) : null;
 }
 
 function completionGroupRank(group: string): number {
