@@ -62,6 +62,9 @@ export interface GraphRuntimeVerification {
     emptyMessages: string[];
     enterLoadedExample: string;
     enterLoadedSaved: string;
+    keyboardExampleFocus: string;
+    keyboardSavedFirstFocus: string;
+    keyboardSavedNextFocus: string;
     loadedExample: string;
     loadedSaved: string;
   };
@@ -539,6 +542,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
 
 function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceDialog"] {
   const root = document.createElement("div");
+  document.body.append(root);
   const savedDocuments: SavedSourceDocument[] = [{
     id: "saved-vessel",
     name: "Saved Vessel",
@@ -571,6 +575,7 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   const search = root.querySelector<HTMLInputElement>(".source-search-input");
   if (!search) {
     errors.push("source dialog search input did not render");
+    root.remove();
     return {
       initialCards: 0,
       chainMatches: [],
@@ -578,6 +583,9 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
       emptyMessages: [],
       enterLoadedExample: "",
       enterLoadedSaved: "",
+      keyboardExampleFocus: "",
+      keyboardSavedFirstFocus: "",
+      keyboardSavedNextFocus: "",
       loadedExample,
       loadedSaved,
     };
@@ -593,6 +601,12 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   const chainMatches = sourceCardLabels(root);
   if (!chainMatches.includes("Chain links")) errors.push("source dialog search did not find Chain links");
   if (chainMatches.includes("CSG example")) errors.push("source dialog search left unrelated example visible");
+  search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+  const keyboardExampleFocus = focusedSourceButtonTarget(root);
+  if (keyboardExampleFocus !== "source-card:Chain links") {
+    errors.push(`source dialog ArrowDown focused ${keyboardExampleFocus || "nothing"}`);
+  }
+  search.focus();
   search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   const enterLoadedExample = loadedExample;
   if (enterLoadedExample !== "chain") {
@@ -606,6 +620,22 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   search.dispatchEvent(new Event("input", { bubbles: true }));
   const savedMatches = sourceCardLabels(root);
   if (!savedMatches.includes("Saved Vessel")) errors.push("source dialog search did not find saved shape");
+  search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+  const keyboardSavedFirstFocus = focusedSourceButtonTarget(root);
+  if (keyboardSavedFirstFocus !== "source-card:Saved Vessel") {
+    errors.push(`source dialog saved ArrowDown focused ${keyboardSavedFirstFocus || "nothing"}`);
+  }
+  const savedVersions = root.querySelector<HTMLDetailsElement>(".source-versions");
+  if (savedVersions) savedVersions.open = true;
+  const focusedSavedButton = document.activeElement;
+  if (focusedSavedButton instanceof HTMLButtonElement) {
+    focusedSavedButton.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+  }
+  const keyboardSavedNextFocus = focusedSourceButtonTarget(root);
+  if (keyboardSavedNextFocus !== "source-version-button:Saved Vessel") {
+    errors.push(`source dialog saved next focus was ${keyboardSavedNextFocus || "nothing"}`);
+  }
+  search.focus();
   search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   const enterLoadedSaved = loadedSaved;
   if (enterLoadedSaved !== "saved-vessel:version-latest") {
@@ -623,6 +653,7 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   if (!emptyMessages.includes("No matching examples")) errors.push("source dialog missing no matching examples state");
   if (!emptyMessages.includes("No saved shapes match")) errors.push("source dialog missing no saved matches state");
 
+  root.remove();
   return {
     initialCards,
     chainMatches,
@@ -630,6 +661,9 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
     emptyMessages,
     enterLoadedExample,
     enterLoadedSaved,
+    keyboardExampleFocus,
+    keyboardSavedFirstFocus,
+    keyboardSavedNextFocus,
     loadedExample,
     loadedSaved,
   };
@@ -828,6 +862,13 @@ function verifyOrientationControl(errors: string[]): void {
 function sourceCardLabels(root: HTMLElement): string[] {
   return [...root.querySelectorAll<HTMLElement>(".source-card strong, .source-version-button strong")]
     .map((item) => item.textContent ?? "");
+}
+
+function focusedSourceButtonTarget(root: HTMLElement): string {
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLButtonElement) || !root.contains(focused)) return "";
+  const label = focused.querySelector("strong")?.textContent ?? "";
+  return `${focused.className}:${label}`;
 }
 
 function clickSourceCard(root: HTMLElement, label: string): void {

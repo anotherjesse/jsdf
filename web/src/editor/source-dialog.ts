@@ -16,6 +16,8 @@ export interface SourceDialogActions {
   deleteVersion(documentId: string, versionId: string): void;
 }
 
+const LOAD_BUTTON_SELECTOR = ".source-card, .source-version-button";
+
 export function renderSourceDialog(
   root: HTMLElement,
   state: SourceDialogState,
@@ -36,6 +38,36 @@ export function renderSourceDialog(
   results.className = "source-dialog-results";
   let firstLoadResult: (() => void) | null = null;
 
+  const loadButtons = (): HTMLButtonElement[] => {
+    return [...results.querySelectorAll<HTMLButtonElement>(LOAD_BUTTON_SELECTOR)]
+      .filter((button) => !button.closest("details:not([open])"));
+  };
+
+  const focusLoadButton = (index: number): boolean => {
+    const buttons = loadButtons();
+    const button = buttons[index];
+    if (!button) return false;
+    button.focus();
+    return true;
+  };
+
+  const focusAdjacentLoadButton = (direction: -1 | 1): boolean => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLButtonElement)) return false;
+    const buttons = loadButtons();
+    const index = buttons.indexOf(active);
+    if (index < 0) return false;
+    return focusLoadButton(clampIndex(index + direction, buttons.length));
+  };
+
+  const handleLoadNavigation = (event: KeyboardEvent): boolean => {
+    if (event.key === "ArrowDown") return focusAdjacentLoadButton(1);
+    if (event.key === "ArrowUp") return focusAdjacentLoadButton(-1);
+    if (event.key === "Home") return focusLoadButton(0);
+    if (event.key === "End") return focusLoadButton(loadButtons().length - 1);
+    return false;
+  };
+
   const renderResults = () => {
     const query = normalizeSearch(search.value);
     const filteredState = {
@@ -52,9 +84,22 @@ export function renderSourceDialog(
 
   search.addEventListener("input", renderResults);
   search.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing || !firstLoadResult) return;
+    if (event.key === "Enter") {
+      if (event.isComposing || !firstLoadResult) return;
+      event.preventDefault();
+      firstLoadResult();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const index = event.key === "ArrowDown" ? 0 : loadButtons().length - 1;
+      if (!focusLoadButton(index)) return;
+      event.preventDefault();
+    }
+  });
+  results.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof HTMLButtonElement) || !event.target.matches(LOAD_BUTTON_SELECTOR)) return;
+    if (!handleLoadNavigation(event)) return;
     event.preventDefault();
-    firstLoadResult();
   });
   renderResults();
   root.replaceChildren(searchBar, results);
@@ -279,4 +324,9 @@ function matchesQuery(value: string, query: string): boolean {
 
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase();
+}
+
+function clampIndex(index: number, length: number): number {
+  if (length <= 0) return -1;
+  return Math.min(length - 1, Math.max(0, index));
 }
