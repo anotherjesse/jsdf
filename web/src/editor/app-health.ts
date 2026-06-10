@@ -3,6 +3,7 @@ export interface AppHealthDiagnostics {
   editorReady: boolean;
   graphReady: boolean;
   activeSdfReady: boolean;
+  healthCheckMode: boolean;
   dirty: boolean;
   status: string;
   viewMode: string;

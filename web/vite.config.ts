@@ -7,6 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         apiCheck: resolve(__dirname, "api-check.html"),
+        appHealthCheck: resolve(__dirname, "app-health-check.html"),
         editorCheck: resolve(__dirname, "editor-check.html"),
         graphCheck: resolve(__dirname, "graph-check.html"),
         main: resolve(__dirname, "index.html"),

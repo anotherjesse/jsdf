@@ -29,6 +29,8 @@ Open `http://127.0.0.1:4173/`.
 
 Open `http://127.0.0.1:4173/api-check.html` to run the browser API verifier. It exercises the completeness fixtures through CPU evaluation plus GLSL and WGSL code generation, and verifies the browser workflow helpers for mesh generation, STL Blob export, and SDF slice rendering.
 
+Open `http://127.0.0.1:4173/app-health-check.html` to run the app health verifier. It loads the editor app in a same-origin frame and checks the non-destructive `window.__sdfAppHealth()` diagnostics for editor readiness, toolbar wiring, source links, preview mode, and Monaco decoration warnings.
+
 Open `http://127.0.0.1:4173/mesh-check.html` to run the browser mesh verifier. It builds surface-net and tetra meshes through the worker path and validates binary STL output.
 
 Open `http://127.0.0.1:4173/preview-check.html` to run the browser preview verifier. It renders both the GLSL raymarch preview and the WebGL mesh preview, then validates nonblank canvas diagnostics.

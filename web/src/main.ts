@@ -133,6 +133,7 @@ let hasUnsavedChanges = false;
 let draftPersistenceEnabled = false;
 const graphHistory = new GraphEditHistory();
 const appHealthMonitor = installAppHealthMonitor();
+const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
@@ -239,8 +240,8 @@ async function boot(): Promise<void> {
       handleSourceLinkHover,
       handleSourceLinkCursor,
     );
-    if (!restoreSourceDraft()) refreshSourceLinks();
-    draftPersistenceEnabled = true;
+    if (healthCheckMode || !restoreSourceDraft()) refreshSourceLinks();
+    draftPersistenceEnabled = !healthCheckMode;
     updateSaveState();
   } catch (error) {
     gpuBadge.textContent = "Preview error";
@@ -1249,6 +1250,7 @@ function appHealthDiagnostics() {
     editorReady: Boolean(codeEditor),
     graphReady: Boolean(graphInspector),
     activeSdfReady: Boolean(activeSdf),
+    healthCheckMode,
     dirty: hasUnsavedChanges,
     status: editorStatus.textContent ?? "",
     viewMode,
