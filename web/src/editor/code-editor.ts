@@ -14,6 +14,8 @@ interface MonacoEnvironment {
   getWorker: () => new editorWorker(),
 };
 
+const SOURCE_HOVER_CLEAR_GRACE_MS = 140;
+
 monaco.languages.registerCompletionItemProvider("javascript", {
   triggerCharacters: ["."],
   provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
@@ -124,22 +126,31 @@ export function createCodeEditor(
     onSourceLinkHover(link, { shiftKey });
   };
 
+  const clearHoverTimer = () => {
+    if (!hoverClearTimer) return;
+    window.clearTimeout(hoverClearTimer);
+    hoverClearTimer = 0;
+  };
+
+  const scheduleHoverClear = () => {
+    if (hoverClearTimer) return;
+    hoverClearTimer = window.setTimeout(() => {
+      hoverClearTimer = 0;
+      commitHover(null, false);
+    }, SOURCE_HOVER_CLEAR_GRACE_MS);
+  };
+
   const updateHover = (
     link: GraphSourceLink | null,
     shiftKey: boolean,
     options: { immediateClear?: boolean } = {},
   ) => {
-    window.clearTimeout(hoverClearTimer);
     if (!link && !options.immediateClear) {
-      if (hoveredLink) commitHover(hoveredLink, shiftKey || shiftDown);
+      scheduleHoverClear();
       return;
     }
+    clearHoverTimer();
     commitHover(link, shiftKey);
-  };
-
-  const scheduleHoverClear = () => {
-    window.clearTimeout(hoverClearTimer);
-    hoverClearTimer = window.setTimeout(() => commitHover(null, false), 2500);
   };
 
   const linkAtPosition = (position: monaco.Position | null | undefined): GraphSourceLink | null => {
@@ -382,7 +393,7 @@ export function createCodeEditor(
     },
     dispose() {
       endScrub();
-      window.clearTimeout(hoverClearTimer);
+      clearHoverTimer();
       updateHover(null, false, { immediateClear: true });
       window.removeEventListener("keydown", keyDownListener);
       window.removeEventListener("keyup", keyUpListener);
