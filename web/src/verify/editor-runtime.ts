@@ -1,7 +1,9 @@
-import { findGraphSourceLinks, type GraphSourceLink } from "../editor/clean-source-patch";
+import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
+import { readSourceLinkNumber, scrubSourceLinkValue } from "../editor/source-link-scrub";
+import type { SDF3 } from "../core/nodes";
 
 const fixtureSource = `
 const left = sphere(1).translate([-0.45, 0, 0])
@@ -18,6 +20,12 @@ export interface EditorRuntimeVerification {
   selectedGraphParams: number;
   selectedGraphTitles: number;
   graphSelections: string[];
+  sourceScrub: {
+    startValue: number | null;
+    nextValue: number | null;
+    graphValue: unknown;
+    patchedSource: string;
+  };
   errors: string[];
 }
 
@@ -28,6 +36,12 @@ export async function runEditorRuntimeVerification(
   const errors: string[] = [];
   const cursorEvents: string[] = [];
   const graphSelections: string[] = [];
+  const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
+    startValue: null,
+    nextValue: null,
+    graphValue: null,
+    patchedSource: "",
+  };
   let selectedNode = "";
 
   const { sdf } = evaluateSource(fixtureSource);
@@ -77,6 +91,7 @@ export async function runEditorRuntimeVerification(
       if (graphRoot.querySelectorAll(".param-row.source-selected").length !== 1) {
         errors.push("radius cursor did not mark exactly one graph param row selected");
       }
+      verifySourceScrubPath(radiusLink, sourceScrub, graphInspector, sdf, errors);
     }
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
@@ -111,6 +126,7 @@ export async function runEditorRuntimeVerification(
       selectedGraphParams,
       selectedGraphTitles,
       graphSelections,
+      sourceScrub,
       errors,
     };
   } finally {
@@ -120,6 +136,54 @@ export async function runEditorRuntimeVerification(
   function selectFromSource(link: GraphSourceLink): void {
     const node = graphInspector.selectNodeById(link.nodeId);
     if (node) codeEditor.markSelectedSourceLink(link);
+  }
+}
+
+function verifySourceScrubPath(
+  link: GraphSourceLink,
+  state: EditorRuntimeVerification["sourceScrub"],
+  graphInspector: GraphInspector,
+  sdf: SDF3,
+  errors: string[],
+): void {
+  const startValue = readSourceLinkNumber(fixtureSource, link);
+  state.startValue = startValue;
+  if (startValue == null) {
+    errors.push("source scrub could not read linked number");
+    return;
+  }
+
+  const nextValue = scrubSourceLinkValue(link, startValue, 8, { altKey: false, shiftKey: false });
+  state.nextValue = nextValue;
+  if (Math.abs(nextValue - 1.2) > 0.000001) {
+    errors.push(`source scrub produced ${nextValue}`);
+  }
+
+  const previousValue = graphInspector.getParamValue(link.nodeId, link.path);
+  if (typeof previousValue !== "number") {
+    errors.push(`source scrub graph value was ${String(previousValue)}`);
+    return;
+  }
+
+  const node = graphInspector.setParamValue(link.nodeId, link.path, nextValue);
+  state.graphValue = graphInspector.getParamValue(link.nodeId, link.path);
+  if (!node) {
+    errors.push("source scrub could not mutate graph node");
+    return;
+  }
+  if (state.graphValue !== nextValue) {
+    errors.push(`source scrub graph value became ${String(state.graphValue)}`);
+  }
+
+  const patchedSource = patchGraphEditSource(fixtureSource, sdf, {
+    nodeId: link.nodeId,
+    nodeKind: link.nodeKind,
+    path: link.path,
+    label: link.label,
+  }, nextValue);
+  state.patchedSource = patchedSource ?? "";
+  if (!patchedSource?.includes("sphere(1.2)")) {
+    errors.push("source scrub did not patch source literal");
   }
 }
 

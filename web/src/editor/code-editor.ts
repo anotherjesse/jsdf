@@ -78,6 +78,10 @@ export function createCodeEditor(
     renderLineHighlight: "line",
     padding: { top: 10, bottom: 10 },
   });
+  const scrubReadout = document.createElement("div");
+  scrubReadout.className = "source-scrub-readout";
+  scrubReadout.setAttribute("aria-hidden", "true");
+  editor.getDomNode()?.append(scrubReadout);
 
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
@@ -101,6 +105,7 @@ export function createCodeEditor(
     if (!activeScrub) return;
     activeScrub = null;
     editor.getDomNode()?.classList.remove("source-scrubbing");
+    scrubReadout.removeAttribute("data-visible");
     window.removeEventListener("mousemove", scrubMove);
     window.removeEventListener("mouseup", endScrub);
   };
@@ -115,6 +120,7 @@ export function createCodeEditor(
     const nextValue = scrubSourceLinkValue(activeScrub.link, activeScrub.startValue, delta, event);
     if (nextValue === activeScrub.lastValue) return;
     activeScrub.lastValue = nextValue;
+    updateScrubReadout(activeScrub.link, nextValue, event);
     onSourceLinkValueChange(activeScrub.link, nextValue, { editSessionId: activeScrub.editSessionId });
   };
 
@@ -138,6 +144,15 @@ export function createCodeEditor(
       hoverClearTimer = 0;
       commitHover(null, false);
     }, SOURCE_HOVER_CLEAR_GRACE_MS);
+  };
+
+  const updateScrubReadout = (link: GraphSourceLink, value: number, event: MouseEvent) => {
+    const editorBounds = editor.getDomNode()?.getBoundingClientRect();
+    if (!editorBounds) return;
+    scrubReadout.textContent = `${link.label} ${formatScrubReadoutValue(value)}`;
+    scrubReadout.style.left = `${event.clientX - editorBounds.left + 12}px`;
+    scrubReadout.style.top = `${event.clientY - editorBounds.top - 28}px`;
+    scrubReadout.dataset.visible = "true";
   };
 
   const updateHover = (
@@ -329,7 +344,7 @@ export function createCodeEditor(
             options: {
               inlineClassName: `source-graph-link ${isNumber ? "source-number-link" : "source-node-link"}`,
               hoverMessage: {
-                value: `Graph: ${link.nodeKind} #${link.nodeId} ${link.label}`,
+                value: sourceLinkHoverMessage(link, isNumber),
               },
             },
           };
@@ -426,6 +441,17 @@ interface ActiveSourceScrub {
 
 function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
+}
+
+function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
+  const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
+  return isNumber
+    ? `Graph: ${target}. Drag sideways to tweak; Shift or Alt slows it down.`
+    : `Graph: ${target}. Click to inspect it in the graph.`;
+}
+
+function formatScrubReadoutValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : Number(value.toFixed(4)).toString();
 }
 
 let nextSourceEditSession = 1;
