@@ -200,6 +200,14 @@ export class GraphInspector {
     return node;
   }
 
+  setFocusHoveredNodeById(id: number | null): void {
+    const nextId = id != null && this.sdf && findNode(this.sdf.node, id) ? id : null;
+    const previousId = this.focusHoverNodeId;
+    if (previousId === nextId) return;
+    this.focusHoverNodeId = nextId;
+    this.syncFocusHoverClass(previousId, nextId);
+  }
+
   setSourceLinks(links: readonly GraphSourceLink[]): void {
     this.sourceLinks = [...links];
     if (this.hoveredSourceLink && !this.sourceLinks.some((link) => sourceLinksEqual(link, this.hoveredSourceLink))) {

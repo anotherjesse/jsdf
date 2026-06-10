@@ -458,6 +458,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
     focusPreview = null;
     graphInspector.setHoveredSourceLink(null);
     graphInspector.setHoveredNodeById(null);
+    graphInspector.setFocusHoveredNodeById(null);
     if (soloPreview) handleSoloPreview(null);
     else schedulePreviewIfHoverChanged(before);
     const selected = graphInspector.getSelected();
@@ -469,16 +470,21 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   graphInspector.setHoveredSourceLink(link);
   const node = graphInspector.setHoveredNodeById(link.nodeId);
   hoveredNode = node;
-  if (!node) return;
+  if (!node) {
+    graphInspector.setFocusHoveredNodeById(null);
+    return;
+  }
   codeEditor?.setFocusedNode(node.id);
 
   if (options.shiftKey && isHighlightableNode(node)) {
+    graphInspector.setFocusHoveredNodeById(node.id);
     focusPreview = graphInspector.buildSoloPreviewForNodeId(link.nodeId);
     schedulePreviewIfHoverChanged(before);
     setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
     return;
   }
 
+  graphInspector.setFocusHoveredNodeById(null);
   focusPreview = null;
   if (soloPreview) handleSoloPreview(null);
   else schedulePreviewIfHoverChanged(before);

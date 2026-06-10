@@ -178,6 +178,15 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     }
     const sphereHoverLabel = `${sphere.kind} #${sphere.id}`;
 
+    graphInspector.setFocusHoveredNodeById(sphere.id);
+    if (!graphRoot.querySelector(`.graph-node[data-node-id="${sphere.id}"].focus-peek`)) {
+      verifyErrors.push("external focus hover did not mark focused graph row");
+    }
+    graphInspector.setFocusHoveredNodeById(null);
+    if (graphRoot.querySelector(".graph-node.focus-peek")) {
+      verifyErrors.push("clearing external focus hover left graph row marked");
+    }
+
     const filterInput = graphRoot.querySelector<HTMLInputElement>(".graph-toolbar input[type='search']");
     if (!filterInput) {
       verifyErrors.push("graph filter input did not render");
