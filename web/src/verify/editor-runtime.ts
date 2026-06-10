@@ -5,6 +5,11 @@ import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
 import { prettifySource } from "../editor/prettify-source";
+import {
+  apiSuggestionTargetFromDiagnosticMessage,
+  replacementTextForSuggestionTarget,
+  titleForSuggestionTarget,
+} from "../editor/source-diagnostic-fixes";
 import { sourceDiagnosticFromError } from "../editor/source-diagnostics";
 import {
   graphNodeSourceIdentityForNode,
@@ -69,6 +74,9 @@ export interface EditorRuntimeVerification {
     globalErrorSuggestion: string;
     easingErrorColumn: number;
     easingErrorSuggestion: string;
+    quickFixTitle: string;
+    quickFixReplacement: string;
+    easingQuickFixReplacement: string;
     syntaxErrorLine: number;
     syntaxErrorColumn: number;
   };
@@ -378,6 +386,14 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
   if (!runtimeDiagnostic.message.includes("difference")) {
     errors.push(`runtime typo diagnostic suggestion ${runtimeDiagnostic.message}`);
   }
+  const runtimeQuickFixTarget = apiSuggestionTargetFromDiagnosticMessage(runtimeDiagnostic.message);
+  const runtimeQuickFixReplacement = runtimeQuickFixTarget
+    ? replacementTextForSuggestionTarget(runtimeQuickFixTarget)
+    : "";
+  const runtimeQuickFixTitle = runtimeQuickFixTarget ? titleForSuggestionTarget(runtimeQuickFixTarget) : "";
+  if (runtimeQuickFixTarget !== ".difference" || runtimeQuickFixReplacement !== "difference") {
+    errors.push(`runtime typo quick fix ${runtimeQuickFixTarget ?? "missing"} -> ${runtimeQuickFixReplacement}`);
+  }
 
   const globalSource = "return spere(1)";
   const globalDiagnostic = diagnosticForSource(globalSource, errors, "global typo");
@@ -395,6 +411,13 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
   }
   if (!easingDiagnostic.message.includes("ease.linear")) {
     errors.push(`easing typo diagnostic suggestion ${easingDiagnostic.message}`);
+  }
+  const easingQuickFixTarget = apiSuggestionTargetFromDiagnosticMessage(easingDiagnostic.message);
+  const easingQuickFixReplacement = easingQuickFixTarget
+    ? replacementTextForSuggestionTarget(easingQuickFixTarget)
+    : "";
+  if (easingQuickFixTarget !== "ease.linear" || easingQuickFixReplacement !== "linear") {
+    errors.push(`easing typo quick fix ${easingQuickFixTarget ?? "missing"} -> ${easingQuickFixReplacement}`);
   }
 
   const syntaxSource = "const radius = ;\nreturn sphere(1)";
@@ -416,6 +439,9 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     globalErrorSuggestion: globalDiagnostic.message,
     easingErrorColumn: easingDiagnostic.column,
     easingErrorSuggestion: easingDiagnostic.message,
+    quickFixTitle: runtimeQuickFixTitle,
+    quickFixReplacement: runtimeQuickFixReplacement,
+    easingQuickFixReplacement,
     syntaxErrorLine: syntaxDiagnostic.lineNumber,
     syntaxErrorColumn: syntaxDiagnostic.column,
   };

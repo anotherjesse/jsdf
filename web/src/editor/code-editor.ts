@@ -11,6 +11,13 @@ import { apiSignatureHelpAt } from "./api-signature-help";
 import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
 import type { SourceDiagnostic } from "./source-diagnostics";
+import {
+  apiSuggestionTargetFromDiagnosticMessage,
+  markerCodeValue,
+  replacementTextForSuggestionTarget,
+  SDF_API_TYPO_MARKER_CODE,
+  titleForSuggestionTarget,
+} from "./source-diagnostic-fixes";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
@@ -92,6 +99,50 @@ monaco.languages.registerSignatureHelpProvider("javascript", {
       dispose() {},
     };
   },
+});
+
+monaco.languages.registerCodeActionProvider("javascript", {
+  provideCodeActions(model, range, context) {
+    const actions: monaco.languages.CodeAction[] = [];
+    for (const marker of context.markers) {
+      if (markerCodeValue(marker.code) !== SDF_API_TYPO_MARKER_CODE) continue;
+      const target = apiSuggestionTargetFromDiagnosticMessage(marker.message);
+      if (!target) continue;
+
+      const markerRange = new monaco.Range(
+        marker.startLineNumber,
+        marker.startColumn,
+        marker.endLineNumber,
+        marker.endColumn,
+      );
+      if (!monaco.Range.areIntersectingOrTouching(markerRange, range)) continue;
+
+      const replacement = replacementTextForSuggestionTarget(target);
+      if (!replacement || model.getValueInRange(markerRange) === replacement) continue;
+      actions.push({
+        title: titleForSuggestionTarget(target),
+        kind: "quickfix",
+        diagnostics: [marker],
+        isPreferred: true,
+        edit: {
+          edits: [{
+            resource: model.uri,
+            versionId: model.getVersionId(),
+            textEdit: {
+              range: markerRange,
+              text: replacement,
+            },
+          }],
+        },
+      });
+    }
+    return {
+      actions,
+      dispose() {},
+    };
+  },
+}, {
+  providedCodeActionKinds: ["quickfix"],
 });
 
 export interface CodeEditor {
@@ -568,7 +619,7 @@ function markerForEditorError(
   const lineLength = model.getLineLength(lineNumber);
   const column = clamp(error.column, 1, Math.max(1, lineLength + 1));
   const endColumn = clamp(error.endColumn, column + 1, Math.max(column + 1, model.getLineLength(endLineNumber) + 1));
-  return {
+  const marker: monaco.editor.IMarkerData = {
     severity: monaco.MarkerSeverity.Error,
     message: error.message,
     startLineNumber: lineNumber,
@@ -576,6 +627,10 @@ function markerForEditorError(
     endLineNumber,
     endColumn,
   };
+  if (apiSuggestionTargetFromDiagnosticMessage(error.message)) {
+    marker.code = SDF_API_TYPO_MARKER_CODE;
+  }
+  return marker;
 }
 
 function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
