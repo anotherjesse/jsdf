@@ -409,6 +409,10 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!paramCodeButton) {
       verifyErrors.push("selected sphere radius has no code icon button");
     } else {
+      const expectedLabel = `Reveal sphere #${sphere.id} radius in code`;
+      if (paramCodeButton.getAttribute("aria-label") !== expectedLabel) {
+        verifyErrors.push(`param code icon label rendered ${paramCodeButton.getAttribute("aria-label") || "nothing"}`);
+      }
       paramCodeButton.click();
       if (revealedSource !== "sphere:radius") verifyErrors.push(`param code icon emitted ${revealedSource || "nothing"}`);
     }
@@ -940,6 +944,10 @@ function verifyOrientationControl(errors: string[]): void {
   if (!matrixSourceButton) {
     errors.push("custom orientation matrix had no source reveal button");
   } else {
+    const expectedLabel = `Reveal rotate3 #${rotate.id} orientation in code`;
+    if (matrixSourceButton.getAttribute("aria-label") !== expectedLabel) {
+      errors.push(`matrix source reveal label rendered ${matrixSourceButton.getAttribute("aria-label") || "nothing"}`);
+    }
     matrixSourceButton.click();
     if (revealedSource !== "rotate3:axis") errors.push(`matrix source reveal emitted ${revealedSource || "nothing"}`);
   }

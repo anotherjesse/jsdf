@@ -1149,7 +1149,10 @@ export class GraphInspector {
     label.textContent = "Matrix";
     header.append(label);
     if (sourceLink) {
-      const source = renderCodeLinkButton("Reveal orientation in code", "param-source-link matrix-source-link");
+      const source = renderCodeLinkButton(
+        `Reveal ${formatNodeLabel(node)} orientation in code`,
+        "param-source-link matrix-source-link",
+      );
       source.addEventListener("click", (event) => {
         event.preventDefault();
         this.options.onRevealSource(sourceLink);
@@ -1262,7 +1265,7 @@ export class GraphInspector {
     nameGroup.append(name);
 
     if (sourceLink) {
-      const source = renderCodeLinkButton(`Reveal ${field.label} in code`, "param-source-link");
+      const source = renderCodeLinkButton(`Reveal ${formatNodeLabel(node)} ${field.label} in code`, "param-source-link");
       source.addEventListener("click", (event) => {
         event.preventDefault();
         this.options.onRevealSource(sourceLink);
@@ -1593,6 +1596,10 @@ function findNode(root: Node, id: number, visited = new Set<number>()): Node | n
     if (match) return match;
   }
   return null;
+}
+
+function formatNodeLabel(node: Node): string {
+  return `${node.kind} #${node.id}`;
 }
 
 function formatPath(path: ParamPath): string {

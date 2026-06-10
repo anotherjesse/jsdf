@@ -276,6 +276,9 @@ export async function runEditorRuntimeVerification(
       if (!paramCodeButton) {
         errors.push("selected radius has no graph source reveal button");
       } else {
+        if (!paramCodeButton.getAttribute("aria-label")?.startsWith("Reveal sphere #")) {
+          errors.push(`graph param reveal label rendered ${paramCodeButton.getAttribute("aria-label") || "nothing"}`);
+        }
         paramCodeButton.click();
         await nextFrame();
         if (graphRevealEvents.at(-1) !== "sphere:radius") {
