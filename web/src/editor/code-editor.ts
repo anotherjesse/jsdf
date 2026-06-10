@@ -288,6 +288,7 @@ export function createCodeEditor(
   let keyboardNudgeSessionId: string | null = null;
   let keyboardNudgeLinkKey: string | null = null;
   let keyboardNudgeClearTimer = 0;
+  let scrubReadoutClearTimer = 0;
   let hoverClearTimer = 0;
   let cursorSyncFrame = 0;
   let pendingCursorPosition: monaco.Position | null = null;
@@ -299,6 +300,7 @@ export function createCodeEditor(
     if (!activeScrub) return;
     activeScrub = null;
     editor.getDomNode()?.classList.remove("source-scrubbing");
+    clearScrubReadoutTimer();
     scrubReadout.removeAttribute("data-visible");
     window.removeEventListener("mousemove", scrubMove);
     window.removeEventListener("mouseup", endScrub);
@@ -314,7 +316,7 @@ export function createCodeEditor(
     const nextValue = scrubSourceLinkValue(activeScrub.link, activeScrub.startValue, delta, event);
     if (nextValue === activeScrub.lastValue) return;
     activeScrub.lastValue = nextValue;
-    updateScrubReadout(activeScrub.link, nextValue, event);
+    updatePointerScrubReadout(activeScrub.link, nextValue, event);
     onSourceLinkValueChange(activeScrub.link, nextValue, { editSessionId: activeScrub.editSessionId });
   };
 
@@ -341,13 +343,52 @@ export function createCodeEditor(
     }, SOURCE_HOVER_CLEAR_GRACE_MS);
   };
 
-  const updateScrubReadout = (link: GraphSourceLink, value: number, event: MouseEvent) => {
+  const clearScrubReadoutTimer = () => {
+    if (!scrubReadoutClearTimer) return;
+    window.clearTimeout(scrubReadoutClearTimer);
+    scrubReadoutClearTimer = 0;
+  };
+
+  const scheduleScrubReadoutClear = () => {
+    clearScrubReadoutTimer();
+    scrubReadoutClearTimer = window.setTimeout(() => {
+      scrubReadoutClearTimer = 0;
+      if (!activeScrub) scrubReadout.removeAttribute("data-visible");
+    }, 850);
+  };
+
+  const showScrubReadoutAt = (link: GraphSourceLink, value: number, left: number, top: number) => {
+    scrubReadout.textContent = `${link.label} ${formatScrubReadoutValue(value)}`;
+    scrubReadout.style.left = `${left}px`;
+    scrubReadout.style.top = `${top}px`;
+    scrubReadout.dataset.visible = "true";
+  };
+
+  const updatePointerScrubReadout = (link: GraphSourceLink, value: number, event: MouseEvent) => {
     const editorBounds = editor.getDomNode()?.getBoundingClientRect();
     if (!editorBounds) return;
-    scrubReadout.textContent = `${link.label} ${formatScrubReadoutValue(value)}`;
-    scrubReadout.style.left = `${event.clientX - editorBounds.left + 12}px`;
-    scrubReadout.style.top = `${event.clientY - editorBounds.top - 28}px`;
-    scrubReadout.dataset.visible = "true";
+    clearScrubReadoutTimer();
+    showScrubReadoutAt(link, value, event.clientX - editorBounds.left + 12, event.clientY - editorBounds.top - 28);
+  };
+
+  const updateKeyboardNudgeReadout = (link: GraphSourceLink, value: number) => {
+    const domNode = editor.getDomNode();
+    const range = rangeForSourceLink(link);
+    if (!domNode || !range) return;
+    const visiblePosition = editor.getScrolledVisiblePosition({
+      lineNumber: range.startLineNumber,
+      column: range.startColumn,
+    });
+    if (!visiblePosition) return;
+    const maxLeft = Math.max(4, domNode.clientWidth - 110);
+    const maxTop = Math.max(4, domNode.clientHeight - 30);
+    showScrubReadoutAt(
+      link,
+      value,
+      clamp(visiblePosition.left + 12, 4, maxLeft),
+      clamp(visiblePosition.top - 28, 4, maxTop),
+    );
+    scheduleScrubReadoutClear();
   };
 
   const updateHover = (
@@ -525,6 +566,7 @@ export function createCodeEditor(
     if (nextValue === startValue) return false;
     cursorLinkKey = sourceLinkKey(link);
     markSelectedSourceLink(link);
+    updateKeyboardNudgeReadout(link, nextValue);
     onSourceLinkSelect(link);
     onSourceLinkValueChange(link, nextValue, {
       editSessionId: options.editSessionId ?? keyboardNudgeSessionFor(link),
@@ -764,6 +806,7 @@ export function createCodeEditor(
     dispose() {
       endScrub();
       clearKeyboardNudgeSession();
+      clearScrubReadoutTimer();
       clearHoverTimer();
       cancelCursorSourceLinkSync();
       updateHover(null, false, { immediateClear: true });

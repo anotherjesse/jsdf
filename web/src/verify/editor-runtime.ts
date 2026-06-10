@@ -53,6 +53,7 @@ export interface EditorRuntimeVerification {
     nextValue: number | null;
     keyboardNextValue: number | null;
     keyboardEditSession: string;
+    keyboardReadout: string;
     graphValue: unknown;
     patchedSource: string;
     editedSourceDecorations: number;
@@ -146,6 +147,7 @@ export async function runEditorRuntimeVerification(
     nextValue: null,
     keyboardNextValue: null,
     keyboardEditSession: "",
+    keyboardReadout: "",
     graphValue: null,
     patchedSource: "",
     editedSourceDecorations: 0,
@@ -216,8 +218,13 @@ export async function runEditorRuntimeVerification(
       if (!codeEditor.nudgeCurrentSourceLink(1)) {
         errors.push("keyboard source nudge did not find current radius link");
       }
+      await nextFrame();
+      sourceScrub.keyboardReadout = codeRoot.querySelector<HTMLElement>(".source-scrub-readout[data-visible='true']")?.textContent?.trim() ?? "";
       if (Math.abs((sourceScrub.keyboardNextValue ?? 0) - 1.1) > 0.000001) {
         errors.push(`keyboard source nudge emitted ${sourceScrub.keyboardNextValue ?? "nothing"}`);
+      }
+      if (!sourceScrub.keyboardReadout.includes("radius 1.1")) {
+        errors.push(`keyboard source nudge readout was ${sourceScrub.keyboardReadout || "missing"}`);
       }
       if (!sourceScrub.keyboardEditSession.startsWith("source-key-nudge:")) {
         errors.push(`keyboard source nudge session was ${sourceScrub.keyboardEditSession || "missing"}`);
