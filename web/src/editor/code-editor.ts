@@ -322,15 +322,20 @@ export function createCodeEditor(
   sourceLinkStatus.hidden = true;
   sourceLinkStatus.setAttribute("aria-label", "Selected graph source link");
   sourceLinkStatus.setAttribute("aria-live", "polite");
+  const sourceLinkStatusTarget = document.createElement("button");
+  sourceLinkStatusTarget.type = "button";
+  sourceLinkStatusTarget.className = "source-link-status-target";
+  sourceLinkStatusTarget.disabled = true;
   const sourceLinkStatusText = document.createElement("span");
   sourceLinkStatusText.className = "source-link-status-text";
+  sourceLinkStatusTarget.append(sourceLinkStatusText);
   const sourceLinkStatusControls = document.createElement("span");
   sourceLinkStatusControls.className = "source-link-status-controls";
   sourceLinkStatusControls.hidden = true;
   const sourceLinkDecreaseButton = renderSourceLinkStepButton("decrease", "-");
   const sourceLinkIncreaseButton = renderSourceLinkStepButton("increase", "+");
   sourceLinkStatusControls.append(sourceLinkDecreaseButton, sourceLinkIncreaseButton);
-  sourceLinkStatus.append(sourceLinkStatusText, sourceLinkStatusControls);
+  sourceLinkStatus.append(sourceLinkStatusTarget, sourceLinkStatusControls);
   editor.getDomNode()?.append(scrubReadout, sourceLinkStatus);
 
   let suppress = false;
@@ -668,6 +673,13 @@ export function createCodeEditor(
     event.stopPropagation();
     nudgeStatusSourceLink(1);
   });
+  sourceLinkStatusTarget.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const link = liveSourceLinkFor(selectedSourceLink);
+    if (!link) return;
+    selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true });
+  });
 
   const selectSourceLink = (
     link: GraphSourceLink,
@@ -693,6 +705,8 @@ export function createCodeEditor(
     if (!link || !range) {
       sourceLinkStatus.hidden = true;
       sourceLinkStatusText.textContent = "";
+      sourceLinkStatusTarget.disabled = true;
+      sourceLinkStatusTarget.removeAttribute("aria-label");
       sourceLinkStatusControls.hidden = true;
       sourceLinkDecreaseButton.disabled = true;
       sourceLinkIncreaseButton.disabled = true;
@@ -704,6 +718,8 @@ export function createCodeEditor(
     sourceLinkStatus.hidden = false;
     sourceLinkStatus.dataset.numeric = String(isNumber);
     sourceLinkStatusText.textContent = sourceLinkStatusTextForLink(link, value);
+    sourceLinkStatusTarget.disabled = false;
+    sourceLinkStatusTarget.setAttribute("aria-label", `Reveal ${sourceLinkStatusTextForLink(link)} in Graph`);
     sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
     sourceLinkStatusControls.hidden = !isNumber;
     sourceLinkDecreaseButton.disabled = !isNumber;

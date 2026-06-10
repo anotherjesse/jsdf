@@ -630,8 +630,34 @@ button:disabled {
   display: none;
 }
 
-.source-link-status-text {
+.source-link-status-target {
   min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  padding: 3px 2px;
+  text-align: left;
+}
+
+.source-link-status-target:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.source-link-status-target:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.source-link-status-text {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
 }

@@ -82,6 +82,8 @@ export interface EditorRuntimeVerification {
   sourceLinkStatus: {
     radius: string;
     graphReveal: string;
+    radiusRevealTargetLabel: string;
+    radiusRevealTargetLink: string;
     radiusStepButtons: number;
     radiusStepNextValue: number | null;
     radiusStepSession: string;
@@ -211,6 +213,8 @@ export async function runEditorRuntimeVerification(
   const sourceLinkStatus: EditorRuntimeVerification["sourceLinkStatus"] = {
     radius: "",
     graphReveal: "",
+    radiusRevealTargetLabel: "",
+    radiusRevealTargetLink: "",
     radiusStepButtons: 0,
     radiusStepNextValue: null,
     radiusStepSession: "",
@@ -281,6 +285,22 @@ export async function runEditorRuntimeVerification(
       sourceLinkStatus.radius = visibleSourceLinkStatus(codeRoot);
       if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink, readSourceLinkNumber(fixtureSource, radiusLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.radius || "nothing"} for radius`);
+      }
+      const statusTarget = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-target");
+      if (!statusTarget) {
+        errors.push("source link status did not render a reveal target button");
+      } else {
+        sourceLinkStatus.radiusRevealTargetLabel = statusTarget.getAttribute("aria-label") ?? "";
+        if (!sourceLinkStatus.radiusRevealTargetLabel.includes("sphere #") || !sourceLinkStatus.radiusRevealTargetLabel.includes("Graph")) {
+          errors.push(`source link status reveal target label rendered ${sourceLinkStatus.radiusRevealTargetLabel || "nothing"}`);
+        }
+        const beforeRevealEvents = sourceRevealGraphEvents.length;
+        statusTarget.click();
+        await nextFrame();
+        sourceLinkStatus.radiusRevealTargetLink = sourceRevealGraphEvents.at(-1) ?? "";
+        if (sourceRevealGraphEvents.length <= beforeRevealEvents || sourceLinkStatus.radiusRevealTargetLink !== "sphere:radius") {
+          errors.push(`source link status reveal target emitted ${sourceLinkStatus.radiusRevealTargetLink || "nothing"}`);
+        }
       }
       sourceLinkStatus.radiusStepButtons = visibleSourceLinkStepperCount(codeRoot);
       if (sourceLinkStatus.radiusStepButtons !== 2) {
