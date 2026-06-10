@@ -258,6 +258,7 @@ export interface CodeEditor {
   revealSourceLink(link: GraphSourceLink): void;
   applyPreferredQuickFix(): boolean;
   selectAdjacentSourceLink(direction: -1 | 1): boolean;
+  revealCurrentSourceLinkInGraph(): boolean;
   nudgeCurrentSourceLink(direction: -1 | 1, modifiers?: ScrubModifiers, options?: { editSessionId?: string }): boolean;
   layout(): void;
   dispose(): void;
@@ -618,7 +619,10 @@ export function createCodeEditor(
     return true;
   };
 
-  const selectSourceLink = (link: GraphSourceLink, options: { reveal?: boolean; selectRange?: boolean } = {}): boolean => {
+  const selectSourceLink = (
+    link: GraphSourceLink,
+    options: SourceLinkSelectOptions & { reveal?: boolean; selectRange?: boolean } = {},
+  ): boolean => {
     const range = rangeForSourceLink(link);
     if (!range) return false;
     cursorLinkKey = sourceLinkKey(link);
@@ -629,7 +633,7 @@ export function createCodeEditor(
     if (options.reveal) {
       editor.revealRangeInCenterIfOutsideViewport(range);
     }
-    onSourceLinkSelect(link);
+    onSourceLinkSelect(link, { revealGraph: options.revealGraph });
     editor.focus();
     return true;
   };
@@ -643,6 +647,11 @@ export function createCodeEditor(
   const selectAdjacentSourceLink = (direction: -1 | 1): boolean => {
     const nextLink = adjacentSourceLink(sourceLinks, currentSourceLinkForNavigation(), direction);
     return nextLink ? selectSourceLink(nextLink, { reveal: true, selectRange: true }) : false;
+  };
+
+  const revealCurrentSourceLinkInGraph = (): boolean => {
+    const link = currentSourceLinkForNavigation();
+    return link ? selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true }) : false;
   };
 
   const markerRange = (marker: monaco.editor.IMarker): monaco.Range => {
@@ -846,6 +855,16 @@ export function createCodeEditor(
       selectAdjacentSourceLink(-1);
     },
   });
+  const revealSourceLinkInGraphAction = editor.addAction({
+    id: "sdf.revealSourceLinkInGraph",
+    label: "Reveal SDF Source Link in Graph",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.Enter],
+    contextMenuGroupId: "sdf",
+    contextMenuOrder: 4,
+    run() {
+      revealCurrentSourceLinkInGraph();
+    },
+  });
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
     pointerLink = null;
@@ -986,6 +1005,9 @@ export function createCodeEditor(
     selectAdjacentSourceLink(direction) {
       return selectAdjacentSourceLink(direction);
     },
+    revealCurrentSourceLinkInGraph() {
+      return revealCurrentSourceLinkInGraph();
+    },
     layout() {
       editor.layout();
     },
@@ -1007,6 +1029,7 @@ export function createCodeEditor(
       quickFixAction.dispose();
       nextSourceLinkAction.dispose();
       previousSourceLinkAction.dispose();
+      revealSourceLinkInGraphAction.dispose();
       leaveSubscription.dispose();
       deleteSourceInlayHintState();
       editor.dispose();
@@ -1083,8 +1106,8 @@ function markerForEditorError(
 export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
   const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
   return isNumber
-    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak. Cmd/Ctrl-click opens this node in Graph; Shift makes keyboard nudges finer.`
-    : `Graph: ${target}. Click to select this node; Cmd/Ctrl-click opens it in Graph.`;
+    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak. Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens this node in Graph; Shift makes keyboard nudges finer.`
+    : `Graph: ${target}. Click to select this node; Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens it in Graph.`;
 }
 
 function formatScrubReadoutValue(value: number): string {

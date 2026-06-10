@@ -82,7 +82,9 @@ export interface EditorRuntimeVerification {
   sourceNavigation: {
     nextLink: string;
     previousLink: string;
+    revealGraphLink: string;
     selectionEvents: number;
+    revealGraphEvents: number;
   };
   editorPreferences: {
     defaultGraphHints: boolean;
@@ -166,6 +168,7 @@ export async function runEditorRuntimeVerification(
   const graphRevealEvents: string[] = [];
   const graphSourceHoverEvents: string[] = [];
   const sourceSelectionEvents: string[] = [];
+  const sourceRevealGraphEvents: string[] = [];
   const sourceChangeEvents: string[] = [];
   const recursiveDecorationMessages: string[] = [];
   const restoreConsole = captureRecursiveDecorationMessages(recursiveDecorationMessages);
@@ -216,8 +219,11 @@ export async function runEditorRuntimeVerification(
     codeRoot,
     fixtureSource,
     (value) => sourceChangeEvents.push(value),
-    (link) => {
+    (link, options) => {
       sourceSelectionEvents.push(formatLink(link));
+      if (options?.revealGraph) {
+        sourceRevealGraphEvents.push(formatLink(link));
+      }
       selectFromSource(link);
     },
     (link, value, options) => {
@@ -341,7 +347,13 @@ export async function runEditorRuntimeVerification(
     codeEditor.setError(null);
     codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
     graphInspector.setSourceLinks(links);
-    const sourceNavigation = await verifySourceNavigation(codeEditor, links, sourceSelectionEvents, errors);
+    const sourceNavigation = await verifySourceNavigation(
+      codeEditor,
+      links,
+      sourceSelectionEvents,
+      sourceRevealGraphEvents,
+      errors,
+    );
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
     if (!boxCallLink) {
@@ -755,17 +767,19 @@ async function verifySourceNavigation(
   codeEditor: ReturnType<typeof createCodeEditor>,
   links: readonly GraphSourceLink[],
   sourceSelectionEvents: string[],
+  sourceRevealGraphEvents: string[],
   errors: string[],
 ): Promise<EditorRuntimeVerification["sourceNavigation"]> {
   const radiusLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
   if (!radiusLink) {
     errors.push("source navigation fixture has no sphere radius link");
-    return { nextLink: "", previousLink: "", selectionEvents: 0 };
+    return { nextLink: "", previousLink: "", revealGraphLink: "", selectionEvents: 0, revealGraphEvents: 0 };
   }
 
   codeEditor.revealSourceLink(radiusLink);
   await nextFrame();
   const beforeEvents = sourceSelectionEvents.length;
+  const beforeRevealGraphEvents = sourceRevealGraphEvents.length;
   if (!codeEditor.selectAdjacentSourceLink(1)) {
     errors.push("source navigation did not select next link");
   }
@@ -784,10 +798,21 @@ async function verifySourceNavigation(
     errors.push(`source navigation previous selected ${previousLink || "nothing"}`);
   }
 
+  if (!codeEditor.revealCurrentSourceLinkInGraph()) {
+    errors.push("source navigation did not reveal current link in graph");
+  }
+  await nextFrame();
+  const revealGraphLink = sourceRevealGraphEvents.at(-1) ?? "";
+  if (revealGraphLink !== previousLink) {
+    errors.push(`source navigation graph reveal selected ${revealGraphLink || "nothing"}`);
+  }
+
   return {
     nextLink,
     previousLink,
+    revealGraphLink,
     selectionEvents: sourceSelectionEvents.length - beforeEvents,
+    revealGraphEvents: sourceRevealGraphEvents.length - beforeRevealGraphEvents,
   };
 }
 
@@ -833,9 +858,11 @@ function verifySourceLinkTooltips(
   const number = numberLink ? sourceLinkHoverMessage(numberLink, true) : "";
 
   if (!call.includes("Click to select this node")) errors.push(`source call tooltip rendered ${call || "nothing"}`);
-  if (!call.includes("Cmd/Ctrl-click opens it in Graph")) errors.push(`source call tooltip missed graph reveal hint: ${call || "nothing"}`);
+  if (!call.includes("Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens it in Graph")) {
+    errors.push(`source call tooltip missed graph reveal hint: ${call || "nothing"}`);
+  }
   if (!number.includes("Drag sideways")) errors.push(`source number tooltip missed drag hint: ${number || "nothing"}`);
-  if (!number.includes("Cmd/Ctrl-click opens this node in Graph")) {
+  if (!number.includes("Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens this node in Graph")) {
     errors.push(`source number tooltip missed graph reveal hint: ${number || "nothing"}`);
   }
 
