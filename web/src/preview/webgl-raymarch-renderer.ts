@@ -1,11 +1,10 @@
 import type { Node, SDF3 } from "../core/nodes";
 import type { Bounds3 } from "../mesh/bounds";
 import { compileGLSLScene } from "../glsl/compiler";
+import { HIGHLIGHT_GLSL_COLOR, HIGHLIGHT_PALETTE, highlightStyle, highlightStyleFromState, type HighlightMode } from "./highlight-style";
 import type { OrbitCamera } from "./orbit-camera";
 import { selectedSceneFunction } from "./selected-scene";
 import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
-
-export type HighlightMode = "mark" | "focus";
 
 export class WebGLRaymarchRenderer {
   private readonly gl: WebGL2RenderingContext;
@@ -66,6 +65,7 @@ export class WebGLRaymarchRenderer {
     this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
     this.canvas.dataset.highlightStyle = highlightStyle(highlightNode, highlightMode);
+    this.canvas.dataset.highlightPalette = highlightNode ? HIGHLIGHT_PALETTE : "";
     this.canvas.dataset.previewLayout = this.layout;
     this.setBounds(bounds);
     if (this.active) this.redraw();
@@ -172,16 +172,8 @@ export class WebGLRaymarchRenderer {
     this.canvas.dataset.programBuilds = String(this.programBuilds);
     this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightStyle = highlightStyleFromState(this.highlightNodeId, this.highlightMode);
+    this.canvas.dataset.highlightPalette = this.highlightNodeId >= 0 ? HIGHLIGHT_PALETTE : "";
   }
-}
-
-function highlightStyle(node: Node | null, mode: HighlightMode): string {
-  return node ? highlightStyleFromState(node.id, mode) : "";
-}
-
-function highlightStyleFromState(nodeId: number, mode: HighlightMode): string {
-  if (nodeId < 0) return "";
-  return mode === "focus" ? "focus-fade" : "outline";
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string): WebGLProgram {
@@ -238,6 +230,7 @@ uniform int u_highlightNode;
 uniform int u_focusHighlight;
 
 ${selectedSceneFunction(sdf.node)}
+const vec3 highlightColor = ${HIGHLIGHT_GLSL_COLOR};
 
 out vec4 outColor;
 
@@ -322,9 +315,9 @@ void main() {
   if (u_focusHighlight == 1) {
     vec3 faded = mix(bg, color, 0.18);
     color = mix(faded, color, selectedBand);
-    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.34);
+    color = mix(color, highlightColor, selectedBand * 0.32);
   } else {
-    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.42);
+    color = mix(color, highlightColor, selectedBand * 0.40);
   }
 
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);

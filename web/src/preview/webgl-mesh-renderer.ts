@@ -2,11 +2,10 @@ import type { Node, SDF3 } from "../core/nodes";
 import { compileGLSLScene } from "../glsl/compiler";
 import type { Bounds3 } from "../mesh/bounds";
 import type { Triangle } from "../mesh/polygonize";
+import { HIGHLIGHT_GLSL_COLOR, HIGHLIGHT_PALETTE, highlightStyle, highlightStyleFromState, type HighlightMode } from "./highlight-style";
 import type { OrbitCamera } from "./orbit-camera";
 import { selectedSceneFunction } from "./selected-scene";
 import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
-
-type HighlightMode = "mark" | "focus";
 
 export class WebGLMeshRenderer {
   private readonly gl: WebGL2RenderingContext;
@@ -82,6 +81,7 @@ export class WebGLMeshRenderer {
     this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
     this.canvas.dataset.highlightStyle = highlightStyle(highlightNode, highlightMode);
+    this.canvas.dataset.highlightPalette = highlightNode ? HIGHLIGHT_PALETTE : "";
     if (options.redraw !== false && this.active) this.redraw();
   }
 
@@ -208,17 +208,9 @@ export class WebGLMeshRenderer {
     this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = this.highlightNodeId >= 0 ? this.highlightMode : "";
     this.canvas.dataset.highlightStyle = highlightStyleFromState(this.highlightNodeId, this.highlightMode);
+    this.canvas.dataset.highlightPalette = this.highlightNodeId >= 0 ? HIGHLIGHT_PALETTE : "";
     delete this.canvas.dataset.previewSteps;
   }
-}
-
-function highlightStyle(node: Node | null, mode: HighlightMode): string {
-  return node ? highlightStyleFromState(node.id, mode) : "";
-}
-
-function highlightStyleFromState(nodeId: number, mode: HighlightMode): string {
-  if (nodeId < 0) return "";
-  return mode === "focus" ? "focus-fade" : "outline";
 }
 
 function normal(triangle: Triangle): number[] {
@@ -342,6 +334,7 @@ uniform vec3 u_light;
 uniform int u_highlightNode;
 uniform int u_focusHighlight;
 ${selectedScene}
+const vec3 highlightColor = ${HIGHLIGHT_GLSL_COLOR};
 
 out vec4 outColor;
 void main() {
@@ -357,9 +350,9 @@ void main() {
   if (u_focusHighlight == 1) {
     vec3 faded = mix(vec3(0.11, 0.125, 0.145), color, 0.26);
     color = mix(faded, color, selectedBand);
-    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.34);
+    color = mix(color, highlightColor, selectedBand * 0.32);
   } else {
-    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.42);
+    color = mix(color, highlightColor, selectedBand * 0.40);
   }
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);
 }

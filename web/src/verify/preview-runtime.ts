@@ -1,5 +1,6 @@
 import { box, intersection, sphere, type SDF3 } from "../api";
 import { generateMesh } from "../mesh/generate";
+import { HIGHLIGHT_PALETTE } from "../preview/highlight-style";
 import { OrbitCamera } from "../preview/orbit-camera";
 import { viewPanels } from "../preview/view-layout";
 import { WebGLMeshRenderer } from "../preview/webgl-mesh-renderer";
@@ -22,6 +23,8 @@ export interface PreviewRuntimeVerification {
     focusMode: string;
     markStyle: string;
     focusStyle: string;
+    markPalette: string;
+    focusPalette: string;
     markProgramBuilds: number;
     focusProgramBuilds: number;
   };
@@ -39,6 +42,8 @@ export interface HighlightDiagnostics {
   focusMode: string;
   markStyle: string;
   focusStyle: string;
+  markPalette: string;
+  focusPalette: string;
 }
 
 export interface CanvasDiagnostics {
@@ -54,6 +59,7 @@ export interface CanvasDiagnostics {
   highlightKind: string;
   highlightMode: string;
   highlightStyle: string;
+  highlightPalette: string;
 }
 
 const bounds: [number[], number[]] = [[-1.45, -1.45, -1.45], [1.45, 1.45, 1.45]];
@@ -104,6 +110,9 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   if (meshMarkNode && mesh.highlightStyle !== "outline") {
     errors.push(`mesh mark highlight style mismatch: ${mesh.highlightStyle}`);
   }
+  if (meshMarkNode && mesh.highlightPalette !== HIGHLIGHT_PALETTE) {
+    errors.push(`mesh mark highlight palette mismatch: ${mesh.highlightPalette}`);
+  }
 
   meshRenderer.setHighlight(sdf, meshFocusNode, "focus");
   const meshFocus = diagnostics(canvas);
@@ -113,6 +122,9 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   if (meshFocusNode && meshFocus.highlightMode !== "focus") errors.push(`mesh focus highlight mode mismatch: ${meshFocus.highlightMode}`);
   if (meshFocusNode && meshFocus.highlightStyle !== "focus-fade") {
     errors.push(`mesh focus highlight style mismatch: ${meshFocus.highlightStyle}`);
+  }
+  if (meshFocusNode && meshFocus.highlightPalette !== HIGHLIGHT_PALETTE) {
+    errors.push(`mesh focus highlight palette mismatch: ${meshFocus.highlightPalette}`);
   }
   if (meshFocus.programBuilds !== mesh.programBuilds) {
     errors.push(`mesh focus highlight rebuilt shader program: ${meshFocus.programBuilds} !== ${mesh.programBuilds}`);
@@ -135,6 +147,8 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
       focusMode: meshFocus.highlightMode,
       markStyle: mesh.highlightStyle,
       focusStyle: meshFocus.highlightStyle,
+      markPalette: mesh.highlightPalette,
+      focusPalette: meshFocus.highlightPalette,
       markProgramBuilds: mesh.programBuilds,
       focusProgramBuilds: meshFocus.programBuilds,
     },
@@ -163,6 +177,8 @@ function verifyHighlightUniforms(
       focusMode: "",
       markStyle: "",
       focusStyle: "",
+      markPalette: "",
+      focusPalette: "",
     };
   }
 
@@ -184,11 +200,13 @@ function verifyHighlightUniforms(
   }
   if (mark.highlightMode !== "mark") errors.push(`mark highlight mode mismatch: ${mark.highlightMode}`);
   if (mark.highlightStyle !== "outline") errors.push(`mark highlight style mismatch: ${mark.highlightStyle}`);
+  if (mark.highlightPalette !== HIGHLIGHT_PALETTE) errors.push(`mark highlight palette mismatch: ${mark.highlightPalette}`);
   if (focus.highlightNode !== String(focusNode.id)) {
     errors.push(`focus highlight node mismatch: ${focus.highlightNode} !== ${focusNode.id}`);
   }
   if (focus.highlightMode !== "focus") errors.push(`focus highlight mode mismatch: ${focus.highlightMode}`);
   if (focus.highlightStyle !== "focus-fade") errors.push(`focus highlight style mismatch: ${focus.highlightStyle}`);
+  if (focus.highlightPalette !== HIGHLIGHT_PALETTE) errors.push(`focus highlight palette mismatch: ${focus.highlightPalette}`);
 
   return {
     initialProgramBuilds,
@@ -200,6 +218,8 @@ function verifyHighlightUniforms(
     focusMode: focus.highlightMode,
     markStyle: mark.highlightStyle,
     focusStyle: focus.highlightStyle,
+    markPalette: mark.highlightPalette,
+    focusPalette: focus.highlightPalette,
   };
 }
 
@@ -217,6 +237,7 @@ function diagnostics(canvas: HTMLCanvasElement): CanvasDiagnostics {
     highlightKind: canvas.dataset.highlightKind ?? "",
     highlightMode: canvas.dataset.highlightMode ?? "",
     highlightStyle: canvas.dataset.highlightStyle ?? "",
+    highlightPalette: canvas.dataset.highlightPalette ?? "",
   };
 }
 
