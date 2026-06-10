@@ -1,7 +1,11 @@
 import * as api from "../index";
 import { buildApiCompletenessFixtures, intentionallyUnsupported } from "../api/completeness";
 import { type SDF, type SDF2, type SDF3 } from "../core/nodes";
+import { findGraphSourceLinks } from "../editor/clean-source-patch";
+import { evaluateSource } from "../editor/evaluate-source";
+import { exampleSources, sourceForExample } from "../editor/example-source";
 import { evaluate2, evaluate3 } from "../evaluate";
+import { examples } from "../examples";
 import { compileGLSLScene } from "../glsl/compiler";
 import { compileScene } from "../wgsl/compiler";
 
@@ -32,7 +36,23 @@ export interface ApiRuntimeVerification {
     methodSliceDistinct: number;
     sliceAxes: string;
   };
+  examples: {
+    total: number;
+    sourceEvaluated: number;
+    finiteSampled: number;
+    glslCompiled: number;
+    wgslCompiled: number;
+    sourceLinks: number;
+    checked: ExampleCheckSummary[];
+  };
   errors: string[];
+}
+
+export interface ExampleCheckSummary {
+  id: string;
+  name: string;
+  nodes: number;
+  sourceLinks: number;
 }
 
 const expectedExports = [
@@ -94,6 +114,7 @@ export async function runApiRuntimeVerification(): Promise<ApiRuntimeVerificatio
   const workflowStart = performance.now();
   const workflow = await verifyWorkflow(errors);
   const workflowMs = performance.now() - workflowStart;
+  const exampleHealth = verifyExamples(errors);
 
   const covered = collectKinds([...fixtures.two, ...fixtures.three]);
   const missing = expectedNodeKinds.filter((kind) => !covered.has(kind));
@@ -107,6 +128,7 @@ export async function runApiRuntimeVerification(): Promise<ApiRuntimeVerificatio
     nodeKinds: { covered: [...covered].sort(), missing },
     timings: { evaluateMs, glslCompileMs, wgslCompileMs, workflowMs },
     workflow,
+    examples: exampleHealth,
     errors,
   };
 }
@@ -171,6 +193,147 @@ function collectKinds(fixtures: SDF[]): Set<string> {
 
   for (const fixture of fixtures) visit(fixture);
   return kinds;
+}
+
+function verifyExamples(errors: string[]): ApiRuntimeVerification["examples"] {
+  const checked: ExampleCheckSummary[] = [];
+  let sourceEvaluated = 0;
+  let finiteSampled = 0;
+  let glslCompiled = 0;
+  let wgslCompiled = 0;
+  let sourceLinks = 0;
+
+  for (const example of examples) {
+    try {
+      if (!(example.id in exampleSources)) errors.push(`example ${example.id} has no editable source`);
+      const built = example.build();
+      const source = sourceForExample(example.id);
+      const { sdf } = evaluateSource(source);
+      sourceEvaluated += 1;
+
+      const builtKinds = kindCounts(built);
+      const sourceKinds = kindCounts(sdf);
+      if (builtKinds !== sourceKinds) {
+        errors.push(`example ${example.id} source graph differs from build graph: ${sourceKinds} !== ${builtKinds}`);
+      }
+
+      const links = findGraphSourceLinks(source, sdf);
+      sourceLinks += links.length;
+      if (!links.some((link) => link.label === "call")) errors.push(`example ${example.id} has no graph call source links`);
+      if (!links.some((link) => link.scrubbable !== false && link.end > link.start)) {
+        errors.push(`example ${example.id} has no scrubbable source links`);
+      }
+
+      verifyExampleFiniteSamples(example.id, sdf, example.bounds, errors);
+      finiteSampled += 1;
+
+      verifyExampleCompilation(example.id, sdf, compileGLSLScene, "GLSL", errors);
+      glslCompiled += 1;
+      verifyExampleCompilation(example.id, sdf, compileScene, "WGSL", errors);
+      wgslCompiled += 1;
+
+      checked.push({
+        id: example.id,
+        name: example.name,
+        nodes: countNodes(sdf),
+        sourceLinks: links.length,
+      });
+    } catch (error) {
+      errors.push(`example ${example.id} failed health check: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return {
+    total: examples.length,
+    sourceEvaluated,
+    finiteSampled,
+    glslCompiled,
+    wgslCompiled,
+    sourceLinks,
+    checked,
+  };
+}
+
+function verifyExampleFiniteSamples(
+  id: string,
+  sdf: SDF3,
+  bounds: [number[], number[]] | undefined,
+  errors: string[],
+): void {
+  const [min, max] = bounds ?? [[-2, -2, -2], [2, 2, 2]];
+  const center = midpoint(min, max);
+  const span = [
+    (max[0] - min[0]) * 0.23,
+    (max[1] - min[1]) * 0.23,
+    (max[2] - min[2]) * 0.23,
+  ];
+  const points = [
+    center,
+    [center[0] + span[0], center[1], center[2]],
+    [center[0] - span[0], center[1], center[2]],
+    [center[0], center[1] + span[1], center[2]],
+    [center[0], center[1], center[2] + span[2]],
+  ];
+
+  for (const point of points) {
+    const value = evaluate3(sdf, point);
+    if (!Number.isFinite(value)) {
+      errors.push(`example ${id} produced non-finite value at ${point.join(",")}: ${value}`);
+      return;
+    }
+  }
+}
+
+function verifyExampleCompilation(
+  id: string,
+  sdf: SDF3,
+  compile: (fixture: SDF3) => { source: string; sceneFunction: string },
+  label: string,
+  errors: string[],
+): void {
+  try {
+    const compiled = compile(sdf);
+    if (!compiled.source.includes(compiled.sceneFunction)) {
+      errors.push(`${label} example ${id} missing scene function ${compiled.sceneFunction}`);
+    }
+    if (compiled.source.includes("undefined") || compiled.source.includes("NaN")) {
+      errors.push(`${label} example ${id} compiled invalid source`);
+    }
+  } catch (error) {
+    errors.push(`${label} example ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function kindCounts(sdf: SDF): string {
+  const counts = new Map<string, number>();
+  const seen = new Set<number>();
+  const visit = (node: SDF["node"]) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
+    for (const child of node.children) visit(child.node);
+  };
+  visit(sdf.node);
+  return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([kind, count]) => `${kind}:${count}`).join(",");
+}
+
+function countNodes(sdf: SDF): number {
+  const seen = new Set<number>();
+  const visit = (node: SDF["node"]) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    for (const child of node.children) visit(child.node);
+  };
+  visit(sdf.node);
+  return seen.size;
+}
+
+function midpoint(min: number[], max: number[]): number[] {
+  return [
+    (min[0] + max[0]) / 2,
+    (min[1] + max[1]) / 2,
+    (min[2] + max[2]) / 2,
+  ];
 }
 
 async function verifyWorkflow(errors: string[]): Promise<ApiRuntimeVerification["workflow"]> {
