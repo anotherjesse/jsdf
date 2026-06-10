@@ -18,6 +18,7 @@ import {
   SDF_API_TYPO_MARKER_CODE,
   titleForSuggestionTarget,
 } from "./source-diagnostic-fixes";
+import { sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
@@ -31,6 +32,8 @@ interface MonacoEnvironment {
 
 const SOURCE_HOVER_CLEAR_GRACE_MS = 140;
 const SOURCE_HOVER_STICKY_COLUMNS = 2;
+const sourceInlayHintLinksByModel = new WeakMap<monaco.editor.ITextModel, readonly GraphSourceLink[]>();
+const sourceInlayHintsChanged = new monaco.Emitter<void>();
 
 monaco.languages.registerCompletionItemProvider("javascript", {
   triggerCharacters: ["."],
@@ -145,6 +148,33 @@ monaco.languages.registerCodeActionProvider("javascript", {
   providedCodeActionKinds: ["quickfix"],
 });
 
+monaco.languages.registerInlayHintsProvider("javascript", {
+  displayName: "SDF graph source links",
+  onDidChangeInlayHints: sourceInlayHintsChanged.event,
+  provideInlayHints(model, range) {
+    const links = sourceInlayHintLinksByModel.get(model) ?? [];
+    const startOffset = model.getOffsetAt({
+      lineNumber: range.startLineNumber,
+      column: range.startColumn,
+    });
+    const endOffset = model.getOffsetAt({
+      lineNumber: range.endLineNumber,
+      column: range.endColumn,
+    });
+    return {
+      hints: sourceInlayHintsForOffsetRange(links, startOffset, endOffset).map((hint) => ({
+        label: hint.label,
+        tooltip: hint.tooltip,
+        position: model.getPositionAt(hint.offset),
+        kind: hint.kind === "param" ? monaco.languages.InlayHintKind.Parameter : monaco.languages.InlayHintKind.Type,
+        paddingLeft: true,
+        paddingRight: true,
+      })),
+      dispose() {},
+    };
+  },
+});
+
 export interface CodeEditor {
   setValue(value: string): void;
   getValue(): string;
@@ -181,6 +211,11 @@ export function createCodeEditor(
     scrollBeyondLastLine: false,
     tabSize: 2,
     wordWrap: "on",
+    inlayHints: {
+      enabled: "on",
+      padding: true,
+      maximumLength: 18,
+    },
     lineNumbersMinChars: 3,
     glyphMargin: false,
     folding: true,
@@ -476,6 +511,9 @@ export function createCodeEditor(
       suppress = true;
       editor.setValue(value);
       suppress = false;
+      const model = editor.getModel();
+      if (model) sourceInlayHintLinksByModel.delete(model);
+      sourceInlayHintsChanged.fire();
     },
     getValue() {
       return editor.getValue();
@@ -493,6 +531,8 @@ export function createCodeEditor(
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
+      sourceInlayHintLinksByModel.set(model, sourceLinks);
+      sourceInlayHintsChanged.fire();
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
       selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
       localHoveredSourceDecorations = editor.deltaDecorations(localHoveredSourceDecorations, []);
@@ -574,6 +614,9 @@ export function createCodeEditor(
       cursorSubscription.dispose();
       prettifyAction.dispose();
       leaveSubscription.dispose();
+      const model = editor.getModel();
+      if (model) sourceInlayHintLinksByModel.delete(model);
+      sourceInlayHintsChanged.fire();
       editor.dispose();
     },
   };

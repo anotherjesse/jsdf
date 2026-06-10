@@ -11,6 +11,7 @@ import {
   titleForSuggestionTarget,
 } from "../editor/source-diagnostic-fixes";
 import { sourceDiagnosticFromError } from "../editor/source-diagnostics";
+import { sourceInlayHintsForOffsetRange } from "../editor/source-inlay-hints";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
@@ -53,6 +54,12 @@ export interface EditorRuntimeVerification {
     stickyGap: string;
     preferredGap: string;
     farGap: string;
+  };
+  sourceInlayHints: {
+    count: number;
+    sphereCall: string;
+    sphereRadius: string;
+    translateOffset: string;
   };
   apiHints: {
     globalCompletions: number;
@@ -122,6 +129,7 @@ export async function runEditorRuntimeVerification(
 
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
+  const sourceInlayHints = verifySourceInlayHints(fixtureSource, links, errors);
   let codeEditor: ReturnType<typeof createCodeEditor> | null = null;
   const graphInspector = new GraphInspector(graphRoot, {
     onSelect(node) {
@@ -288,6 +296,7 @@ export async function runEditorRuntimeVerification(
       recursiveDecorationWarnings: recursiveDecorationMessages.length,
       sourceScrub,
       sourceLinkHitTest,
+      sourceInlayHints,
       apiHints,
       editorTools,
       selectionRestore,
@@ -444,6 +453,28 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     easingQuickFixReplacement,
     syntaxErrorLine: syntaxDiagnostic.lineNumber,
     syntaxErrorColumn: syntaxDiagnostic.column,
+  };
+}
+
+function verifySourceInlayHints(
+  source: string,
+  links: readonly GraphSourceLink[],
+  errors: string[],
+): EditorRuntimeVerification["sourceInlayHints"] {
+  const hints = sourceInlayHintsForOffsetRange(links, 0, source.length);
+  const sphereCall = hints.find((hint) => hint.tooltip.startsWith("sphere #") && hint.label.startsWith("#"));
+  const sphereRadius = hints.find((hint) => hint.tooltip.includes("sphere #") && hint.label === "radius");
+  const translateOffset = hints.find((hint) => hint.tooltip.includes("translate #") && hint.label === "offset.x");
+
+  if (!sphereCall) errors.push("source inlay hints missing sphere node id");
+  if (!sphereRadius) errors.push("source inlay hints missing sphere radius label");
+  if (!translateOffset) errors.push("source inlay hints missing translate offset axis label");
+
+  return {
+    count: hints.length,
+    sphereCall: sphereCall?.label ?? "",
+    sphereRadius: sphereRadius?.label ?? "",
+    translateOffset: translateOffset?.label ?? "",
   };
 }
 
