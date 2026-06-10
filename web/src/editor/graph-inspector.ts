@@ -101,6 +101,7 @@ export class GraphInspector {
     this.showAllButton.className = "graph-show-all";
     this.showAllButton.title = "Show all hidden nodes (Shift+V)";
     this.showAllButton.setAttribute("aria-label", "Show all hidden graph nodes");
+    this.showAllButton.setAttribute("aria-keyshortcuts", "Shift+V");
     this.showAllButton.hidden = true;
     this.showAllCount.className = "visibility-count";
     this.showAllCount.setAttribute("aria-hidden", "true");
@@ -308,11 +309,23 @@ export class GraphInspector {
     const header = document.createElement("div");
     header.className = "graph-tree-header";
 
-    const visibility = document.createElement("div");
+    const hidden = this.hiddenNodeIds.size;
+    const visibility = document.createElement("button");
+    visibility.type = "button";
     visibility.className = "graph-tree-header-eye";
-    visibility.title = "Visibility";
-    visibility.setAttribute("aria-label", "Visibility column");
+    visibility.disabled = hidden === 0;
+    visibility.title = hidden === 0 ? "Visibility" : "Show all hidden nodes (Shift+V)";
+    visibility.setAttribute("aria-label", hidden === 0 ? "Visibility column" : "Show all hidden graph nodes");
+    visibility.setAttribute("aria-keyshortcuts", "Shift+V");
     visibility.append(renderEyeIcon("visible"));
+    if (hidden > 0) {
+      const count = document.createElement("span");
+      count.className = "visibility-count graph-tree-header-eye-count";
+      count.setAttribute("aria-hidden", "true");
+      count.textContent = hidden > 99 ? "99+" : String(hidden);
+      visibility.append(count);
+      visibility.addEventListener("click", () => this.showAllNodes({ focus: true }));
+    }
 
     const rule = document.createElement("div");
     rule.className = "graph-tree-header-rule";
@@ -346,6 +359,7 @@ export class GraphInspector {
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
     visibility.title = visibilityShortcutTitle(visibilityMeta.title);
     visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
+    visibility.setAttribute("aria-keyshortcuts", "V");
     visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
     visibility.append(renderEyeIcon(visibilityMeta.state));
     visibility.addEventListener("click", (event) => {
@@ -544,6 +558,7 @@ export class GraphInspector {
       eye.setAttribute("tabindex", "0");
     }
     eye.setAttribute("aria-label", `${visibilityShortcutTitle(visibilityMeta.title)} ${node.kind} #${node.id}`);
+    eye.setAttribute("aria-keyshortcuts", "V");
     eye.setAttribute("aria-pressed", String(visibilityMeta.pressed));
 
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -893,6 +908,7 @@ export class GraphInspector {
     if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
     visibility.title = visibilityShortcutTitle(visibilityMeta.title);
     visibility.setAttribute("aria-label", `${visibility.title} selected ${node.kind} #${node.id}`);
+    visibility.setAttribute("aria-keyshortcuts", "V");
     visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
     visibility.append(renderEyeIcon(visibilityMeta.state));
     visibility.addEventListener("click", () => this.toggleNodeVisibility(node));
@@ -1572,7 +1588,7 @@ function relatedEventTarget(event: Event): EventTarget | null {
 }
 
 function visibilityShortcutTitle(title: string): string {
-  return title === "Root stays visible" ? title : `${title} (V)`;
+  return title === "Root node stays visible" ? title : `${title} (V)`;
 }
 
 function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {

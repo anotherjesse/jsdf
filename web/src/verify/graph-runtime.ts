@@ -160,6 +160,15 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (graphRoot.querySelectorAll(".graph-tree-header").length !== 1) {
       verifyErrors.push("graph tree visibility header did not render");
     }
+    const initialHeaderEye = graphRoot.querySelector<HTMLButtonElement>(".graph-tree-header-eye");
+    if (!initialHeaderEye) {
+      verifyErrors.push("graph tree visibility header eye did not render");
+    } else {
+      if (!initialHeaderEye.disabled) verifyErrors.push("graph tree visibility header eye should be disabled with no hidden nodes");
+      if (initialHeaderEye.getAttribute("aria-label") !== "Visibility column") {
+        verifyErrors.push("graph tree visibility header eye had unclear empty label");
+      }
+    }
     if (sourceLinks.length < 4) {
       verifyErrors.push("source links found too few graph ranges");
     }
@@ -224,6 +233,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       if (!mapEye) {
         verifyErrors.push("selected sphere has no map eye visibility toggle");
       } else {
+        if (mapEye.getAttribute("aria-keyshortcuts") !== "V") verifyErrors.push("map eye visibility shortcut missing");
         mapEye.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         if (hiddenEvents.at(-1)?.[0] !== sphere.id) verifyErrors.push("map eye visibility toggle did not hide sphere");
       }
@@ -350,8 +360,26 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!visibilityButton) {
       verifyErrors.push("selected sphere has no eye visibility button");
     } else {
+      if (visibilityButton.getAttribute("aria-keyshortcuts") !== "V") verifyErrors.push("tree eye visibility shortcut missing");
+      if (!visibilityButton.getAttribute("aria-label")?.includes("preview")) {
+        verifyErrors.push("tree eye visibility label did not explain preview effect");
+      }
       visibilityButton.click();
       if (hiddenEvents.at(-1)?.[0] !== sphere.id) verifyErrors.push("eye visibility toggle did not hide sphere");
+    }
+
+    const hiddenHeaderEye = graphRoot.querySelector<HTMLButtonElement>(".graph-tree-header-eye");
+    if (!hiddenHeaderEye || hiddenHeaderEye.disabled) {
+      verifyErrors.push("graph tree header eye did not become show-all control");
+    } else {
+      if (hiddenHeaderEye.querySelector(".visibility-count")?.textContent !== "1") {
+        verifyErrors.push("graph tree header eye did not show hidden count");
+      }
+      if (hiddenHeaderEye.getAttribute("aria-label") !== "Show all hidden graph nodes") {
+        verifyErrors.push("graph tree header eye had unclear show-all label");
+      }
+      hiddenHeaderEye.click();
+      if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("graph tree header eye did not clear hidden nodes");
     }
 
     nodeButton = graphRoot.querySelector<HTMLButtonElement>(`.graph-node[data-node-id="${sphere.id}"]`);

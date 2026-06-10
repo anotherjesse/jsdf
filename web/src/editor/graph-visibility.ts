@@ -15,7 +15,7 @@ export function graphVisibilityMeta(
   if (isRoot) {
     return {
       state: "root",
-      title: "Root stays visible",
+      title: "Root node stays visible",
       disabled: true,
       pressed: true,
     };
@@ -23,7 +23,7 @@ export function graphVisibilityMeta(
   if (directlyHidden) {
     return {
       state: "hidden",
-      title: "Show node",
+      title: "Show node in preview",
       disabled: false,
       pressed: false,
     };
@@ -38,7 +38,7 @@ export function graphVisibilityMeta(
   }
   return {
     state: "visible",
-    title: "Hide node",
+    title: "Hide node in preview",
     disabled: false,
     pressed: true,
   };
