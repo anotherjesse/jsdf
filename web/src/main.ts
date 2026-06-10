@@ -137,7 +137,13 @@ async function boot(): Promise<void> {
     compileEditorSource({ status: "Loaded example", invalidateMesh: false });
     await renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
-    codeEditor = createCodeEditor(codeEditorElement, sourceForExample(exampleSelect.value), scheduleSourceCompile, handleSourceLinkSelect);
+    codeEditor = createCodeEditor(
+      codeEditorElement,
+      sourceForExample(exampleSelect.value),
+      scheduleSourceCompile,
+      handleSourceLinkSelect,
+      handleSourceLinkValueChange,
+    );
     refreshSourceLinks();
   } catch (error) {
     gpuBadge.textContent = "Preview error";
@@ -191,6 +197,23 @@ function handleSourceLinkSelect(link: GraphSourceLink): void {
   if (!node) return;
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
   schedulePreview(0);
+}
+
+function handleSourceLinkValueChange(link: GraphSourceLink, nextValue: number): void {
+  if (!graphInspector) return;
+  const previousValue = graphInspector.getParamValue(link.nodeId, link.path);
+  if (typeof previousValue !== "number" || previousValue === nextValue) return;
+  const node = graphInspector.setParamValue(link.nodeId, link.path, nextValue);
+  if (!node) return;
+  handleGraphEdit({
+    node,
+    nodeId: node.id,
+    nodeKind: node.kind,
+    path: [...link.path],
+    label: link.label,
+    previousValue,
+    nextValue,
+  });
 }
 
 function selectNode(node: Node | null): void {

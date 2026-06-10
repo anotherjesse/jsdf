@@ -101,6 +101,12 @@ export class GraphInspector {
     return this.selected;
   }
 
+  getParamValue(nodeId: number, path: ParamPath): ParamValue | undefined {
+    if (!this.sdf) return undefined;
+    const node = findNode(this.sdf.node, nodeId);
+    return node ? getAtPath(node.params, path) : undefined;
+  }
+
   setParamValue(nodeId: number, path: ParamPath, value: ParamValue): Node | null {
     if (!this.sdf) return null;
     const node = findNode(this.sdf.node, nodeId);

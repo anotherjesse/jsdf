@@ -299,6 +299,15 @@ button:disabled {
   cursor: pointer;
 }
 
+.source-number-link {
+  cursor: ew-resize;
+}
+
+.source-scrubbing .source-number-link {
+  border-bottom-color: var(--accent-2);
+  color: var(--accent-2) !important;
+}
+
 .graph-inspector {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;

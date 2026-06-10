@@ -4,6 +4,7 @@ import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import * as api from "../api";
 import type { GraphSourceLink } from "./clean-source-patch";
+import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
 interface MonacoEnvironment {
   getWorker(): Worker;
@@ -50,6 +51,7 @@ export function createCodeEditor(
   initialValue: string,
   onChange: (value: string) => void,
   onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
+  onSourceLinkValueChange: (link: GraphSourceLink, value: number) => void = () => {},
 ): CodeEditor {
   const editor = monaco.editor.create(element, {
     value: initialValue,
@@ -71,6 +73,29 @@ export function createCodeEditor(
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
   let sourceLinkDecorations: string[] = [];
+  let activeScrub: ActiveSourceScrub | null = null;
+
+  const endScrub = () => {
+    if (!activeScrub) return;
+    activeScrub = null;
+    editor.getDomNode()?.classList.remove("source-scrubbing");
+    window.removeEventListener("mousemove", scrubMove);
+    window.removeEventListener("mouseup", endScrub);
+  };
+
+  const scrubMove = (event: MouseEvent) => {
+    if (!activeScrub) return;
+    const delta = event.clientX - activeScrub.startX;
+    if (!activeScrub.dragging && Math.abs(delta) < 2) return;
+    activeScrub.dragging = true;
+    event.preventDefault();
+    editor.getDomNode()?.classList.add("source-scrubbing");
+    const nextValue = scrubSourceLinkValue(activeScrub.link, activeScrub.startValue, delta, event);
+    if (nextValue === activeScrub.lastValue) return;
+    activeScrub.lastValue = nextValue;
+    onSourceLinkValueChange(activeScrub.link, nextValue);
+  };
+
   const subscription = editor.onDidChangeModelContent(() => {
     if (!suppress) onChange(editor.getValue());
   });
@@ -82,7 +107,20 @@ export function createCodeEditor(
     const link = sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end);
     if (!link) return;
     event.event.preventDefault();
+    event.event.stopPropagation();
     onSourceLinkSelect(link);
+
+    const startValue = readSourceLinkNumber(editor.getValue(), link);
+    if (startValue == null) return;
+    activeScrub = {
+      link,
+      startX: event.event.browserEvent.clientX,
+      startValue,
+      lastValue: startValue,
+      dragging: false,
+    };
+    window.addEventListener("mousemove", scrubMove);
+    window.addEventListener("mouseup", endScrub);
   });
 
   return {
@@ -117,10 +155,11 @@ export function createCodeEditor(
         .map((link) => {
           const start = model.getPositionAt(link.start);
           const end = model.getPositionAt(link.end);
+          const isNumber = readSourceLinkNumber(editor.getValue(), link) != null;
           return {
             range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
             options: {
-              inlineClassName: "source-graph-link",
+              inlineClassName: `source-graph-link ${isNumber ? "source-number-link" : "source-node-link"}`,
               hoverMessage: {
                 value: `Graph: ${link.nodeKind} #${link.nodeId} ${link.label}`,
               },
@@ -132,11 +171,20 @@ export function createCodeEditor(
       editor.layout();
     },
     dispose() {
+      endScrub();
       subscription.dispose();
       linkSubscription.dispose();
       editor.dispose();
     },
   };
+}
+
+interface ActiveSourceScrub {
+  link: GraphSourceLink;
+  startX: number;
+  startValue: number;
+  lastValue: number;
+  dragging: boolean;
 }
 
 let completionNames: string[] | null = null;
