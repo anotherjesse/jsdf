@@ -1,6 +1,7 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
+import { renderGraphChangeJournal } from "../editor/graph-change-journal";
 import { GraphEditHistory, formatGraphChangeValue } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
 import { scrubNumericParamValue } from "../editor/scrub-values";
@@ -43,6 +44,14 @@ export interface GraphRuntimeVerification {
     separateSessionCount: number;
     timedCount: number;
     changeLabel: string;
+  };
+  changeJournal: {
+    hiddenWhenEmpty: boolean;
+    renderedRows: number;
+    overflowText: string;
+    hoverShift: boolean;
+    clearCount: number;
+    revealSource: boolean;
   };
   sourceDialog: {
     initialCards: number;
@@ -118,6 +127,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   verifyOrientationControl(errors);
 
   const history = verifyHistoryCoalescing(errors);
+  const changeJournal = verifyChangeJournal(errors);
   const scrubValues = verifyScrubValues(errors);
   const sourceDialog = verifySourceDialog(errors);
   const workspaceStorage = verifyWorkspaceStorage(errors);
@@ -141,6 +151,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     vectorSourcePatches: verifyVectorSourcePatches(errors),
     scrubValues,
     history,
+    changeJournal,
     sourceDialog,
     workspaceStorage,
     errors,
@@ -860,6 +871,75 @@ function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["hi
     separateSessionCount: separateSession.dirtyCount,
     timedCount: timed.dirtyCount,
     changeLabel,
+  };
+}
+
+function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["changeJournal"] {
+  const emptyRoot = document.createElement("div");
+  const noopOptions = {
+    entries: [],
+    sourceLinkForEntry: () => null,
+    onSelect: () => {},
+    onHover: () => {},
+    onClearHover: () => {},
+  };
+  renderGraphChangeJournal(emptyRoot, noopOptions);
+  const hiddenWhenEmpty = emptyRoot.hidden;
+  if (!hiddenWhenEmpty) errors.push("empty graph change journal stayed visible");
+
+  const history = new GraphEditHistory();
+  history.record(edit("journal-1", 1, 1.1), 0);
+  history.record(edit("journal-2", 1.1, 1.2), 10);
+  history.record(edit("journal-3", 1.2, 1.3), 20);
+  history.record(edit("journal-4", 1.3, 1.4), 30);
+
+  const root = document.createElement("div");
+  const hoverEvents: Array<{ id: number; shiftKey: boolean }> = [];
+  const selections: Array<{ id: number; revealSource?: boolean }> = [];
+  let clearCount = 0;
+  renderGraphChangeJournal(root, {
+    entries: history.current(),
+    sourceLinkForEntry: (entry) => ({
+      nodeId: entry.nodeId,
+      nodeKind: entry.nodeKind,
+      path: entry.path,
+      label: entry.label,
+      start: 0,
+      end: 6,
+    }),
+    onSelect(entry, options) {
+      selections.push({ id: entry.id, revealSource: options.revealSource });
+    },
+    onHover(entry, options) {
+      hoverEvents.push({ id: entry.id, shiftKey: options.shiftKey });
+    },
+    onClearHover() {
+      clearCount += 1;
+    },
+  });
+
+  const renderedRows = root.querySelectorAll(".change-entry-row").length;
+  const overflowText = root.querySelector(".change-journal-more")?.textContent ?? "";
+  if (renderedRows !== 3) errors.push(`graph change journal rendered ${renderedRows} visible rows`);
+  if (overflowText !== "+1") errors.push(`graph change journal overflow rendered ${overflowText || "nothing"}`);
+  const firstRow = root.querySelector<HTMLElement>(".change-entry-row");
+  firstRow?.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true, shiftKey: true }));
+  firstRow?.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+  root.querySelector<HTMLButtonElement>(".change-entry-source")?.click();
+
+  const hoverShift = hoverEvents.at(-1)?.shiftKey === true;
+  const revealSource = selections.at(-1)?.revealSource === true;
+  if (!hoverShift) errors.push("graph change journal hover did not preserve shift focus");
+  if (clearCount !== 1) errors.push(`graph change journal clear count ${clearCount} !== 1`);
+  if (!revealSource) errors.push("graph change journal source button did not request reveal");
+
+  return {
+    hiddenWhenEmpty,
+    renderedRows,
+    overflowText,
+    hoverShift,
+    clearCount,
+    revealSource,
   };
 }
 

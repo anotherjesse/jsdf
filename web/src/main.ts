@@ -4,7 +4,8 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type 
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
-import { GraphEditHistory, formatGraphChangeValue, type GraphHistoryEntry } from "./editor/graph-history";
+import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
+import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
@@ -815,87 +816,18 @@ function updateGraphHistoryControls(): void {
 function renderGraphChangeJournal(): void {
   const entries = graphHistory.current();
   graphHistoryHoverKey = null;
-  graphChangeJournal.replaceChildren();
-  graphChangeJournal.hidden = entries.length === 0;
-  if (entries.length === 0) return;
-
-  const count = document.createElement("span");
-  count.className = "change-journal-count";
-  count.textContent = `${entries.length} ${entries.length === 1 ? "change" : "changes"}`;
-
-  const list = document.createElement("div");
-  list.className = "change-journal-list";
-  const visibleEntries = entries.slice(-3).reverse();
-  for (const entry of visibleEntries) {
-    list.append(renderGraphChangeEntry(entry));
-  }
-  if (entries.length > visibleEntries.length) {
-    const overflow = document.createElement("span");
-    overflow.className = "change-journal-more";
-    overflow.textContent = `+${entries.length - visibleEntries.length}`;
-    list.append(overflow);
-  }
-
-  graphChangeJournal.append(count, list);
+  renderGraphChangeJournalView(graphChangeJournal, {
+    entries,
+    sourceLinkForEntry: (entry) => sourceLinkForGraphEdit(currentSourceLinks, entry),
+    onSelect: selectGraphHistoryEntry,
+    onHover: hoverGraphHistoryEntry,
+    onClearHover: clearGraphHistoryEntryHover,
+  });
 }
 
-function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "change-entry-row";
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "change-entry";
-  const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
-  const sourceHint = sourceLink ? "; Cmd/Ctrl-click to show code" : "";
-  const changeLabel = formatGraphChangeValue(entry);
-  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${changeLabel}${sourceHint}`;
-  button.setAttribute("aria-label", button.title);
-  button.dataset.nodeId = String(entry.nodeId);
-  if (sourceLink) button.dataset.hasSource = "true";
-
-  const node = document.createElement("span");
-  node.className = "change-entry-node";
-  node.textContent = `${entry.nodeKind} #${entry.nodeId}`;
-
-  const value = document.createElement("span");
-  value.className = "change-entry-value";
-  value.textContent = changeLabel;
-
-  button.append(node, value);
-  button.addEventListener("click", (event) => {
-    selectGraphHistoryEntry(entry, { revealSource: event.metaKey || event.ctrlKey });
-  });
-  row.append(button);
-  row.addEventListener("pointerenter", (event) => hoverGraphHistoryEntry(entry, event));
-  row.addEventListener("pointermove", (event) => hoverGraphHistoryEntry(entry, event));
-  row.addEventListener("pointerleave", clearGraphHistoryEntryHover);
-  row.addEventListener("focusin", () => hoverGraphHistoryEntry(entry));
-  row.addEventListener("focusout", (event) => {
-    if (event.relatedTarget instanceof globalThis.Node && row.contains(event.relatedTarget)) return;
-    clearGraphHistoryEntryHover();
-  });
-
-  if (sourceLink) {
-    const source = document.createElement("button");
-    source.type = "button";
-    source.className = "change-entry-source icon-button";
-    source.title = `Reveal ${entry.nodeKind} ${entry.label} in code`;
-    source.setAttribute("aria-label", source.title);
-    const icon = document.createElement("span");
-    icon.className = "code-link-icon";
-    icon.setAttribute("aria-hidden", "true");
-    source.append(icon);
-    source.addEventListener("click", () => selectGraphHistoryEntry(entry, { revealSource: true }));
-    row.append(source);
-  }
-
-  return row;
-}
-
-function hoverGraphHistoryEntry(entry: GraphHistoryEntry, event?: PointerEvent): void {
+function hoverGraphHistoryEntry(entry: GraphHistoryEntry, options: { shiftKey: boolean }): void {
   if (!graphInspector) return;
-  const focus = Boolean(event?.shiftKey);
+  const focus = options.shiftKey;
   const hoverKey = `${entry.id}:${focus}`;
   if (hoverKey === graphHistoryHoverKey) return;
   graphHistoryHoverKey = hoverKey;
