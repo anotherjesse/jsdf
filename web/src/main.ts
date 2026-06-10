@@ -27,11 +27,12 @@ import { hasWebGPU } from "./gpu/webgpu";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
 import { OrbitCamera } from "./preview/orbit-camera";
-import type { PreviewLayout } from "./preview/view-layout";
+import { viewPanels, type PreviewLayout } from "./preview/view-layout";
 import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
 import { WebGLRaymarchRenderer } from "./preview/webgl-raymarch-renderer";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!;
+const viewLabels = document.querySelector<HTMLElement>("#viewLabels")!;
 const documentNameInput = document.querySelector<HTMLInputElement>("#documentNameInput")!;
 const dirtyIndicator = document.querySelector<HTMLElement>("#dirtyIndicator")!;
 const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
@@ -172,7 +173,10 @@ graphModeButton.addEventListener("click", () => setEditorView("graph"));
 undoGraphButton.addEventListener("click", undoGraphEdit);
 redoGraphButton.addEventListener("click", redoGraphEdit);
 resetGraphButton.addEventListener("click", resetGraphEdits);
-window.addEventListener("resize", () => activeRenderer()?.redraw());
+window.addEventListener("resize", () => {
+  activeRenderer()?.redraw();
+  renderViewLabels();
+});
 window.addEventListener("keydown", handleAppKeyboardShortcuts, { capture: true });
 window.addEventListener("keydown", handleGraphKeyboardShortcuts);
 window.addEventListener("beforeunload", handleBeforeUnload);
@@ -851,7 +855,27 @@ function setPreviewLayout(layout: PreviewLayout): void {
   layoutViewButton.setAttribute("aria-label", layoutViewButton.title);
   rayRenderer?.setLayout(layout);
   meshRenderer?.setLayout(layout);
+  renderViewLabels();
   activeRenderer()?.redraw();
+}
+
+function renderViewLabels(): void {
+  viewLabels.replaceChildren();
+  viewLabels.hidden = previewLayout !== "quad";
+  if (previewLayout !== "quad") return;
+
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (width <= 0 || height <= 0) return;
+
+  for (const panel of viewPanels(previewLayout, width, height)) {
+    const label = document.createElement("span");
+    label.className = "view-label";
+    label.textContent = panel.label;
+    label.style.left = `${panel.x + 10}px`;
+    label.style.top = `${height - panel.y - panel.height + 10}px`;
+    viewLabels.append(label);
+  }
 }
 
 function setEditorView(mode: EditorView): void {

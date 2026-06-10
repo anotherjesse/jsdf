@@ -1,6 +1,7 @@
 import { box, intersection, sphere, type SDF3 } from "../api";
 import { generateMesh } from "../mesh/generate";
 import { OrbitCamera } from "../preview/orbit-camera";
+import { viewPanels } from "../preview/view-layout";
 import { WebGLMeshRenderer } from "../preview/webgl-mesh-renderer";
 import { WebGLRaymarchRenderer } from "../preview/webgl-raymarch-renderer";
 
@@ -14,6 +15,7 @@ export interface PreviewRuntimeVerification {
     usedWorker: boolean;
     meshTimeMs: number;
   };
+  quadLabels: string[];
   errors: string[];
 }
 
@@ -80,11 +82,17 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   if (mesh.triangles <= 0) errors.push("mesh preview generated no triangles");
   if (!mesh.usedWorker) errors.push("mesh preview did not use worker mesh generation");
 
+  const quadLabels = viewPanels("quad", 800, 600).map((panel) => panel.label);
+  if (quadLabels.join(",") !== "Orbit,Top Z,Right X,Front Y") {
+    errors.push(`quad preview labels mismatch: ${quadLabels.join(",")}`);
+  }
+
   return {
     ok: errors.length === 0,
     shader,
     highlight,
     mesh,
+    quadLabels,
     errors,
   };
 }
