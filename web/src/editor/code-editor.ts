@@ -1091,7 +1091,6 @@ export function createCodeEditor(
       const range = rangeForSourceLink(link);
       if (!range) return;
       cancelCursorSourceLinkSync();
-      cursorLinkKey = sourceLinkKey(link);
       selectedSourceLink = link;
       updateSourceLinkStatus(link);
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{
