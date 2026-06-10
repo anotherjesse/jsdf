@@ -155,9 +155,8 @@ button:disabled {
 }
 
 .editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
   padding: 14px 14px 10px;
 }
@@ -168,9 +167,30 @@ button:disabled {
   font-weight: 700;
 }
 
+.editor-meta {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  min-width: 0;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.editor-actions button {
+  min-height: 26px;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
 .editor-status {
   min-width: 0;
-  max-width: 68%;
+  max-width: 100%;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;

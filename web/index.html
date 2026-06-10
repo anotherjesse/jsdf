@@ -48,7 +48,14 @@
       <aside class="editor-pane">
         <header class="editor-header">
           <h2>Editor</h2>
-          <span id="editorStatus" class="editor-status">Ready</span>
+          <div class="editor-meta">
+            <div class="editor-actions" aria-label="Graph edit history">
+              <button id="undoGraphButton" type="button" title="Undo graph edit" aria-label="Undo graph edit" disabled>Undo</button>
+              <button id="redoGraphButton" type="button" title="Redo graph edit" aria-label="Redo graph edit" disabled>Redo</button>
+              <button id="resetGraphButton" type="button" title="Reset graph edits" aria-label="Reset graph edits" disabled>Reset</button>
+            </div>
+            <span id="editorStatus" class="editor-status">Ready</span>
+          </div>
         </header>
 
         <div class="segmented editor-toggle" aria-label="Editor mode">

@@ -2,7 +2,7 @@ import type { Node, SDF3 } from "./core/nodes";
 import type { CodeEditor } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
-import { GraphInspector } from "./editor/graph-inspector";
+import { GraphInspector, type GraphParamEdit, type ParamPath } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
@@ -27,6 +27,9 @@ const graphPanel = document.querySelector<HTMLElement>("#graphPanel")!;
 const codeEditorElement = document.querySelector<HTMLElement>("#codeEditor")!;
 const graphInspectorElement = document.querySelector<HTMLElement>("#graphInspector")!;
 const editorStatus = document.querySelector<HTMLElement>("#editorStatus")!;
+const undoGraphButton = document.querySelector<HTMLButtonElement>("#undoGraphButton")!;
+const redoGraphButton = document.querySelector<HTMLButtonElement>("#redoGraphButton")!;
+const resetGraphButton = document.querySelector<HTMLButtonElement>("#resetGraphButton")!;
 const stepsInput = document.querySelector<HTMLInputElement>("#stepsInput")!;
 const stepsOutput = document.querySelector<HTMLOutputElement>("#stepsOutput")!;
 const gridInput = document.querySelector<HTMLInputElement>("#gridInput")!;
@@ -39,6 +42,16 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
 type RenderView = "shader" | "mesh";
 type EditorView = "code" | "graph";
+
+interface GraphHistoryEntry {
+  nodeId: number;
+  nodeKind: string;
+  path: ParamPath;
+  label: string;
+  previousValue: number;
+  nextValue: number;
+  timestamp: number;
+}
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -59,6 +72,8 @@ let viewMode: RenderView = "shader";
 let desiredViewMode: RenderView = "shader";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
+let undoStack: GraphHistoryEntry[] = [];
+let redoStack: GraphHistoryEntry[] = [];
 
 for (const example of examples) {
   const option = document.createElement("option");
@@ -101,6 +116,9 @@ downloadButton.addEventListener("click", () => {
 exampleSelect.addEventListener("change", () => loadExample(exampleSelect.value));
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
+undoGraphButton.addEventListener("click", undoGraphEdit);
+redoGraphButton.addEventListener("click", redoGraphEdit);
+resetGraphButton.addEventListener("click", resetGraphEdits);
 window.addEventListener("resize", () => activeRenderer()?.redraw());
 
 void boot();
@@ -158,6 +176,7 @@ function compileEditorSource(options: { status: string; invalidateMesh?: boolean
     activeSdf = sdf;
     graphInspector?.setSdf(sdf);
     codeEditor?.setError(null);
+    clearGraphHistory();
     setEditorStatus(options.status, "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
     schedulePreview(0);
@@ -179,12 +198,11 @@ function selectNode(node: Node | null): void {
   }
 }
 
-function handleGraphEdit(): void {
+function handleGraphEdit(edit: GraphParamEdit): void {
   if (!activeSdf) return;
   soloPreview = null;
-  setEditorStatus(selectedNode ? `Edited ${selectedNode.kind} #${selectedNode.id}` : "Graph edit", "ok");
-  invalidateMeshForActiveSdf();
-  schedulePreview(0);
+  recordGraphEdit(edit);
+  applyGraphMutationStatus(`Edited ${edit.nodeKind} ${edit.label}`);
 }
 
 function handleSoloPreview(preview: SoloPreview | null): void {
@@ -213,6 +231,84 @@ function invalidateMeshForActiveSdf(): void {
     return;
   }
   clearMesh();
+}
+
+function recordGraphEdit(edit: GraphParamEdit): void {
+  const now = performance.now();
+  const last = undoStack.at(-1);
+  redoStack = [];
+  if (last && last.nodeId === edit.nodeId && samePath(last.path, edit.path) && now - last.timestamp < 700) {
+    last.nextValue = edit.nextValue;
+    last.timestamp = now;
+  } else {
+    undoStack.push({
+      nodeId: edit.nodeId,
+      nodeKind: edit.nodeKind,
+      path: [...edit.path],
+      label: edit.label,
+      previousValue: edit.previousValue,
+      nextValue: edit.nextValue,
+      timestamp: now,
+    });
+  }
+  updateGraphHistoryControls();
+}
+
+function undoGraphEdit(): void {
+  const entry = undoStack.pop();
+  if (!entry) return;
+  const node = graphInspector?.setParamValue(entry.nodeId, entry.path, entry.previousValue);
+  if (!node) {
+    undoStack.push(entry);
+    updateGraphHistoryControls();
+    return;
+  }
+  redoStack.push({ ...entry, timestamp: performance.now() });
+  updateGraphHistoryControls();
+  applyGraphMutationStatus(`Undid ${entry.nodeKind} ${entry.label}`);
+}
+
+function redoGraphEdit(): void {
+  const entry = redoStack.pop();
+  if (!entry) return;
+  const node = graphInspector?.setParamValue(entry.nodeId, entry.path, entry.nextValue);
+  if (!node) {
+    redoStack.push(entry);
+    updateGraphHistoryControls();
+    return;
+  }
+  undoStack.push({ ...entry, timestamp: performance.now() });
+  updateGraphHistoryControls();
+  applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`);
+}
+
+function resetGraphEdits(): void {
+  if (undoStack.length === 0) return;
+  if (compileEditorSource({ status: "Reset graph" })) {
+    overlay.textContent = "";
+  }
+}
+
+function applyGraphMutationStatus(message: string): void {
+  setEditorStatus(message, "ok");
+  invalidateMeshForActiveSdf();
+  schedulePreview(0);
+}
+
+function clearGraphHistory(): void {
+  undoStack = [];
+  redoStack = [];
+  updateGraphHistoryControls();
+}
+
+function updateGraphHistoryControls(): void {
+  undoGraphButton.disabled = undoStack.length === 0;
+  redoGraphButton.disabled = redoStack.length === 0;
+  resetGraphButton.disabled = undoStack.length === 0;
+}
+
+function samePath(a: ParamPath, b: ParamPath): boolean {
+  return a.length === b.length && a.every((part, index) => part === b[index]);
 }
 
 function clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}): void {
