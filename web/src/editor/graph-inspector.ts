@@ -46,6 +46,7 @@ export class GraphInspector {
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
   private readonly mapButton = document.createElement("button");
+  private readonly showAllButton = document.createElement("button");
   private readonly summary = document.createElement("span");
   private readonly map = document.createElement("div");
   private readonly tree = document.createElement("div");
@@ -66,6 +67,12 @@ export class GraphInspector {
     this.mapButton.title = "Toggle graph map";
     this.mapButton.setAttribute("aria-label", "Toggle graph map");
     this.mapButton.setAttribute("aria-pressed", "false");
+    this.showAllButton.type = "button";
+    this.showAllButton.className = "graph-show-all";
+    this.showAllButton.textContent = "Show all";
+    this.showAllButton.title = "Show all hidden nodes";
+    this.showAllButton.setAttribute("aria-label", "Show all hidden graph nodes");
+    this.showAllButton.hidden = true;
     this.summary.className = "graph-summary";
     this.filterInput.addEventListener("input", () => {
       this.filter = this.filterInput.value;
@@ -76,6 +83,7 @@ export class GraphInspector {
       this.mapButton.setAttribute("aria-pressed", String(this.showMap));
       this.render();
     });
+    this.showAllButton.addEventListener("click", () => this.showAllNodes());
     window.addEventListener("pointermove", (event) => {
       if (!(event.target instanceof globalThis.Node) || !this.root.contains(event.target)) {
         this.clearHover();
@@ -91,7 +99,7 @@ export class GraphInspector {
       this.clearHover();
       this.clearSolo();
     });
-    this.toolbar.append(this.filterInput, this.mapButton, this.summary);
+    this.toolbar.append(this.filterInput, this.mapButton, this.showAllButton, this.summary);
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
     this.params.className = "param-editor";
@@ -179,6 +187,7 @@ export class GraphInspector {
     if (!this.sdf) return;
     const model = buildGraphModel(this.sdf.node, this.filter);
     this.renderSummary(model);
+    this.showAllButton.hidden = this.hiddenNodeIds.size === 0;
     this.map.hidden = !this.showMap;
     if (this.showMap) this.renderMap(model);
     if (model.visibleNodeIds.size === 0) {
@@ -203,13 +212,20 @@ export class GraphInspector {
     row.style.setProperty("--depth", String(depth));
 
     const isRoot = this.sdf?.node.id === node.id;
+    const directlyHidden = this.hiddenNodeIds.has(node.id);
+    const inheritedHidden = path.slice(0, -1).some((ancestor) => this.hiddenNodeIds.has(ancestor.id));
+    const effectivelyHidden = directlyHidden || inheritedHidden;
+    if (effectivelyHidden) row.classList.add("hidden-node-row");
+    if (inheritedHidden && !directlyHidden) row.classList.add("inherited-hidden");
+
     const visibility = document.createElement("button");
     visibility.type = "button";
     visibility.className = "graph-visibility";
     visibility.disabled = isRoot;
-    visibility.title = isRoot ? "Root stays visible" : this.hiddenNodeIds.has(node.id) ? "Show node" : "Hide node";
+    if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
+    visibility.title = visibilityTitle(isRoot, directlyHidden, inheritedHidden);
     visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
-    visibility.setAttribute("aria-pressed", String(!this.hiddenNodeIds.has(node.id)));
+    visibility.setAttribute("aria-pressed", String(!directlyHidden));
     visibility.append(renderEyeIcon());
     visibility.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -219,7 +235,8 @@ export class GraphInspector {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "graph-node";
-    if (this.hiddenNodeIds.has(node.id)) button.classList.add("hidden-node");
+    if (effectivelyHidden) button.classList.add("hidden-node");
+    if (inheritedHidden && !directlyHidden) button.classList.add("inherited-hidden");
     if (this.filter && view?.matched) button.classList.add("matched");
     if (this.hovered?.id === node.id) button.classList.add("hovered");
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
@@ -229,7 +246,7 @@ export class GraphInspector {
     label.textContent = node.kind;
     const meta = document.createElement("small");
     const shared = (view?.parents.size ?? 0) > 1;
-    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}`;
+    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}${directlyHidden ? " hidden" : inheritedHidden ? " parent hidden" : ""}`;
     button.append(label, meta);
     button.addEventListener("click", () => this.select(node));
     this.attachSoloHover(row, path);
@@ -247,9 +264,11 @@ export class GraphInspector {
   private renderSummary(model: GraphModel): void {
     const total = model.nodes.length;
     const visible = model.visibleNodeIds.size;
+    const hidden = this.hiddenNodeIds.size;
+    const suffix = hidden > 0 ? `, ${hidden} hidden` : "";
     this.summary.textContent = this.filter
-      ? `${visible}/${total} nodes`
-      : `${total} nodes, ${model.edges.length} edges`;
+      ? `${visible}/${total} nodes${suffix}`
+      : `${total} nodes, ${model.edges.length} edges${suffix}`;
   }
 
   private renderMap(model: GraphModel): void {
@@ -288,6 +307,8 @@ export class GraphInspector {
     this.map.style.setProperty("--graph-map-height", `${height}px`);
     this.map.style.setProperty("--graph-map-width", `${width}px`);
 
+    const effectiveVisibleNodeIds = this.effectiveVisibleNodeIds();
+
     for (const edge of model.edges) {
       const from = positions.get(edge.from);
       const to = positions.get(edge.to);
@@ -307,19 +328,21 @@ export class GraphInspector {
     for (const view of nodes) {
       const position = positions.get(view.node.id);
       if (!position) continue;
-      svg.append(this.renderMapNode(view, position.x, position.y));
+      svg.append(this.renderMapNode(view, position.x, position.y, effectiveVisibleNodeIds));
     }
 
     this.map.replaceChildren(svg);
   }
 
-  private renderMapNode(view: GraphNodeView, x: number, y: number): SVGElement {
+  private renderMapNode(view: GraphNodeView, x: number, y: number, effectiveVisibleNodeIds: ReadonlySet<number>): SVGElement {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.classList.add("graph-map-node");
     if (this.selected?.id === view.node.id) group.classList.add("selected");
     if (this.hovered?.id === view.node.id) group.classList.add("hovered");
     if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
-    if (this.hiddenNodeIds.has(view.node.id)) group.classList.add("hidden-node");
+    const directlyHidden = this.hiddenNodeIds.has(view.node.id);
+    if (directlyHidden) group.classList.add("hidden-node");
+    if (!directlyHidden && !effectiveVisibleNodeIds.has(view.node.id)) group.classList.add("inherited-hidden");
     if (this.filter && view.matched) group.classList.add("matched");
     if (view.parents.size > 1) group.classList.add("shared");
     group.dataset.nodeId = String(view.node.id);
@@ -359,6 +382,26 @@ export class GraphInspector {
     }
     this.render();
     this.options.onVisibilityChange([...this.hiddenNodeIds]);
+  }
+
+  private showAllNodes(): void {
+    if (this.hiddenNodeIds.size === 0) return;
+    this.hiddenNodeIds.clear();
+    this.render();
+    this.options.onVisibilityChange([]);
+  }
+
+  private effectiveVisibleNodeIds(): Set<number> {
+    const out = new Set<number>();
+    if (!this.sdf) return out;
+
+    const visit = (node: Node) => {
+      if (this.hiddenNodeIds.has(node.id)) return;
+      out.add(node.id);
+      for (const child of node.children) visit(child.node);
+    };
+    visit(this.sdf.node);
+    return out;
   }
 
   private select(node: Node): void {
@@ -932,6 +975,13 @@ function attachScrubber(
 
 function mapLabel(kind: string): string {
   return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
+}
+
+function visibilityTitle(isRoot: boolean, directlyHidden: boolean, inheritedHidden: boolean): string {
+  if (isRoot) return "Root stays visible";
+  if (directlyHidden) return "Show node";
+  if (inheritedHidden) return "Hide node; parent is already hidden";
+  return "Hide node";
 }
 
 function renderEyeIcon(): HTMLElement {

@@ -336,7 +336,7 @@ button:disabled {
 
 .graph-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 10px;
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -359,7 +359,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.graph-map-toggle {
+.graph-map-toggle,
+.graph-show-all {
   min-height: 30px;
   border-radius: 6px;
   padding: 4px 9px;
@@ -369,6 +370,14 @@ button:disabled {
 .graph-map-toggle[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
   color: var(--accent);
+}
+
+.graph-show-all {
+  color: var(--accent);
+}
+
+.graph-show-all[hidden] {
+  display: none;
 }
 
 .graph-map {
@@ -482,6 +491,10 @@ button:disabled {
   color: #65707c;
 }
 
+.graph-visibility.inherited-hidden {
+  color: #74808d;
+}
+
 .eye-icon {
   position: relative;
   width: 17px;
@@ -545,8 +558,23 @@ button:disabled {
 }
 
 .graph-node.hidden-node,
-.graph-map-node.hidden-node {
+.graph-map-node.hidden-node,
+.graph-node.inherited-hidden,
+.graph-map-node.inherited-hidden {
   opacity: 0.42;
+}
+
+.graph-node.inherited-hidden,
+.graph-map-node.inherited-hidden {
+  opacity: 0.58;
+}
+
+.graph-node-row.hidden-node-row {
+  filter: saturate(0.72);
+}
+
+.graph-node-row.inherited-hidden .graph-node {
+  border-color: transparent;
 }
 
 .graph-node.matched:not([aria-pressed="true"]) {
