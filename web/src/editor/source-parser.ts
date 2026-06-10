@@ -68,6 +68,8 @@ export function findMatchingParen(source: string, open: number): number {
 }
 
 export function splitArgs(source: string, start: number, end: number): CallArg[] {
+  if (source.slice(start, end).trim() === "") return [];
+
   const args: CallArg[] = [];
   let depth = 0;
   let quote: string | null = null;

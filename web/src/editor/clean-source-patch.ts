@@ -524,13 +524,27 @@ function vectorValueForLabel(node: Node, label: string): number[] | null {
 
 function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number, node: Node, label: string): string | null {
   const range = findNthCallArgumentRange(source, patch, ordinal);
-  if (!range) return null;
+  if (!range) return materializeMissingCallArguments(source, patch, ordinal, node, label);
   if (range.scalarVector) {
     const vector = vectorValueForLabel(node, label);
     if (!vector) return null;
     return replaceRange(source, range.start, range.end, `[${vector.map(formatNumber).join(", ")}]`);
   }
   return replaceRange(source, range.start, range.end, formatNumberLike(source.slice(range.start, range.end), value));
+}
+
+function materializeMissingCallArguments(source: string, patch: CallPatch, ordinal: number, node: Node, label: string): string | null {
+  const calls = findCalls(source, patch.fns);
+  const call = calls[ordinal];
+  if (!call || call.args.length > patch.arg) return null;
+
+  const values: string[] = [];
+  for (let arg = call.args.length; arg <= patch.arg; arg += 1) {
+    const value = materializedArgumentValue(node, patch, arg, label);
+    if (!value) return null;
+    values.push(value);
+  }
+  return insertCallArguments(source, call, values);
 }
 
 function findNthCallArgumentRange(source: string, patch: CallPatch, ordinal: number): SourceRange | null {
@@ -568,6 +582,47 @@ function findKMethodCalls(source: string): CallMatch[] {
 
 function findVectorElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
   return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element) ?? findScalarVectorRange(source, arg);
+}
+
+function materializedArgumentValue(node: Node, patch: CallPatch, arg: number, fallbackLabel: string): string | null {
+  const candidates = Object.entries(CALL_PATCHES[node.kind] ?? {}).filter(([, candidate]) => {
+    return candidate.arg === arg && candidate.fns.some((fn) => patch.fns.includes(fn));
+  });
+  const scalar = candidates.find(([, candidate]) => candidate.element == null);
+  if (scalar) {
+    const value = valueForLabel(node, scalar[0]);
+    return typeof value === "number" && Number.isFinite(value) ? formatNumber(value) : null;
+  }
+
+  const vectorLabels = new Set(candidates.map(([candidateLabel]) => vectorBaseLabel(candidateLabel)));
+  if (arg === patch.arg) vectorLabels.add(vectorBaseLabel(fallbackLabel));
+  for (const vectorLabel of vectorLabels) {
+    const vector = vectorValueForLabel(node, vectorLabel);
+    if (vector) return `[${vector.map(formatNumber).join(", ")}]`;
+  }
+  return null;
+}
+
+function valueForLabel(node: Node, label: string): unknown {
+  let value: unknown = node.params;
+  for (const part of labelToPath(label)) {
+    value = Array.isArray(value)
+      ? value[part as number]
+      : (value as Record<string, unknown> | undefined)?.[part as string];
+  }
+  return value;
+}
+
+function insertCallArguments(source: string, call: CallMatch, values: string[]): string | null {
+  const open = source.indexOf("(", call.nameEnd);
+  if (open < 0) return null;
+  const close = findMatchingParen(source, open);
+  if (close < 0) return null;
+  const beforeClose = source.slice(0, close);
+  const trailingWhitespace = beforeClose.match(/\s*$/)?.[0].length ?? 0;
+  const insertAt = close - trailingWhitespace;
+  const separator = call.args.length === 0 ? "" : ", ";
+  return `${source.slice(0, insertAt)}${separator}${values.join(", ")}${source.slice(insertAt)}`;
 }
 
 function findArrayElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
