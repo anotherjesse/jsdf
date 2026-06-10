@@ -133,6 +133,7 @@ let cleanNameSnapshot = activeSourceName;
 let cleanPreviewSnapshot = "";
 let hasUnsavedChanges = false;
 let draftPersistenceEnabled = false;
+let editorSourceValid = true;
 const graphHistory = new GraphEditHistory();
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
@@ -276,7 +277,7 @@ function updateSourceHintsButton(): void {
 
 function loadExample(id: string): void {
   if (!confirmDiscardUnsavedChanges()) return;
-  window.clearTimeout(sourceCompileTimer);
+  clearPendingSourceCompile();
   activeExampleId = id;
   activeBounds = boundsForExample(id);
   boundsAreValid = true;
@@ -310,7 +311,7 @@ function loadSavedSourceById(documentId: string, versionId: string): void {
 }
 
 function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string, preview?: SavedSourcePreview): void {
-  window.clearTimeout(sourceCompileTimer);
+  clearPendingSourceCompile();
   activeDocumentId = document.id;
   activeSourceVersionId = versionId;
   activeSourceName = document.name;
@@ -334,7 +335,7 @@ function restoreSourceDraft(): boolean {
   const draft = loadSourceDraft();
   if (!draft) return false;
 
-  window.clearTimeout(sourceCompileTimer);
+  clearPendingSourceCompile();
   if (examples.some((example) => example.id === draft.activeExampleId)) {
     activeExampleId = draft.activeExampleId;
   }
@@ -387,7 +388,7 @@ function prettifyCurrentSource(): void {
     setEditorStatus("Already pretty", "idle");
     return;
   }
-  window.clearTimeout(sourceCompileTimer);
+  clearPendingSourceCompile();
   pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
   codeEditor.setValue(nextSource);
   updateSaveState();
@@ -428,15 +429,28 @@ function deleteSavedVersion(documentId: string, versionId: string): void {
 }
 
 function scheduleSourceCompile(): void {
-  window.clearTimeout(sourceCompileTimer);
+  clearPendingSourceCompile();
   pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
   updateSaveState();
   setEditorStatus("Editing...", "pending");
   codeEditor?.setSourceLinks([]);
   graphInspector?.setSourceLinks([]);
   sourceCompileTimer = window.setTimeout(() => {
+    sourceCompileTimer = 0;
     compileEditorSource({ status: "Compiled" });
   }, 350);
+}
+
+function clearPendingSourceCompile(): void {
+  if (!sourceCompileTimer) return;
+  window.clearTimeout(sourceCompileTimer);
+  sourceCompileTimer = 0;
+}
+
+function flushPendingSourceCompile(): boolean {
+  if (!sourceCompileTimer) return editorSourceValid;
+  clearPendingSourceCompile();
+  return compileEditorSource({ status: "Compiled" });
 }
 
 function compileEditorSource(
@@ -457,6 +471,7 @@ function compileEditorSource(
     soloPreview = null;
     focusPreview = null;
     hiddenNodeIds = new Set(restoredHiddenNodeIds);
+    editorSourceValid = true;
     activeSdf = sdf;
     currentSourceLinks = sourceLinks;
     graphInspector?.setSdf(sdf, restoredHiddenNodeIds);
@@ -476,6 +491,7 @@ function compileEditorSource(
     graphInspector?.setSourceLinks([]);
     currentSourceLinks = [];
     selectedSourceLink = null;
+    editorSourceValid = false;
     setEditorStatus(diagnostic.message, "error");
     overlay.textContent = `Code error: ${diagnostic.message}`;
     return false;
@@ -1061,6 +1077,10 @@ function renderViewLabels(): void {
 
 function setEditorView(mode: EditorView): void {
   const previousMode = editorView;
+  if (mode === "graph" && previousMode === "code" && !flushPendingSourceCompile()) {
+    return;
+  }
+
   editorView = mode;
   codeModeButton.setAttribute("aria-pressed", String(mode === "code"));
   graphModeButton.setAttribute("aria-pressed", String(mode === "graph"));

@@ -715,7 +715,9 @@ export class GraphInspector {
     const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
     window.requestAnimationFrame(() => {
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
-      if (focus) target?.focus({ preventScroll: true });
+      if (!focus) return;
+      target?.focus({ preventScroll: true });
+      window.setTimeout(() => target?.focus({ preventScroll: true }), 0);
     });
   }
 
