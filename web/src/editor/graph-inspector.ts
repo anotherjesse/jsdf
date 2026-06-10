@@ -428,8 +428,9 @@ export class GraphInspector {
     if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
     if (this.dirtyNodeIds.has(view.node.id)) group.classList.add("edited");
     const directlyHidden = this.hiddenNodeIds.has(view.node.id);
+    const inheritedHidden = !directlyHidden && !effectiveVisibleNodeIds.has(view.node.id);
     if (directlyHidden) group.classList.add("hidden-node");
-    if (!directlyHidden && !effectiveVisibleNodeIds.has(view.node.id)) group.classList.add("inherited-hidden");
+    if (inheritedHidden) group.classList.add("inherited-hidden");
     if (this.filter && view.matched) group.classList.add("matched");
     if (view.parents.size > 1) group.classList.add("shared");
     group.dataset.nodeId = String(view.node.id);
@@ -438,20 +439,24 @@ export class GraphInspector {
     group.setAttribute("aria-label", `${view.node.kind} #${view.node.id}`);
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(x - 38));
+    rect.setAttribute("x", String(x - 50));
     rect.setAttribute("y", String(y - 12));
-    rect.setAttribute("width", "76");
+    rect.setAttribute("width", "100");
     rect.setAttribute("height", "24");
     rect.setAttribute("rx", "6");
+    rect.classList.add("graph-map-card");
 
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", String(x));
+    text.setAttribute("x", String(x + 9));
     text.setAttribute("y", String(y + 4));
     text.textContent = mapLabel(view.node.kind);
 
-    group.append(rect, text);
+    const path = this.pathToNode(view.node.id);
+    const { isRoot } = this.visibilityStateForPath(view.node, path);
+    const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
+    group.append(rect, this.renderMapEye(view.node, x - 34, y, visibilityMeta), text);
     group.addEventListener("click", () => this.select(view.node));
-    this.attachSoloHover(group, this.pathToNode(view.node.id));
+    this.attachSoloHover(group, path);
     group.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
@@ -461,6 +466,66 @@ export class GraphInspector {
       this.handleNodeKeyDown(event, view.node);
     });
     return group;
+  }
+
+  private renderMapEye(
+    node: Node,
+    x: number,
+    y: number,
+    visibilityMeta: ReturnType<typeof graphVisibilityMeta>,
+  ): SVGElement {
+    const eye = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    eye.classList.add("graph-map-eye");
+    eye.dataset.state = visibilityMeta.state;
+    if (!visibilityMeta.disabled) {
+      eye.setAttribute("role", "button");
+      eye.setAttribute("tabindex", "0");
+    }
+    eye.setAttribute("aria-label", `${visibilityShortcutTitle(visibilityMeta.title)} ${node.kind} #${node.id}`);
+    eye.setAttribute("aria-pressed", String(visibilityMeta.pressed));
+
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    hitArea.setAttribute("x", String(x - 11));
+    hitArea.setAttribute("y", String(y - 11));
+    hitArea.setAttribute("width", "22");
+    hitArea.setAttribute("height", "22");
+    hitArea.setAttribute("rx", "5");
+    hitArea.classList.add("graph-map-eye-hit");
+
+    const outline = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+    outline.setAttribute("cx", String(x));
+    outline.setAttribute("cy", String(y));
+    outline.setAttribute("rx", "7.4");
+    outline.setAttribute("ry", "4.8");
+    outline.classList.add("graph-map-eye-outline");
+
+    const pupil = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    pupil.setAttribute("cx", String(x));
+    pupil.setAttribute("cy", String(y));
+    pupil.setAttribute("r", visibilityMeta.state === "hidden" ? "1.7" : "2.4");
+    pupil.classList.add("graph-map-eye-pupil");
+
+    const slash = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    slash.setAttribute("x1", String(x - 7.6));
+    slash.setAttribute("y1", String(y + 5.7));
+    slash.setAttribute("x2", String(x + 7.6));
+    slash.setAttribute("y2", String(y - 5.7));
+    slash.classList.add("graph-map-eye-slash");
+
+    eye.append(hitArea, outline, pupil, slash);
+    if (!visibilityMeta.disabled) {
+      eye.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.toggleNodeVisibility(node);
+      });
+      eye.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.toggleNodeVisibility(node, { focus: true });
+      });
+    }
+    return eye;
   }
 
   private toggleNodeVisibility(node: Node, options: { focus?: boolean } = {}): void {

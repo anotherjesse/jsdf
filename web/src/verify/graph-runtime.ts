@@ -8,6 +8,7 @@ export interface GraphRuntimeVerification {
   ok: boolean;
   nodes: number;
   eyeButtons: number;
+  mapEyes: number;
   links: number;
   selectedNode: string;
   editedRows: number;
@@ -73,6 +74,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     ok: errors.length === 0,
     nodes: root.querySelectorAll(".graph-node").length,
     eyeButtons: root.querySelectorAll(".graph-visibility").length,
+    mapEyes: root.querySelectorAll(".graph-map-eye").length,
     links: links.length,
     selectedNode,
     editedRows: root.querySelectorAll(".param-row.edited, .axis-control.edited").length,
@@ -99,6 +101,22 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!graphInspector.selectNodeById(sphere.id)) {
       verifyErrors.push("could not select sphere node");
       return;
+    }
+
+    const mapToggle = graphRoot.querySelector<HTMLButtonElement>(".graph-map-toggle");
+    if (!mapToggle) {
+      verifyErrors.push("graph map toggle not found");
+    } else {
+      mapToggle.click();
+      const mapEye = graphRoot.querySelector<SVGElement>(`.graph-map-node[data-node-id="${sphere.id}"] .graph-map-eye`);
+      if (!mapEye) {
+        verifyErrors.push("selected sphere has no map eye visibility toggle");
+      } else {
+        mapEye.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        if (hiddenEvents.at(-1)?.[0] !== sphere.id) verifyErrors.push("map eye visibility toggle did not hide sphere");
+      }
+      graphRoot.querySelector<HTMLButtonElement>(".graph-show-all")?.click();
+      if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("show-all after map eye did not clear hidden nodes");
     }
 
     const radiusInput = graphRoot.querySelector<HTMLInputElement>(".param-row input[type='number']");
