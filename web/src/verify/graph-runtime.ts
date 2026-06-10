@@ -60,6 +60,8 @@ export interface GraphRuntimeVerification {
     chainMatches: string[];
     savedMatches: string[];
     emptyMessages: string[];
+    enterLoadedExample: string;
+    enterLoadedSaved: string;
     loadedExample: string;
     loadedSaved: string;
   };
@@ -574,6 +576,8 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
       chainMatches: [],
       savedMatches: [],
       emptyMessages: [],
+      enterLoadedExample: "",
+      enterLoadedSaved: "",
       loadedExample,
       loadedSaved,
     };
@@ -589,13 +593,25 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   const chainMatches = sourceCardLabels(root);
   if (!chainMatches.includes("Chain links")) errors.push("source dialog search did not find Chain links");
   if (chainMatches.includes("CSG example")) errors.push("source dialog search left unrelated example visible");
+  search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const enterLoadedExample = loadedExample;
+  if (enterLoadedExample !== "chain") {
+    errors.push(`source dialog Enter example load emitted ${enterLoadedExample || "nothing"}`);
+  }
+  loadedExample = "";
   clickSourceCard(root, "Chain links");
   if (loadedExample !== "chain") errors.push(`source dialog example load emitted ${loadedExample || "nothing"}`);
 
-  search.value = "vessel";
+  search.value = "saved";
   search.dispatchEvent(new Event("input", { bubbles: true }));
   const savedMatches = sourceCardLabels(root);
   if (!savedMatches.includes("Saved Vessel")) errors.push("source dialog search did not find saved shape");
+  search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const enterLoadedSaved = loadedSaved;
+  if (enterLoadedSaved !== "saved-vessel:version-latest") {
+    errors.push(`source dialog Enter saved load emitted ${enterLoadedSaved || "nothing"}`);
+  }
+  loadedSaved = "";
   clickSourceCard(root, "Saved Vessel");
   if (loadedSaved !== "saved-vessel:version-latest") {
     errors.push(`source dialog saved load emitted ${loadedSaved || "nothing"}`);
@@ -612,6 +628,8 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
     chainMatches,
     savedMatches,
     emptyMessages,
+    enterLoadedExample,
+    enterLoadedSaved,
     loadedExample,
     loadedSaved,
   };

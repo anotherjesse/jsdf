@@ -34,6 +34,7 @@ export function renderSourceDialog(
 
   const results = document.createElement("div");
   results.className = "source-dialog-results";
+  let firstLoadResult: (() => void) | null = null;
 
   const renderResults = () => {
     const query = normalizeSearch(search.value);
@@ -42,6 +43,7 @@ export function renderSourceDialog(
       examples: filterExamples(state.examples, query),
       savedDocuments: filterSavedDocuments(state.savedDocuments, query),
     };
+    firstLoadResult = firstVisibleLoadAction(filteredState, actions);
     results.replaceChildren(
       renderExampleSection(filteredState, actions, query),
       renderSavedSection(filteredState, actions, query),
@@ -49,8 +51,28 @@ export function renderSourceDialog(
   };
 
   search.addEventListener("input", renderResults);
+  search.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing || !firstLoadResult) return;
+    event.preventDefault();
+    firstLoadResult();
+  });
   renderResults();
   root.replaceChildren(searchBar, results);
+}
+
+function firstVisibleLoadAction(
+  state: SourceDialogState,
+  actions: SourceDialogActions,
+): (() => void) | null {
+  const example = state.examples[0];
+  if (example) return () => actions.loadExample(example.id);
+
+  for (const savedDocument of state.savedDocuments) {
+    const latest = latestSourceVersion(savedDocument);
+    if (latest) return () => actions.loadSaved(savedDocument.id, latest.id);
+  }
+
+  return null;
 }
 
 function renderExampleSection(state: SourceDialogState, actions: SourceDialogActions, query = ""): HTMLElement {
