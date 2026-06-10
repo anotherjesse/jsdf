@@ -85,7 +85,9 @@ export interface EditorRuntimeVerification {
     radiusRevealTargetLabel: string;
     radiusRevealTargetLink: string;
     radiusStepButtons: number;
+    radiusStepTitle: string;
     radiusStepNextValue: number | null;
+    radiusFineStepNextValue: number | null;
     radiusStepSession: string;
     hiddenAfterClear: boolean;
     box: string;
@@ -216,7 +218,9 @@ export async function runEditorRuntimeVerification(
     radiusRevealTargetLabel: "",
     radiusRevealTargetLink: "",
     radiusStepButtons: 0,
+    radiusStepTitle: "",
     radiusStepNextValue: null,
+    radiusFineStepNextValue: null,
     radiusStepSession: "",
     hiddenAfterClear: false,
     box: "",
@@ -257,7 +261,11 @@ export async function runEditorRuntimeVerification(
     (link, value, options) => {
       if (link.nodeKind !== "sphere" || link.label !== "radius") return;
       if (options?.editSessionId?.startsWith("source-status-step:")) {
-        sourceLinkStatus.radiusStepNextValue = value;
+        if (sourceLinkStatus.radiusStepNextValue == null) {
+          sourceLinkStatus.radiusStepNextValue = value;
+        } else {
+          sourceLinkStatus.radiusFineStepNextValue = value;
+        }
         sourceLinkStatus.radiusStepSession = options.editSessionId;
         return;
       }
@@ -310,6 +318,10 @@ export async function runEditorRuntimeVerification(
       if (!increaseButton) {
         errors.push("source link status did not render an increase step button");
       } else {
+        sourceLinkStatus.radiusStepTitle = increaseButton.title;
+        if (!sourceLinkStatus.radiusStepTitle.includes("Shift/Alt-click")) {
+          errors.push(`source link status step title rendered ${sourceLinkStatus.radiusStepTitle || "nothing"}`);
+        }
         increaseButton.click();
         await nextFrame();
         if (Math.abs((sourceLinkStatus.radiusStepNextValue ?? 0) - 1.1) > 0.000001) {
@@ -317,6 +329,11 @@ export async function runEditorRuntimeVerification(
         }
         if (!sourceLinkStatus.radiusStepSession.startsWith("source-status-step:")) {
           errors.push(`source link status step session was ${sourceLinkStatus.radiusStepSession || "missing"}`);
+        }
+        increaseButton.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+        await nextFrame();
+        if (Math.abs((sourceLinkStatus.radiusFineStepNextValue ?? 0) - 1.025) > 0.000001) {
+          errors.push(`source link status fine step emitted ${sourceLinkStatus.radiusFineStepNextValue ?? "nothing"}`);
         }
       }
       if (cursorEvents.at(-1) !== "sphere:radius") {

@@ -655,10 +655,10 @@ export function createCodeEditor(
     return true;
   };
 
-  const nudgeStatusSourceLink = (direction: -1 | 1) => {
+  const nudgeStatusSourceLink = (direction: -1 | 1, modifiers: ScrubModifiers) => {
     const link = liveSourceLinkFor(selectedSourceLink);
     if (!link) return;
-    nudgeSourceLink(link, direction, { altKey: false, shiftKey: false }, {
+    nudgeSourceLink(link, direction, modifiers, {
       editSessionId: nextEditSessionId("source-status-step"),
     });
   };
@@ -666,12 +666,12 @@ export function createCodeEditor(
   sourceLinkDecreaseButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    nudgeStatusSourceLink(-1);
+    nudgeStatusSourceLink(-1, modifiersForMouseEvent(event));
   });
   sourceLinkIncreaseButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    nudgeStatusSourceLink(1);
+    nudgeStatusSourceLink(1, modifiersForMouseEvent(event));
   });
   sourceLinkStatusTarget.addEventListener("click", (event) => {
     event.preventDefault();
@@ -726,6 +726,8 @@ export function createCodeEditor(
     sourceLinkIncreaseButton.disabled = !isNumber;
     sourceLinkDecreaseButton.setAttribute("aria-label", `Decrease ${sourceLinkStatusTextForLink(link)}`);
     sourceLinkIncreaseButton.setAttribute("aria-label", `Increase ${sourceLinkStatusTextForLink(link)}`);
+    sourceLinkDecreaseButton.title = "Decrease value; Shift/Alt-click for finer steps";
+    sourceLinkIncreaseButton.title = "Increase value; Shift/Alt-click for finer steps";
   };
 
   const currentSourceLinkForNavigation = (): GraphSourceLink | null => {
@@ -1162,6 +1164,13 @@ function sourceNudgeDirectionForKey(key: string): -1 | 1 | null {
   if (key === "ArrowDown") return -1;
   if (key === "ArrowUp") return 1;
   return null;
+}
+
+function modifiersForMouseEvent(event: MouseEvent): ScrubModifiers {
+  return {
+    altKey: event.altKey,
+    shiftKey: event.shiftKey,
+  };
 }
 
 function paramPathsEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
