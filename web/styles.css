@@ -653,6 +653,16 @@ button:disabled {
   color: var(--accent);
 }
 
+.param-visibility {
+  width: 28px;
+  border-radius: 6px;
+}
+
+.param-visibility:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
 .param-isolate[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
   color: var(--accent-2);

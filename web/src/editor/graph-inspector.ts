@@ -247,9 +247,7 @@ export class GraphInspector {
     row.className = "graph-node-row";
     row.style.setProperty("--depth", String(depth));
 
-    const isRoot = this.sdf?.node.id === node.id;
-    const directlyHidden = this.hiddenNodeIds.has(node.id);
-    const inheritedHidden = path.slice(0, -1).some((ancestor) => this.hiddenNodeIds.has(ancestor.id));
+    const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
     const effectivelyHidden = directlyHidden || inheritedHidden;
     if (effectivelyHidden) row.classList.add("hidden-node-row");
     if (inheritedHidden && !directlyHidden) row.classList.add("inherited-hidden");
@@ -592,6 +590,21 @@ export class GraphInspector {
 
     const actions = document.createElement("div");
     actions.className = "param-title-actions";
+
+    const path = this.pathToNode(node.id);
+    const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
+    const visibility = document.createElement("button");
+    visibility.type = "button";
+    visibility.className = "graph-visibility param-visibility";
+    visibility.disabled = isRoot;
+    if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
+    visibility.title = visibilityTitle(isRoot, directlyHidden, inheritedHidden);
+    visibility.setAttribute("aria-label", `${visibility.title} selected ${node.kind} #${node.id}`);
+    visibility.setAttribute("aria-pressed", String(!directlyHidden));
+    visibility.append(renderEyeIcon());
+    visibility.addEventListener("click", () => this.toggleNodeVisibility(node));
+    actions.append(visibility);
+
     const nodeSourceLink = this.sourceLinkForNode(node.id);
     if (nodeSourceLink) {
       const source = document.createElement("button");
@@ -669,6 +682,13 @@ export class GraphInspector {
     });
 
     return trail;
+  }
+
+  private visibilityStateForPath(node: Node, path: readonly Node[]): { isRoot: boolean; directlyHidden: boolean; inheritedHidden: boolean } {
+    const isRoot = this.sdf?.node.id === node.id;
+    const directlyHidden = this.hiddenNodeIds.has(node.id);
+    const inheritedHidden = path.slice(0, -1).some((ancestor) => this.hiddenNodeIds.has(ancestor.id));
+    return { isRoot, directlyHidden, inheritedHidden };
   }
 
   private renderOrientationControl(node: Node): HTMLElement | null {
