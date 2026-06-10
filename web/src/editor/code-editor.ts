@@ -205,6 +205,7 @@ export interface CodeEditor {
   getValue(): string;
   setError(error: CodeEditorError | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
+  setGraphHintsEnabled(enabled: boolean): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
   markSelectedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   markHoveredSourceLink(link: GraphSourceLink | null): void;
@@ -613,6 +614,16 @@ export function createCodeEditor(
       applyFocusedNodeDecorations(false);
       cursorLinkKey = null;
       scheduleCursorSourceLinkSync(editor.getPosition());
+    },
+    setGraphHintsEnabled(enabled: boolean) {
+      editor.updateOptions({
+        inlayHints: {
+          enabled: enabled ? "on" : "off",
+          padding: true,
+          maximumLength: 18,
+        },
+      });
+      sourceInlayHintsChanged.fire();
     },
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;

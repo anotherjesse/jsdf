@@ -2,6 +2,7 @@ import { apiCompletionEntriesForScope, apiReferenceForWord } from "../editor/api
 import { apiSignatureHelpAt } from "../editor/api-signature-help";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { createCodeEditor } from "../editor/code-editor";
+import { loadEditorPreferences, saveEditorPreferences } from "../editor/editor-preferences";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
 import { prettifySource } from "../editor/prettify-source";
@@ -62,6 +63,11 @@ export interface EditorRuntimeVerification {
     sphereRadius: string;
     sphereRadiusKey: string;
     translateOffset: string;
+  };
+  editorPreferences: {
+    defaultGraphHints: boolean;
+    savedGraphHints: boolean;
+    recoveredGraphHints: boolean;
   };
   apiHints: {
     globalCompletions: number;
@@ -124,6 +130,7 @@ export async function runEditorRuntimeVerification(
     selectedGraphParamsAfterPatch: 0,
   };
   const sourceLinkHitTest = verifySourceLinkHitTest(errors);
+  const editorPreferences = verifyEditorPreferences(errors);
   const apiHints = verifyApiHints(errors);
   const editorTools = verifyEditorTools(errors);
   const selectionRestore = verifySelectionRestore(errors);
@@ -299,6 +306,7 @@ export async function runEditorRuntimeVerification(
       sourceScrub,
       sourceLinkHitTest,
       sourceInlayHints,
+      editorPreferences,
       apiHints,
       editorTools,
       selectionRestore,
@@ -487,6 +495,32 @@ function verifySourceInlayHints(
     sphereRadius: sphereRadius?.label ?? "",
     sphereRadiusKey: sphereRadius?.key ?? "",
     translateOffset: translateOffset?.label ?? "",
+  };
+}
+
+function verifyEditorPreferences(errors: string[]): EditorRuntimeVerification["editorPreferences"] {
+  const storage = new MemoryStorage();
+  const defaults = loadEditorPreferences(storage);
+  if (defaults.graphHintsEnabled !== true) {
+    errors.push("editor preferences did not default graph hints on");
+  }
+
+  saveEditorPreferences({ graphHintsEnabled: false }, storage);
+  const saved = loadEditorPreferences(storage);
+  if (saved.graphHintsEnabled !== false) {
+    errors.push("editor preferences did not persist disabled graph hints");
+  }
+
+  storage.setItem("sdf-browser-editor-preferences-v1", "{");
+  const recovered = loadEditorPreferences(storage);
+  if (recovered.graphHintsEnabled !== true) {
+    errors.push("editor preferences did not recover from invalid storage");
+  }
+
+  return {
+    defaultGraphHints: defaults.graphHintsEnabled,
+    savedGraphHints: saved.graphHintsEnabled,
+    recoveredGraphHints: recovered.graphHintsEnabled,
   };
 }
 
@@ -709,4 +743,32 @@ async function revealAndSettle(
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
 }

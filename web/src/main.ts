@@ -4,6 +4,7 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type 
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
+import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
 import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
@@ -52,6 +53,7 @@ const dirtyIndicator = document.querySelector<HTMLElement>("#dirtyIndicator")!;
 const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
 const saveSourceButton = document.querySelector<HTMLButtonElement>("#saveSourceButton")!;
 const prettifySourceButton = document.querySelector<HTMLButtonElement>("#prettifySourceButton")!;
+const sourceHintsButton = document.querySelector<HTMLButtonElement>("#sourceHintsButton")!;
 const sourceDialog = document.querySelector<HTMLDialogElement>("#sourceDialog")!;
 const sourceDialogList = document.querySelector<HTMLElement>("#sourceDialogList")!;
 const closeSourceDialogButton = document.querySelector<HTMLButtonElement>("#closeSourceDialogButton")!;
@@ -134,6 +136,8 @@ let draftPersistenceEnabled = false;
 const graphHistory = new GraphEditHistory();
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
+const editorPreferences = loadEditorPreferences();
+let graphHintsEnabled = editorPreferences.graphHintsEnabled;
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
@@ -144,6 +148,7 @@ boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
   onInvalid: handleBoundsInvalid,
 });
 cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
+updateSourceHintsButton();
 updateSaveState();
 renderLoadDialog();
 exposeAppHealthDiagnostics(appHealthDiagnostics);
@@ -185,6 +190,7 @@ documentNameInput.addEventListener("input", updateSaveState);
 loadSourceButton.addEventListener("click", openSourceDialog);
 saveSourceButton.addEventListener("click", saveCurrentSource);
 prettifySourceButton.addEventListener("click", prettifyCurrentSource);
+sourceHintsButton.addEventListener("click", () => setGraphHintsEnabled(!graphHintsEnabled));
 closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
 sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
@@ -241,6 +247,7 @@ async function boot(): Promise<void> {
       handleSourceLinkCursor,
       prettifyCurrentSource,
     );
+    codeEditor.setGraphHintsEnabled(graphHintsEnabled);
     if (healthCheckMode || !restoreSourceDraft()) refreshSourceLinks();
     draftPersistenceEnabled = !healthCheckMode;
     updateSaveState();
@@ -249,6 +256,18 @@ async function boot(): Promise<void> {
     gpuBadge.classList.add("warn");
     overlay.textContent = error instanceof Error ? error.message : String(error);
   }
+}
+
+function setGraphHintsEnabled(enabled: boolean): void {
+  graphHintsEnabled = enabled;
+  codeEditor?.setGraphHintsEnabled(enabled);
+  updateSourceHintsButton();
+  saveEditorPreferences({ graphHintsEnabled });
+}
+
+function updateSourceHintsButton(): void {
+  sourceHintsButton.setAttribute("aria-pressed", String(graphHintsEnabled));
+  sourceHintsButton.title = graphHintsEnabled ? "Hide graph hints" : "Show graph hints";
 }
 
 function loadExample(id: string): void {
