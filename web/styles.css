@@ -424,6 +424,12 @@ button:disabled {
   stroke-width: 1.8;
 }
 
+.graph-map-node.isolated rect {
+  fill: color-mix(in srgb, var(--accent-2) 24%, #20262e);
+  stroke: var(--accent-2);
+  stroke-width: 2;
+}
+
 .graph-map-node.matched rect {
   stroke: var(--accent-2);
 }
@@ -470,6 +476,11 @@ button:disabled {
   background: color-mix(in srgb, var(--accent-2) 12%, transparent);
 }
 
+.graph-node.isolated {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+}
+
 .graph-node.matched:not([aria-pressed="true"]) {
   border-color: color-mix(in srgb, var(--accent-2) 64%, var(--line));
 }
@@ -507,12 +518,32 @@ button:disabled {
   color: var(--text);
 }
 
+.param-title-text {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
 .param-title strong {
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.param-isolate {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.param-isolate[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  color: var(--accent-2);
 }
 
 .param-title span,

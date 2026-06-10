@@ -33,7 +33,9 @@ export class GraphInspector {
   private hovered: Node | null = null;
   private filter = "";
   private showMap = false;
-  private soloKey: string | null = null;
+  private hoverSoloKey: string | null = null;
+  private lockedSoloKey: string | null = null;
+  private lockedSoloNodeId: number | null = null;
   private revealSelectedAfterRender = false;
   private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
@@ -94,11 +96,15 @@ export class GraphInspector {
   setSdf(sdf: SDF3): void {
     this.sdf = sdf;
     this.selected = sdf.node;
+    this.hoverSoloKey = null;
+    this.lockedSoloKey = null;
+    this.lockedSoloNodeId = null;
     this.render();
     this.options.onSelect(this.selected);
   }
 
   setSelected(node: Node | null): void {
+    this.clearLockedSoloIfDifferent(node);
     this.selected = node;
     this.revealSelectedAfterRender = node != null;
     this.render();
@@ -145,6 +151,7 @@ export class GraphInspector {
     if (!this.sdf) return null;
     const node = findNode(this.sdf.node, nodeId);
     if (!node) return null;
+    this.clearLockedSoloIfDifferent(node);
     setAtPath(node.params, path, value);
     this.selected = node;
     this.revealSelectedAfterRender = true;
@@ -184,6 +191,7 @@ export class GraphInspector {
     button.className = "graph-node";
     if (this.filter && view?.matched) button.classList.add("matched");
     if (this.hovered?.id === node.id) button.classList.add("hovered");
+    if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
     button.style.setProperty("--depth", String(depth));
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
     button.dataset.nodeId = String(node.id);
@@ -279,6 +287,7 @@ export class GraphInspector {
     group.classList.add("graph-map-node");
     if (this.selected?.id === view.node.id) group.classList.add("selected");
     if (this.hovered?.id === view.node.id) group.classList.add("hovered");
+    if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
     if (this.filter && view.matched) group.classList.add("matched");
     if (view.parents.size > 1) group.classList.add("shared");
     group.dataset.nodeId = String(view.node.id);
@@ -311,6 +320,7 @@ export class GraphInspector {
   }
 
   private select(node: Node): void {
+    this.clearLockedSoloIfDifferent(node);
     this.selected = node;
     this.revealSelectedAfterRender = true;
     this.render();
@@ -343,6 +353,7 @@ export class GraphInspector {
   }
 
   private updateSolo(path: Node[], event: Event): void {
+    if (this.lockedSoloKey) return;
     if (!(event instanceof PointerEvent) || !event.shiftKey) {
       this.clearSolo();
       return;
@@ -352,8 +363,8 @@ export class GraphInspector {
       this.clearSolo();
       return;
     }
-    if (preview.key === this.soloKey) return;
-    this.soloKey = preview.key;
+    if (preview.key === this.hoverSoloKey) return;
+    this.hoverSoloKey = preview.key;
     this.options.onSolo(preview);
   }
 
@@ -363,9 +374,41 @@ export class GraphInspector {
   }
 
   private clearSolo(): void {
-    if (!this.soloKey) return;
-    this.soloKey = null;
+    if (!this.hoverSoloKey) return;
+    this.hoverSoloKey = null;
+    if (this.lockedSoloKey) return;
     this.options.onSolo(null);
+  }
+
+  private toggleLockedSolo(node: Node): void {
+    const preview = this.soloPreviewForNode(node);
+    if (!preview) return;
+
+    this.hoverSoloKey = null;
+    if (this.lockedSoloKey === preview.key) {
+      this.lockedSoloKey = null;
+      this.lockedSoloNodeId = null;
+      this.options.onSolo(null);
+    } else {
+      this.lockedSoloKey = preview.key;
+      this.lockedSoloNodeId = node.id;
+      this.options.onSolo(preview);
+    }
+    this.render();
+  }
+
+  private clearLockedSoloIfDifferent(node: Node | null): void {
+    if (!this.lockedSoloKey) return;
+    const preview = node ? this.soloPreviewForNode(node) : null;
+    if (preview?.key === this.lockedSoloKey) return;
+    this.lockedSoloKey = null;
+    this.lockedSoloNodeId = null;
+    this.hoverSoloKey = null;
+    this.options.onSolo(null);
+  }
+
+  private soloPreviewForNode(node: Node): SoloPreview | null {
+    return buildSoloPreview(this.pathToNode(node.id));
   }
 
   private pathToNode(id: number): Node[] {
@@ -393,11 +436,27 @@ export class GraphInspector {
 
     const title = document.createElement("div");
     title.className = "param-title";
+    const titleText = document.createElement("div");
+    titleText.className = "param-title-text";
     const kind = document.createElement("strong");
     kind.textContent = node.kind;
     const id = document.createElement("span");
     id.textContent = `#${node.id}`;
-    title.append(kind, id);
+    titleText.append(kind, id);
+    title.append(titleText);
+
+    const soloPreview = this.soloPreviewForNode(node);
+    if (soloPreview) {
+      const isolate = document.createElement("button");
+      isolate.type = "button";
+      isolate.className = "param-isolate";
+      isolate.textContent = "Isolate";
+      isolate.title = "Isolate selected node in preview";
+      isolate.setAttribute("aria-label", "Isolate selected node in preview");
+      isolate.setAttribute("aria-pressed", String(node.id === this.lockedSoloNodeId));
+      isolate.addEventListener("click", () => this.toggleLockedSolo(node));
+      title.append(isolate);
+    }
     this.params.append(title);
 
     const breadcrumb = this.renderBreadcrumb(node);
