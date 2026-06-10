@@ -25,6 +25,7 @@ export interface GraphInspectorOptions {
 export class GraphInspector {
   private sdf: SDF3 | null = null;
   private selected: Node | null = null;
+  private hovered: Node | null = null;
   private filter = "";
   private showMap = false;
   private soloKey: string | null = null;
@@ -89,12 +90,31 @@ export class GraphInspector {
     this.render();
   }
 
+  setHoveredNodeById(id: number | null): Node | null {
+    if (id == null || !this.sdf) {
+      if (this.hovered) {
+        this.hovered = null;
+        this.render();
+      }
+      return null;
+    }
+    const node = findNode(this.sdf.node, id);
+    if (this.hovered?.id === node?.id) return node;
+    this.hovered = node;
+    this.render();
+    return node;
+  }
+
   selectNodeById(id: number): Node | null {
     if (!this.sdf) return null;
     const node = findNode(this.sdf.node, id);
     if (!node) return null;
     this.select(node);
     return node;
+  }
+
+  buildSoloPreviewForNodeId(id: number): SoloPreview | null {
+    return buildSoloPreview(this.pathToNode(id));
   }
 
   getSelected(): Node | null {
@@ -147,6 +167,7 @@ export class GraphInspector {
     button.type = "button";
     button.className = "graph-node";
     if (this.filter && view?.matched) button.classList.add("matched");
+    if (this.hovered?.id === node.id) button.classList.add("hovered");
     button.style.setProperty("--depth", String(depth));
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
     button.dataset.nodeId = String(node.id);
@@ -241,6 +262,7 @@ export class GraphInspector {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.classList.add("graph-map-node");
     if (this.selected?.id === view.node.id) group.classList.add("selected");
+    if (this.hovered?.id === view.node.id) group.classList.add("hovered");
     if (this.filter && view.matched) group.classList.add("matched");
     if (view.parents.size > 1) group.classList.add("shared");
     group.dataset.nodeId = String(view.node.id);

@@ -1,6 +1,6 @@
 import type { Node, SDF3 } from "./core/nodes";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
-import type { CodeEditor } from "./editor/code-editor";
+import type { CodeEditor, SourceLinkHoverOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
@@ -52,6 +52,7 @@ let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
 let activeSdf: SDF3 | null = null;
 let selectedNode: Node | null = null;
+let hoveredNode: Node | null = null;
 let soloPreview: SoloPreview | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
@@ -143,6 +144,7 @@ async function boot(): Promise<void> {
       scheduleSourceCompile,
       handleSourceLinkSelect,
       handleSourceLinkValueChange,
+      handleSourceLinkHover,
     );
     refreshSourceLinks();
   } catch (error) {
@@ -155,6 +157,7 @@ async function boot(): Promise<void> {
 function loadExample(id: string): void {
   window.clearTimeout(sourceCompileTimer);
   selectedNode = null;
+  hoveredNode = null;
   codeEditor?.setValue(sourceForExample(id));
   compileEditorSource({ status: "Loaded example" });
 }
@@ -214,6 +217,33 @@ function handleSourceLinkValueChange(link: GraphSourceLink, nextValue: number): 
     previousValue,
     nextValue,
   });
+}
+
+function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLinkHoverOptions): void {
+  if (!graphInspector) return;
+  if (!link) {
+    hoveredNode = null;
+    graphInspector.setHoveredNodeById(null);
+    if (soloPreview) handleSoloPreview(null);
+    else schedulePreview(0);
+    const selected = graphInspector.getSelected();
+    if (selected) setEditorStatus(`${selected.kind} #${selected.id}`, "ok");
+    return;
+  }
+
+  const node = graphInspector.setHoveredNodeById(link.nodeId);
+  hoveredNode = node;
+  if (!node) return;
+
+  if (options.shiftKey) {
+    handleSoloPreview(graphInspector.buildSoloPreviewForNodeId(link.nodeId));
+    setEditorStatus(`Solo ${node.kind} #${node.id}`, "ok");
+    return;
+  }
+
+  if (soloPreview) handleSoloPreview(null);
+  else schedulePreview(0);
+  setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
 }
 
 function selectNode(node: Node | null): void {
@@ -482,7 +512,7 @@ async function renderCurrent(): Promise<void> {
   const start = performance.now();
   try {
     if (job !== renderJob) return;
-    rayRenderer.render(sdf, currentBounds(), steps, preview?.node ?? selectedNode);
+    rayRenderer.render(sdf, currentBounds(), steps, preview?.node ?? hoveredNode ?? selectedNode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
     if (preview) {
       overlay.textContent = `Solo: ${preview.label}${preview.preservedWrappers ? ` (${preview.preservedWrappers} context)` : ""}`;

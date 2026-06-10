@@ -52,6 +52,7 @@ export function createCodeEditor(
   onChange: (value: string) => void,
   onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
   onSourceLinkValueChange: (link: GraphSourceLink, value: number) => void = () => {},
+  onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
 ): CodeEditor {
   const editor = monaco.editor.create(element, {
     value: initialValue,
@@ -74,6 +75,8 @@ export function createCodeEditor(
   let sourceLinks: readonly GraphSourceLink[] = [];
   let sourceLinkDecorations: string[] = [];
   let activeScrub: ActiveSourceScrub | null = null;
+  let hoveredKey: string | null = null;
+  let hoveredLink: GraphSourceLink | null = null;
 
   const endScrub = () => {
     if (!activeScrub) return;
@@ -96,15 +99,26 @@ export function createCodeEditor(
     onSourceLinkValueChange(activeScrub.link, nextValue);
   };
 
+  const updateHover = (link: GraphSourceLink | null, shiftKey: boolean) => {
+    const key = link ? `${link.nodeId}:${link.label}:${link.start}:${link.end}:${shiftKey}` : null;
+    if (key === hoveredKey) return;
+    hoveredKey = key;
+    hoveredLink = link;
+    onSourceLinkHover(link, { shiftKey });
+  };
+
+  const linkAtPosition = (position: monaco.Position | null | undefined): GraphSourceLink | null => {
+    const model = editor.getModel();
+    if (!model || !position) return null;
+    const offset = model.getOffsetAt(position);
+    return sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end) ?? null;
+  };
+
   const subscription = editor.onDidChangeModelContent(() => {
     if (!suppress) onChange(editor.getValue());
   });
   const linkSubscription = editor.onMouseDown((event) => {
-    const model = editor.getModel();
-    const position = event.target.position;
-    if (!model || !position) return;
-    const offset = model.getOffsetAt(position);
-    const link = sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end);
+    const link = linkAtPosition(event.target.position);
     if (!link) return;
     event.event.preventDefault();
     event.event.stopPropagation();
@@ -122,6 +136,19 @@ export function createCodeEditor(
     window.addEventListener("mousemove", scrubMove);
     window.addEventListener("mouseup", endScrub);
   });
+  const hoverSubscription = editor.onMouseMove((event) => {
+    if (activeScrub) return;
+    updateHover(linkAtPosition(event.target.position), event.event.browserEvent.shiftKey);
+  });
+  const leaveSubscription = editor.onMouseLeave(() => updateHover(null, false));
+  const keyDownListener = (event: KeyboardEvent) => {
+    if (event.key === "Shift" && hoveredLink) updateHover(hoveredLink, true);
+  };
+  const keyUpListener = (event: KeyboardEvent) => {
+    if (event.key === "Shift" && hoveredLink) updateHover(hoveredLink, false);
+  };
+  window.addEventListener("keydown", keyDownListener);
+  window.addEventListener("keyup", keyUpListener);
 
   return {
     setValue(value: string) {
@@ -147,6 +174,7 @@ export function createCodeEditor(
         : []);
     },
     setSourceLinks(links: readonly GraphSourceLink[]) {
+      updateHover(null, false);
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
@@ -172,11 +200,20 @@ export function createCodeEditor(
     },
     dispose() {
       endScrub();
+      updateHover(null, false);
+      window.removeEventListener("keydown", keyDownListener);
+      window.removeEventListener("keyup", keyUpListener);
       subscription.dispose();
       linkSubscription.dispose();
+      hoverSubscription.dispose();
+      leaveSubscription.dispose();
       editor.dispose();
     },
   };
+}
+
+export interface SourceLinkHoverOptions {
+  shiftKey: boolean;
 }
 
 interface ActiveSourceScrub {

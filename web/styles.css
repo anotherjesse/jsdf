@@ -400,6 +400,12 @@ button:disabled {
   stroke: var(--accent);
 }
 
+.graph-map-node.hovered rect {
+  fill: color-mix(in srgb, var(--accent-2) 20%, #20262e);
+  stroke: var(--accent-2);
+  stroke-width: 1.8;
+}
+
 .graph-map-node.selected rect {
   fill: color-mix(in srgb, var(--accent) 24%, #20262e);
   stroke: var(--accent);
@@ -441,9 +447,15 @@ button:disabled {
 
 .graph-node:hover,
 .graph-node[aria-pressed="true"],
+.graph-node.hovered,
 .graph-node.matched {
   border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
   background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.graph-node.hovered:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 68%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
 }
 
 .graph-node.matched:not([aria-pressed="true"]) {
