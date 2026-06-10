@@ -760,9 +760,12 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "change-entry";
-  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${entry.label} ${formatGraphValue(entry.previousValue)} -> ${formatGraphValue(entry.nextValue)}`;
+  const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
+  const sourceHint = sourceLink ? "; Cmd/Ctrl-click to show code" : "";
+  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${entry.label} ${formatGraphValue(entry.previousValue)} -> ${formatGraphValue(entry.nextValue)}${sourceHint}`;
   button.setAttribute("aria-label", button.title);
   button.dataset.nodeId = String(entry.nodeId);
+  if (sourceLink) button.dataset.hasSource = "true";
 
   const node = document.createElement("span");
   node.className = "change-entry-node";
@@ -773,13 +776,21 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLButtonElement {
   value.textContent = `${entry.label} ${formatGraphValue(entry.nextValue)}`;
 
   button.append(node, value);
-  button.addEventListener("click", () => selectGraphHistoryEntry(entry));
+  button.addEventListener("click", (event) => {
+    selectGraphHistoryEntry(entry, { revealSource: event.metaKey || event.ctrlKey });
+  });
   return button;
 }
 
-function selectGraphHistoryEntry(entry: GraphHistoryEntry): void {
+function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSource?: boolean } = {}): void {
   const node = graphInspector?.selectNodeById(entry.nodeId);
   if (!node) return;
+  const sourceLink = options.revealSource ? sourceLinkForGraphEdit(currentSourceLinks, entry) : null;
+  if (sourceLink) {
+    revealGraphSource(sourceLink);
+    schedulePreview(0);
+    return;
+  }
   setEditorView("graph");
   setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
   schedulePreview(0);

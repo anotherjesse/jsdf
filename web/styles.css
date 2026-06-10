@@ -253,6 +253,10 @@ button:disabled {
   text-align: left;
 }
 
+.change-entry[data-has-source="true"] {
+  border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line));
+}
+
 .change-entry-node,
 .change-entry-value {
   min-width: 0;
