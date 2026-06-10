@@ -47,6 +47,8 @@ export interface GraphRuntimeVerification {
     separateSessionCount: number;
     timedCount: number;
     changeLabel: string;
+    undoLabel: string;
+    redoLabel: string;
   };
   changeJournal: {
     hiddenWhenEmpty: boolean;
@@ -1335,16 +1337,30 @@ function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["hi
   timed.record(edit(undefined, 1, 1.1), 0);
   timed.record(edit(undefined, 1.1, 1.2), 100);
   if (timed.dirtyCount !== 1) errors.push(`timed edit history count ${timed.dirtyCount} !== 1`);
+  const timedCount = timed.dirtyCount;
   const changeLabel = formatGraphChangeValue(timed.current()[0]);
   if (changeLabel !== "radius 1 -> 1.2") {
     errors.push(`graph change label rendered ${changeLabel}`);
+  }
+  const undoEntry = timed.peekUndo();
+  const undoLabel = undoEntry ? `${undoEntry.nodeKind} #${undoEntry.nodeId} ${formatGraphChangeValue(undoEntry)}` : "";
+  if (undoLabel !== "sphere #100 radius 1 -> 1.2") {
+    errors.push(`graph undo peek rendered ${undoLabel || "nothing"}`);
+  }
+  timed.undo(() => true, 200);
+  const redoEntry = timed.peekRedo();
+  const redoLabel = redoEntry ? `${redoEntry.nodeKind} #${redoEntry.nodeId} ${formatGraphChangeValue(redoEntry)}` : "";
+  if (redoLabel !== "sphere #100 radius 1 -> 1.2") {
+    errors.push(`graph redo peek rendered ${redoLabel || "nothing"}`);
   }
 
   return {
     sameSessionCount: sameSession.dirtyCount,
     separateSessionCount: separateSession.dirtyCount,
-    timedCount: timed.dirtyCount,
+    timedCount,
     changeLabel,
+    undoLabel,
+    redoLabel,
   };
 }
 

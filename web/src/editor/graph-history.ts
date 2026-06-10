@@ -33,6 +33,14 @@ export class GraphEditHistory {
     return this.undoStack;
   }
 
+  peekUndo(): GraphHistoryEntry | null {
+    return this.undoStack.at(-1) ?? null;
+  }
+
+  peekRedo(): GraphHistoryEntry | null {
+    return this.redoStack.at(-1) ?? null;
+  }
+
   record(edit: GraphParamEdit, now = performance.now()): void {
     const last = this.undoStack.at(-1);
     this.redoStack.length = 0;

@@ -7,7 +7,7 @@ import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/ap
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
-import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
+import { formatGraphChangeValue, GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import { prettifySource } from "./editor/prettify-source";
 import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
@@ -97,6 +97,8 @@ const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
 const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
 const GRAPH_FILTER_SHORTCUTS = "Control+F Meta+F /";
+const GRAPH_UNDO_SHORTCUTS = "Control+Z Meta+Z";
+const GRAPH_REDO_SHORTCUTS = "Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y";
 const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
 const SOURCE_PRETTIFY_SHORTCUT = "Alt+Shift+F";
 const SELECTED_TARGET_SHORTCUTS = "Control+Alt+Enter Meta+Alt+Enter";
@@ -781,10 +783,9 @@ function redoGraphEdit(): void {
 }
 
 function configureGraphHistoryButtons(): void {
-  undoGraphButton.title = "Undo graph edit in Graph view (Cmd/Ctrl+Z)";
-  undoGraphButton.setAttribute("aria-keyshortcuts", "Control+Z Meta+Z");
-  redoGraphButton.title = "Redo graph edit in Graph view (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)";
-  redoGraphButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y");
+  undoGraphButton.setAttribute("aria-keyshortcuts", GRAPH_UNDO_SHORTCUTS);
+  redoGraphButton.setAttribute("aria-keyshortcuts", GRAPH_REDO_SHORTCUTS);
+  updateGraphHistoryButtonLabels();
 }
 
 function configureEditorModeShortcuts(): void {
@@ -1091,8 +1092,33 @@ function updateGraphHistoryControls(): void {
   undoGraphButton.disabled = !graphHistory.canUndo;
   redoGraphButton.disabled = !graphHistory.canRedo;
   resetGraphButton.disabled = !graphHistory.canUndo;
+  updateGraphHistoryButtonLabels();
   graphInspector?.setDirtyParams(graphHistory.current());
   renderGraphChangeJournal();
+}
+
+function updateGraphHistoryButtonLabels(): void {
+  const undoEntry = graphHistory.peekUndo();
+  const redoEntry = graphHistory.peekRedo();
+  const dirtyCount = graphHistory.dirtyCount;
+
+  const undoLabel = undoEntry ? `Undo ${graphChangeSummary(undoEntry)}` : "Undo graph edit";
+  undoGraphButton.title = undoEntry ? `${undoLabel} (Cmd/Ctrl+Z)` : "Undo graph edit (Cmd/Ctrl+Z)";
+  undoGraphButton.setAttribute("aria-label", undoLabel);
+
+  const redoLabel = redoEntry ? `Redo ${graphChangeSummary(redoEntry)}` : "Redo graph edit";
+  redoGraphButton.title = redoEntry ? `${redoLabel} (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)` : "Redo graph edit (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)";
+  redoGraphButton.setAttribute("aria-label", redoLabel);
+
+  const resetLabel = dirtyCount > 0
+    ? `Reset ${dirtyCount} graph ${dirtyCount === 1 ? "edit" : "edits"}`
+    : "Reset graph edits";
+  resetGraphButton.title = resetLabel;
+  resetGraphButton.setAttribute("aria-label", resetLabel);
+}
+
+function graphChangeSummary(entry: GraphHistoryEntry): string {
+  return `${entry.nodeKind} #${entry.nodeId} ${formatGraphChangeValue(entry)}`;
 }
 
 function renderGraphChangeJournal(): void {
