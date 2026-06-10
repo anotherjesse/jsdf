@@ -261,6 +261,7 @@ function renderSourceButton(options: {
   button.type = "button";
   button.className = options.className ?? "source-card";
   button.setAttribute("aria-pressed", String(options.pressed));
+  if (options.pressed) button.setAttribute("aria-current", "true");
 
   const name = document.createElement("strong");
   name.textContent = options.name;

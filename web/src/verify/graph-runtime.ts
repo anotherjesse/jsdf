@@ -65,6 +65,9 @@ export interface GraphRuntimeVerification {
     keyboardExampleFocus: string;
     keyboardSavedFirstFocus: string;
     keyboardSavedNextFocus: string;
+    activeExampleCurrent: string;
+    activeLatestSavedCurrent: string;
+    activeOlderSavedCurrent: string;
     loadedExample: string;
     loadedSaved: string;
   };
@@ -586,14 +589,21 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
       keyboardExampleFocus: "",
       keyboardSavedFirstFocus: "",
       keyboardSavedNextFocus: "",
+      activeExampleCurrent: "",
+      activeLatestSavedCurrent: "",
+      activeOlderSavedCurrent: "",
       loadedExample,
       loadedSaved,
     };
   }
 
   const initialCards = sourceCardLabels(root).length;
+  const activeExampleCurrent = currentSourceTargets(root).join(",");
   if (initialCards < examples.length + savedDocuments.length) {
     errors.push(`source dialog rendered too few cards: ${initialCards}`);
+  }
+  if (activeExampleCurrent !== `source-card:${examples[0]?.name ?? ""}`) {
+    errors.push(`source dialog current example was ${activeExampleCurrent || "nothing"}`);
   }
 
   search.value = "chain";
@@ -653,6 +663,42 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   if (!emptyMessages.includes("No matching examples")) errors.push("source dialog missing no matching examples state");
   if (!emptyMessages.includes("No saved shapes match")) errors.push("source dialog missing no saved matches state");
 
+  renderSourceDialog(root, {
+    examples,
+    savedDocuments,
+    activeExampleId: examples[0]?.id ?? "",
+    activeDocumentId: "saved-vessel",
+    activeVersionId: "version-latest",
+  }, {
+    loadExample() {},
+    loadSaved() {},
+    deleteDocument() {},
+    deleteVersion() {},
+  });
+  const activeLatestSavedCurrent = currentSourceTargets(root).join(",");
+  if (activeLatestSavedCurrent !== "source-card:Saved Vessel") {
+    errors.push(`source dialog current latest saved was ${activeLatestSavedCurrent || "nothing"}`);
+  }
+
+  renderSourceDialog(root, {
+    examples,
+    savedDocuments,
+    activeExampleId: examples[0]?.id ?? "",
+    activeDocumentId: "saved-vessel",
+    activeVersionId: "version-old",
+  }, {
+    loadExample() {},
+    loadSaved() {},
+    deleteDocument() {},
+    deleteVersion() {},
+  });
+  const savedVersionsForCurrent = root.querySelector<HTMLDetailsElement>(".source-versions");
+  if (savedVersionsForCurrent) savedVersionsForCurrent.open = true;
+  const activeOlderSavedCurrent = currentSourceTargets(root).join(",");
+  if (activeOlderSavedCurrent !== "source-version-button:Saved Vessel") {
+    errors.push(`source dialog current older saved was ${activeOlderSavedCurrent || "nothing"}`);
+  }
+
   root.remove();
   return {
     initialCards,
@@ -664,6 +710,9 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
     keyboardExampleFocus,
     keyboardSavedFirstFocus,
     keyboardSavedNextFocus,
+    activeExampleCurrent,
+    activeLatestSavedCurrent,
+    activeOlderSavedCurrent,
     loadedExample,
     loadedSaved,
   };
@@ -869,6 +918,11 @@ function focusedSourceButtonTarget(root: HTMLElement): string {
   if (!(focused instanceof HTMLButtonElement) || !root.contains(focused)) return "";
   const label = focused.querySelector("strong")?.textContent ?? "";
   return `${focused.className}:${label}`;
+}
+
+function currentSourceTargets(root: HTMLElement): string[] {
+  return [...root.querySelectorAll<HTMLButtonElement>(".source-card[aria-current='true'], .source-version-button[aria-current='true']")]
+    .map((button) => `${button.className}:${button.querySelector("strong")?.textContent ?? ""}`);
 }
 
 function clickSourceCard(root: HTMLElement, label: string): void {
