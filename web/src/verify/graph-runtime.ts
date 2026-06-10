@@ -416,6 +416,31 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       verifyErrors.push("selected sphere node disappeared after eye toggle");
       return;
     }
+
+    const isolateButton = nodeButton.closest<HTMLElement>(".graph-node-row")?.querySelector<HTMLButtonElement>(".graph-visibility");
+    const siblingBranchId = sdf.node.children[1]?.node.id;
+    if (!isolateButton) {
+      verifyErrors.push("selected sphere has no eye visibility button after restore");
+    } else {
+      isolateButton.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true }));
+      const isolatedHidden = hiddenEvents.at(-1) ?? [];
+      if (siblingBranchId == null || !isolatedHidden.includes(siblingBranchId)) {
+        verifyErrors.push("Alt-click eye did not isolate by hiding sibling branch");
+      }
+      if (isolatedHidden.includes(sphere.id)) verifyErrors.push("Alt-click eye hid the isolated sphere");
+      if (!isolateButton.title.includes("Alt-click isolates branch")) {
+        verifyErrors.push("eye visibility title did not advertise isolate gesture");
+      }
+      const isolateHeaderEye = graphRoot.querySelector<HTMLButtonElement>(".graph-tree-header-eye");
+      isolateHeaderEye?.click();
+      if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("show-all after Alt-click isolate did not clear hidden nodes");
+    }
+
+    nodeButton = graphRoot.querySelector<HTMLButtonElement>(`.graph-node[data-node-id="${sphere.id}"]`);
+    if (!nodeButton) {
+      verifyErrors.push("selected sphere node disappeared after isolate restore");
+      return;
+    }
     nodeButton.dispatchEvent(new KeyboardEvent("keydown", { key: "V", shiftKey: true, bubbles: true }));
     if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) verifyErrors.push("keyboard show-all after eye toggle did not clear hidden nodes");
 

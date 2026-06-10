@@ -367,7 +367,7 @@ export class GraphInspector {
     visibility.append(renderEyeIcon(visibilityMeta.state));
     visibility.addEventListener("click", (event) => {
       event.stopPropagation();
-      this.toggleNodeVisibility(node);
+      this.toggleNodeVisibility(node, { isolate: event.altKey });
     });
 
     const button = document.createElement("button");
@@ -598,7 +598,7 @@ export class GraphInspector {
     if (!visibilityMeta.disabled) {
       eye.addEventListener("click", (event) => {
         event.stopPropagation();
-        this.toggleNodeVisibility(node);
+        this.toggleNodeVisibility(node, { isolate: event.altKey });
       });
       eye.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -610,7 +610,11 @@ export class GraphInspector {
     return eye;
   }
 
-  private toggleNodeVisibility(node: Node, options: { focus?: boolean } = {}): void {
+  private toggleNodeVisibility(node: Node, options: { focus?: boolean; isolate?: boolean } = {}): void {
+    if (options.isolate) {
+      this.toggleIsolatedVisibility(node, options);
+      return;
+    }
     if (this.hiddenNodeIds.has(node.id)) {
       this.hiddenNodeIds.delete(node.id);
     } else {
@@ -623,6 +627,44 @@ export class GraphInspector {
     }
     this.render();
     this.options.onVisibilityChange([...this.hiddenNodeIds]);
+  }
+
+  private toggleIsolatedVisibility(node: Node, options: { focus?: boolean } = {}): void {
+    const isolatedHiddenNodeIds = this.hiddenNodeIdsForIsolatedNode(node);
+    if (setsEqual(this.hiddenNodeIds, isolatedHiddenNodeIds)) {
+      this.showAllNodes(options);
+      return;
+    }
+
+    this.hiddenNodeIds.clear();
+    for (const nodeId of isolatedHiddenNodeIds) this.hiddenNodeIds.add(nodeId);
+    if (options.focus) {
+      this.selected = node;
+      this.revealSelectedAfterRender = true;
+      this.focusSelectedAfterRender = true;
+    }
+    this.render();
+    this.options.onVisibilityChange([...this.hiddenNodeIds]);
+  }
+
+  private hiddenNodeIdsForIsolatedNode(node: Node): Set<number> {
+    const hidden = new Set<number>();
+    if (!this.sdf || this.sdf.node.id === node.id) return hidden;
+
+    const allowed = new Set<number>();
+    for (const pathNode of this.pathToNode(node.id)) allowed.add(pathNode.id);
+    collectSubtreeNodeIds(node, allowed);
+
+    const visit = (candidate: Node) => {
+      if (candidate.id !== this.sdf?.node.id && !allowed.has(candidate.id)) {
+        hidden.add(candidate.id);
+        return;
+      }
+      for (const child of candidate.children) visit(child.node);
+    };
+
+    visit(this.sdf.node);
+    return hidden;
   }
 
   private showAllNodes(options: { focus?: boolean } = {}): void {
@@ -913,7 +955,7 @@ export class GraphInspector {
     visibility.setAttribute("aria-keyshortcuts", "V");
     visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
     visibility.append(renderEyeIcon(visibilityMeta.state));
-    visibility.addEventListener("click", () => this.toggleNodeVisibility(node));
+    visibility.addEventListener("click", (event) => this.toggleNodeVisibility(node, { isolate: event.altKey }));
     actions.append(visibility);
 
     const nodeSourceLink = this.sourceLinkForNode(node.id);
@@ -1589,8 +1631,21 @@ function relatedEventTarget(event: Event): EventTarget | null {
   return event instanceof MouseEvent || event instanceof FocusEvent ? event.relatedTarget : null;
 }
 
+function collectSubtreeNodeIds(node: Node, out: Set<number>): void {
+  out.add(node.id);
+  for (const child of node.children) collectSubtreeNodeIds(child.node, out);
+}
+
+function setsEqual(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
 function visibilityShortcutTitle(title: string): string {
-  return title === "Root node stays visible" ? title : `${title} (V)`;
+  return title === "Root node stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
 }
 
 function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {
