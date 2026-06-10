@@ -320,6 +320,12 @@ button:disabled {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 48%, transparent);
 }
 
+.source-revealed-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 64%, transparent);
+}
+
 .graph-inspector {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -611,6 +617,13 @@ button:disabled {
   accent-color: var(--accent);
 }
 
+.param-name-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
 .param-name {
   min-width: 0;
   overflow: hidden;
@@ -623,6 +636,17 @@ button:disabled {
 
 .param-name.scrubbing {
   color: var(--accent-2);
+}
+
+.param-source-link {
+  flex: 0 0 auto;
+  min-height: 22px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .axis-control {

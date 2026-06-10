@@ -43,6 +43,7 @@ export interface CodeEditor {
   setError(message: string | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
+  revealSourceLink(link: GraphSourceLink): void;
   layout(): void;
   dispose(): void;
 }
@@ -76,6 +77,7 @@ export function createCodeEditor(
   let sourceLinks: readonly GraphSourceLink[] = [];
   let sourceLinkDecorations: string[] = [];
   let focusedNodeDecorations: string[] = [];
+  let revealedSourceDecorations: string[] = [];
   let focusedNodeId: number | null = null;
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
@@ -115,6 +117,14 @@ export function createCodeEditor(
     if (!model || !position) return null;
     const offset = model.getOffsetAt(position);
     return sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end) ?? null;
+  };
+
+  const rangeForSourceLink = (link: GraphSourceLink): monaco.Range | null => {
+    const model = editor.getModel();
+    if (!model || link.end <= link.start) return null;
+    const start = model.getPositionAt(link.start);
+    const end = model.getPositionAt(link.end);
+    return new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
   };
 
   const applyFocusedNodeDecorations = (reveal: boolean) => {
@@ -205,6 +215,7 @@ export function createCodeEditor(
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
+      revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
       sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
         .filter((link) => link.end > link.start)
         .map((link) => {
@@ -226,6 +237,19 @@ export function createCodeEditor(
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;
       applyFocusedNodeDecorations(Boolean(options.reveal));
+    },
+    revealSourceLink(link: GraphSourceLink) {
+      const range = rangeForSourceLink(link);
+      if (!range) return;
+      revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{
+        range,
+        options: {
+          inlineClassName: "source-revealed-link",
+        },
+      }]);
+      editor.setSelection(range);
+      editor.revealRangeInCenterIfOutsideViewport(range);
+      editor.focus();
     },
     layout() {
       editor.layout();

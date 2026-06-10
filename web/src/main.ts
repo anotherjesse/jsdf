@@ -179,6 +179,7 @@ async function boot(): Promise<void> {
       onHover: handleGraphHover,
       onEdit: handleGraphEdit,
       onSolo: handleSoloPreview,
+      onRevealSource: revealGraphSource,
     });
     setViewMode("shader");
     compileEditorSource({ status: "Ready", statusState: "idle", invalidateMesh: false });
@@ -303,6 +304,7 @@ function scheduleSourceCompile(): void {
   updateSaveState();
   setEditorStatus("Editing...", "pending");
   codeEditor?.setSourceLinks([]);
+  graphInspector?.setSourceLinks([]);
   sourceCompileTimer = window.setTimeout(() => {
     compileEditorSource({ status: "Compiled" });
   }, 350);
@@ -328,6 +330,7 @@ function compileEditorSource(
     const message = error instanceof Error ? error.message : String(error);
     codeEditor?.setError(message);
     codeEditor?.setSourceLinks([]);
+    graphInspector?.setSourceLinks([]);
     setEditorStatus(message, "error");
     overlay.textContent = `Code error: ${message}`;
     return false;
@@ -408,6 +411,15 @@ function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
   if (soloPreview) handleSoloPreview(null);
   else schedulePreview(0);
   setEditorStatus(`${node.kind} #${node.id}`, "ok");
+}
+
+function revealGraphSource(link: GraphSourceLink): void {
+  setEditorView("code");
+  codeEditor?.setFocusedNode(link.nodeId);
+  window.requestAnimationFrame(() => {
+    codeEditor?.revealSourceLink(link);
+  });
+  setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
 }
 
 function selectNode(node: Node | null): void {
@@ -514,7 +526,9 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
 
 function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
   if (!codeEditor || !source || !sdf) return;
-  codeEditor.setSourceLinks(findGraphSourceLinks(source, sdf));
+  const links = findGraphSourceLinks(source, sdf);
+  codeEditor.setSourceLinks(links);
+  graphInspector?.setSourceLinks(links);
   codeEditor.setFocusedNode(hoveredNode?.id ?? selectedNode?.id ?? null);
 }
 

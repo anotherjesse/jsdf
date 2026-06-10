@@ -1,5 +1,6 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
+import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
@@ -21,6 +22,7 @@ export interface GraphInspectorOptions {
   onHover(node: Node | null, options: GraphHoverOptions): void;
   onEdit(edit: GraphParamEdit): void;
   onSolo(preview: SoloPreview | null): void;
+  onRevealSource(link: GraphSourceLink): void;
 }
 
 export interface GraphHoverOptions {
@@ -33,6 +35,7 @@ export class GraphInspector {
   private hovered: Node | null = null;
   private filter = "";
   private showMap = false;
+  private sourceLinks: readonly GraphSourceLink[] = [];
   private hoverSoloKey: string | null = null;
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
@@ -123,6 +126,11 @@ export class GraphInspector {
     this.hovered = node;
     this.render();
     return node;
+  }
+
+  setSourceLinks(links: readonly GraphSourceLink[]): void {
+    this.sourceLinks = [...links];
+    this.render();
   }
 
   selectNodeById(id: number): Node | null {
@@ -579,12 +587,31 @@ export class GraphInspector {
   }
 
   private renderNumberField(node: Node, field: NumericParam): HTMLElement {
-    const row = document.createElement("label");
+    const row = document.createElement("div");
     row.className = "param-row";
+
+    const sourceLink = this.sourceLinkForParam(node.id, field.path);
+    const nameGroup = document.createElement("span");
+    nameGroup.className = "param-name-group";
 
     const name = document.createElement("span");
     name.className = "param-name";
     name.textContent = field.label;
+    nameGroup.append(name);
+
+    if (sourceLink) {
+      const source = document.createElement("button");
+      source.type = "button";
+      source.className = "param-source-link";
+      source.textContent = "Code";
+      source.title = `Reveal ${field.label} in code`;
+      source.setAttribute("aria-label", `Reveal ${field.label} in code`);
+      source.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.options.onRevealSource(sourceLink);
+      });
+      nameGroup.append(source);
+    }
 
     const input = document.createElement("input");
     input.type = "number";
@@ -642,8 +669,21 @@ export class GraphInspector {
       },
     );
 
-    row.append(name, input, range);
+    row.append(nameGroup, input, range);
     return row;
+  }
+
+  private sourceLinkForParam(nodeId: number, path: ParamPath): GraphSourceLink | null {
+    const exact = this.sourceLinks.find((link) => {
+      return link.nodeId === nodeId && link.end > link.start && pathsEqual(link.path, path);
+    });
+    if (exact) return exact;
+    return this.sourceLinks.find((link) => {
+      return link.nodeId === nodeId
+        && link.end > link.start
+        && link.scrubbable === false
+        && pathStartsWith(path, link.path);
+    }) ?? null;
   }
 }
 
@@ -709,6 +749,14 @@ function getAtPath(root: Record<string, unknown>, path: ParamPath): ParamValue {
       : (target as Record<string, unknown>)[part as string];
   }
   return target;
+}
+
+function pathsEqual(a: ParamPath, b: ParamPath): boolean {
+  return a.length === b.length && a.every((part, index) => part === b[index]);
+}
+
+function pathStartsWith(path: ParamPath, prefix: ParamPath): boolean {
+  return prefix.length > 0 && prefix.length < path.length && prefix.every((part, index) => part === path[index]);
 }
 
 function matrixParam(value: unknown): number[][] | null {
