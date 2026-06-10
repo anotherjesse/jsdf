@@ -1073,6 +1073,10 @@ function setEditorView(mode: EditorView): void {
         codeEditor?.revealSourceLink(selectedSourceLink);
       }
     });
+  } else if (previousMode === "code") {
+    window.requestAnimationFrame(() => {
+      graphInspector?.revealSelected({ focus: true });
+    });
   }
 }
 

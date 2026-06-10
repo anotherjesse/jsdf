@@ -249,6 +249,13 @@ export class GraphInspector {
     return node;
   }
 
+  revealSelected(options: { focus?: boolean } = {}): void {
+    if (!this.selected) return;
+    this.revealSelectedAfterRender = true;
+    this.focusSelectedAfterRender = Boolean(options.focus);
+    this.render();
+  }
+
   buildSoloPreviewForNodeId(id: number): SoloPreview | null {
     return buildSoloPreview(this.pathToNode(id));
   }
@@ -705,7 +712,7 @@ export class GraphInspector {
     this.revealSelectedAfterRender = false;
     const focus = this.focusSelectedAfterRender;
     this.focusSelectedAfterRender = false;
-    const target = this.tree.querySelector<HTMLElement>(`[data-node-id="${this.selected.id}"]`);
+    const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
     window.requestAnimationFrame(() => {
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
       if (focus) target?.focus({ preventScroll: true });

@@ -33,6 +33,14 @@ export interface AppHealthRuntimeVerification {
     revealedMarks: number;
     codeVisible: boolean;
   };
+  codeGraphReveal: {
+    selectedBefore: string;
+    selectedAfter: string;
+    editorView: string;
+    graphVisible: boolean;
+    activeElement: string;
+    focusedSelectedNode: boolean;
+  };
   errors: string[];
 }
 
@@ -55,6 +63,7 @@ export async function runAppHealthRuntimeVerification(
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
+  const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
 
   if (!health) {
     errors.push("app health hook never became available");
@@ -71,6 +80,7 @@ export async function runAppHealthRuntimeVerification(
     graphHoverStatus,
     sourceDialogFocus,
     graphCodeReveal,
+    codeGraphReveal,
     errors,
   };
 }
@@ -341,6 +351,66 @@ async function verifyGraphCodeReveal(
   }
 
   return { selectedBefore, selectedAfter, editorView, revealedMarks, codeVisible };
+}
+
+async function verifyCodeGraphReveal(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["codeGraphReveal"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    selectedBefore: "",
+    selectedAfter: "",
+    editorView: "",
+    graphVisible: false,
+    activeElement: "",
+    focusedSelectedNode: false,
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for code-to-graph reveal verification");
+    return empty;
+  }
+
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const graphPanel = frameDocument.querySelector<HTMLElement>("#graphPanel");
+  if (!graphMode || !graphPanel) {
+    errors.push("app frame missing code-to-graph reveal controls");
+    return empty;
+  }
+
+  const selectedBefore = readAppHealth(frame)?.selectedNode ?? "";
+  if (!selectedBefore) {
+    errors.push("code-to-graph reveal started without a selected graph node");
+  }
+
+  graphMode.click();
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  const afterHealth = readAppHealth(frame);
+  const selectedAfter = afterHealth?.selectedNode ?? "";
+  const editorView = afterHealth?.editorView ?? "";
+  const graphVisible = !graphPanel.classList.contains("hidden");
+  const activeElement = activeElementToken(frameDocument);
+  const active = frameDocument.activeElement;
+  const focusedSelectedNode = Boolean(
+    active
+      && "classList" in active
+      && active.classList.contains("graph-node")
+      && active.getAttribute("aria-pressed") === "true",
+  );
+
+  if (editorView !== "graph") errors.push(`code-to-graph reveal left editor in ${editorView || "unknown"} view`);
+  if (!graphVisible) errors.push("code-to-graph reveal left graph panel hidden");
+  if (selectedAfter !== selectedBefore) {
+    errors.push(`code-to-graph reveal changed selected node from ${selectedBefore || "nothing"} to ${selectedAfter || "nothing"}`);
+  }
+  if (!focusedSelectedNode) {
+    errors.push(`code-to-graph reveal focused ${activeElement || "nothing"} instead of the selected graph node`);
+  }
+
+  return { selectedBefore, selectedAfter, editorView, graphVisible, activeElement, focusedSelectedNode };
 }
 
 function activeElementToken(document: Document): string {
