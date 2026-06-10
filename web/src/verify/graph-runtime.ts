@@ -18,6 +18,7 @@ export interface GraphRuntimeVerification {
   selectedNode: string;
   editedRows: number;
   hiddenEvents: number[][];
+  hoverEvents: Array<{ label: string; shiftKey: boolean }>;
   hoverLabels: string[];
   sourceHoverLabels: string[];
   revealedSource: string;
@@ -56,6 +57,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const hiddenEvents: number[][] = [];
+  const hoverEvents: Array<{ label: string; shiftKey: boolean }> = [];
   const hoverLabels: string[] = [];
   const sourceHoverLabels: string[] = [];
   const soloLabels: string[] = [];
@@ -67,8 +69,10 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     onSelect(node) {
       selectedNode = node ? `${node.kind} #${node.id}` : "";
     },
-    onHover(node) {
-      hoverLabels.push(node ? `${node.kind} #${node.id}` : "");
+    onHover(node, options) {
+      const label = node ? `${node.kind} #${node.id}` : "";
+      hoverEvents.push({ label, shiftKey: options.shiftKey });
+      hoverLabels.push(label);
     },
     onEdit(edit) {
       lastEdit = edit;
@@ -112,6 +116,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     selectedNode,
     editedRows: root.querySelectorAll(".param-row.edited, .axis-control.edited").length,
     hiddenEvents,
+    hoverEvents,
     hoverLabels,
     sourceHoverLabels,
     revealedSource,
@@ -289,6 +294,14 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       nodeRow.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "sphere:call") {
         verifyErrors.push(`tree node hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+      }
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));
+      if (graphHoverLabels.at(-1) !== sphereHoverLabel || hoverEvents.at(-1)?.shiftKey !== true) {
+        verifyErrors.push("tree node Shift keydown did not focus hovered node");
+      }
+      window.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift" }));
+      if (graphHoverLabels.at(-1) !== sphereHoverLabel || hoverEvents.at(-1)?.shiftKey !== false) {
+        verifyErrors.push("tree node Shift keyup did not restore normal hover");
       }
       nodeRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node leave did not clear source hover");

@@ -48,6 +48,7 @@ export class GraphInspector {
   private sourceLinks: readonly GraphSourceLink[] = [];
   private hoveredSourceLink: GraphSourceLink | null = null;
   private selectedSourceLink: GraphSourceLink | null = null;
+  private pointerHoverPath: Node[] | null = null;
   private hoverSoloKey: string | null = null;
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
@@ -136,8 +137,14 @@ export class GraphInspector {
       if (!event.shiftKey) this.clearSolo();
     }, { capture: true });
     window.addEventListener("pointerup", () => this.clearSolo(), { capture: true });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Shift" && !event.repeat) this.refreshPointerHover(true);
+    });
     window.addEventListener("keyup", (event) => {
-      if (event.key === "Shift") this.clearSolo();
+      if (event.key === "Shift") {
+        this.refreshPointerHover(false);
+        this.clearSolo();
+      }
     });
     window.addEventListener("blur", () => this.clearSolo());
     root.addEventListener("pointerleave", () => {
@@ -163,6 +170,7 @@ export class GraphInspector {
     this.selected = sdf.node;
     this.hoveredSourceLink = null;
     this.selectedSourceLink = null;
+    this.pointerHoverPath = null;
     this.hoverSoloKey = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
@@ -725,10 +733,14 @@ export class GraphInspector {
   private attachSoloHover(target: Element, path: Node[]): void {
     const sourceLink = this.sourceLinkForNode(path.at(-1)?.id ?? -1);
     target.addEventListener("pointerenter", (event) => {
+      this.pointerHoverPath = path;
       this.updateHover(path, event);
       if (sourceLink) this.options.onSourceHover(sourceLink);
     });
-    target.addEventListener("pointermove", (event) => this.updateHover(path, event));
+    target.addEventListener("pointermove", (event) => {
+      this.pointerHoverPath = path;
+      this.updateHover(path, event);
+    });
     target.addEventListener("pointerleave", (event) => {
       if (sourceLink && !containsEventTarget(target, relatedEventTarget(event))) {
         this.options.onSourceHover(null);
@@ -752,9 +764,18 @@ export class GraphInspector {
   }
 
   private updateHover(path: Node[], event: Event): void {
+    this.emitHover(path, event instanceof PointerEvent && event.shiftKey);
+  }
+
+  private refreshPointerHover(shiftKey: boolean): void {
+    if (!this.pointerHoverPath) return;
+    this.emitHover(this.pointerHoverPath, shiftKey);
+  }
+
+  private emitHover(path: Node[], shiftKey: boolean): void {
     const target = path.at(-1) ?? null;
     this.setHoveredNodeById(target?.id ?? null);
-    this.options.onHover(target, { shiftKey: event instanceof PointerEvent && event.shiftKey });
+    this.options.onHover(target, { shiftKey });
   }
 
   private updateSolo(path: Node[], event: Event): void {
@@ -774,6 +795,7 @@ export class GraphInspector {
   }
 
   private clearHover(): void {
+    this.pointerHoverPath = null;
     this.setHoveredNodeById(null);
     this.options.onHover(null, { shiftKey: false });
   }
