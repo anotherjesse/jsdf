@@ -20,6 +20,8 @@ export interface AppHealthRuntimeVerification {
     after: string;
   };
   sourceDialogFocus: {
+    loadShortcut: string;
+    shortcutPreventedDefault: boolean;
     onOpen: string;
     afterClose: string;
   };
@@ -216,7 +218,7 @@ async function verifySourceDialogFocus(
 ): Promise<AppHealthRuntimeVerification["sourceDialogFocus"]> {
   const frameDocument = safeFrameDocument(frame);
   const frameWindow = safeFrameWindow(frame);
-  const empty = { onOpen: "", afterClose: "" };
+  const empty = { loadShortcut: "", shortcutPreventedDefault: false, onOpen: "", afterClose: "" };
   if (!frameDocument || !frameWindow) {
     errors.push("app frame was unavailable for source dialog focus verification");
     return empty;
@@ -229,7 +231,21 @@ async function verifySourceDialogFocus(
     return empty;
   }
 
-  loadButton.click();
+  const loadShortcut = loadButton.getAttribute("aria-keyshortcuts") ?? "";
+  if (!loadShortcut.includes("Control+O") || !loadShortcut.includes("Meta+O")) {
+    errors.push(`load button advertised shortcut as ${loadShortcut || "nothing"}`);
+  }
+
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const shortcutPreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "o",
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  if (!shortcutPreventedDefault) {
+    errors.push("load shortcut did not prevent the browser default");
+  }
   await nextFrame(frameWindow);
   await nextFrame(frameWindow);
   const onOpen = activeElementToken(frameDocument);
@@ -244,7 +260,7 @@ async function verifySourceDialogFocus(
     errors.push(`source dialog restored focus to ${afterClose || "nothing"}`);
   }
 
-  return { onOpen, afterClose };
+  return { loadShortcut, shortcutPreventedDefault, onOpen, afterClose };
 }
 
 function activeElementToken(document: Document): string {

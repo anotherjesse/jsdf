@@ -737,6 +737,12 @@ function redoGraphEdit(): void {
 }
 
 function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
+  if (isLoadShortcut(event)) {
+    event.preventDefault();
+    if (!event.repeat) openSourceDialog();
+    return;
+  }
+
   if (!isSaveShortcut(event)) return;
   event.preventDefault();
   if (event.repeat) return;
@@ -751,8 +757,19 @@ function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
   saveCurrentSource();
 }
 
+function isLoadShortcut(event: KeyboardEvent): boolean {
+  return isCommandShortcut(event, "o");
+}
+
 function isSaveShortcut(event: KeyboardEvent): boolean {
-  return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "s";
+  return isCommandShortcut(event, "s");
+}
+
+function isCommandShortcut(event: KeyboardEvent, key: string): boolean {
+  return (event.metaKey || event.ctrlKey)
+    && !event.altKey
+    && !event.shiftKey
+    && event.key.toLowerCase() === key;
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
