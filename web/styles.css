@@ -609,8 +609,10 @@ button:disabled {
   right: 10px;
   bottom: 8px;
   z-index: 12;
+  display: flex;
+  gap: 6px;
+  align-items: center;
   max-width: calc(100% - 20px);
-  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
   border-radius: 6px;
   background: color-mix(in srgb, var(--panel) 92%, black);
@@ -619,14 +621,54 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1;
-  padding: 5px 7px;
-  pointer-events: none;
-  text-overflow: ellipsis;
+  padding: 3px 4px 3px 7px;
+  pointer-events: auto;
   white-space: nowrap;
 }
 
 .source-link-status[hidden] {
   display: none;
+}
+
+.source-link-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-link-status-controls {
+  display: inline-flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.source-link-status-controls[hidden] {
+  display: none;
+}
+
+.source-link-status-step {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel-2) 92%, black);
+  color: color-mix(in srgb, var(--text) 90%, var(--accent));
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0;
+}
+
+.source-link-status-step:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.source-link-status-step:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 1px;
 }
 
 .source-focused-link {

@@ -322,6 +322,15 @@ export function createCodeEditor(
   sourceLinkStatus.hidden = true;
   sourceLinkStatus.setAttribute("aria-label", "Selected graph source link");
   sourceLinkStatus.setAttribute("aria-live", "polite");
+  const sourceLinkStatusText = document.createElement("span");
+  sourceLinkStatusText.className = "source-link-status-text";
+  const sourceLinkStatusControls = document.createElement("span");
+  sourceLinkStatusControls.className = "source-link-status-controls";
+  sourceLinkStatusControls.hidden = true;
+  const sourceLinkDecreaseButton = renderSourceLinkStepButton("decrease", "-");
+  const sourceLinkIncreaseButton = renderSourceLinkStepButton("increase", "+");
+  sourceLinkStatusControls.append(sourceLinkDecreaseButton, sourceLinkIncreaseButton);
+  sourceLinkStatus.append(sourceLinkStatusText, sourceLinkStatusControls);
   editor.getDomNode()?.append(scrubReadout, sourceLinkStatus);
 
   let suppress = false;
@@ -614,6 +623,18 @@ export function createCodeEditor(
     options: { editSessionId?: string } = {},
   ): boolean => {
     const link = currentSourceLinkForNudge();
+    if (!link) return false;
+    return nudgeSourceLink(link, direction, modifiers, {
+      editSessionId: options.editSessionId ?? keyboardNudgeSessionFor(link),
+    });
+  };
+
+  const nudgeSourceLink = (
+    link: GraphSourceLink,
+    direction: -1 | 1,
+    modifiers: ScrubModifiers,
+    options: { editSessionId?: string } = {},
+  ): boolean => {
     if (!link || !isScrubbableSourceLink(link)) return false;
     const startValue = readSourceLinkNumber(editor.getValue(), link);
     if (startValue == null) return false;
@@ -624,10 +645,29 @@ export function createCodeEditor(
     updateKeyboardNudgeReadout(link, nextValue);
     onSourceLinkSelect(link);
     onSourceLinkValueChange(link, nextValue, {
-      editSessionId: options.editSessionId ?? keyboardNudgeSessionFor(link),
+      ...(options.editSessionId ? { editSessionId: options.editSessionId } : {}),
     });
     return true;
   };
+
+  const nudgeStatusSourceLink = (direction: -1 | 1) => {
+    const link = liveSourceLinkFor(selectedSourceLink);
+    if (!link) return;
+    nudgeSourceLink(link, direction, { altKey: false, shiftKey: false }, {
+      editSessionId: nextEditSessionId("source-status-step"),
+    });
+  };
+
+  sourceLinkDecreaseButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    nudgeStatusSourceLink(-1);
+  });
+  sourceLinkIncreaseButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    nudgeStatusSourceLink(1);
+  });
 
   const selectSourceLink = (
     link: GraphSourceLink,
@@ -652,15 +692,24 @@ export function createCodeEditor(
     const range = link ? rangeForSourceLink(link) : null;
     if (!link || !range) {
       sourceLinkStatus.hidden = true;
-      sourceLinkStatus.textContent = "";
+      sourceLinkStatusText.textContent = "";
+      sourceLinkStatusControls.hidden = true;
+      sourceLinkDecreaseButton.disabled = true;
+      sourceLinkIncreaseButton.disabled = true;
       sourceLinkStatus.removeAttribute("title");
       return;
     }
     const value = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
     const isNumber = value != null;
     sourceLinkStatus.hidden = false;
-    sourceLinkStatus.textContent = sourceLinkStatusText(link, value);
+    sourceLinkStatus.dataset.numeric = String(isNumber);
+    sourceLinkStatusText.textContent = sourceLinkStatusTextForLink(link, value);
     sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
+    sourceLinkStatusControls.hidden = !isNumber;
+    sourceLinkDecreaseButton.disabled = !isNumber;
+    sourceLinkIncreaseButton.disabled = !isNumber;
+    sourceLinkDecreaseButton.setAttribute("aria-label", `Decrease ${sourceLinkStatusTextForLink(link)}`);
+    sourceLinkIncreaseButton.setAttribute("aria-label", `Increase ${sourceLinkStatusTextForLink(link)}`);
   };
 
   const currentSourceLinkForNavigation = (): GraphSourceLink | null => {
@@ -1146,8 +1195,26 @@ export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean)
 }
 
 export function sourceLinkStatusText(link: GraphSourceLink, value: number | null = null): string {
+  return sourceLinkStatusTextForLink(link, value);
+}
+
+function sourceLinkStatusTextForLink(link: GraphSourceLink, value: number | null = null): string {
   const label = `${link.nodeKind} #${link.nodeId} · ${link.label}`;
   return value == null ? label : `${label} = ${formatScrubReadoutValue(value)}`;
+}
+
+function renderSourceLinkStepButton(direction: "decrease" | "increase", label: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "source-link-status-step";
+  button.dataset.direction = direction;
+  button.textContent = label;
+  button.disabled = true;
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  return button;
 }
 
 function formatScrubReadoutValue(value: number): string {

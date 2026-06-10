@@ -82,8 +82,12 @@ export interface EditorRuntimeVerification {
   sourceLinkStatus: {
     radius: string;
     graphReveal: string;
+    radiusStepButtons: number;
+    radiusStepNextValue: number | null;
+    radiusStepSession: string;
     hiddenAfterClear: boolean;
     box: string;
+    boxStepButtons: number;
   };
   sourceNavigation: {
     nextLink: string;
@@ -207,8 +211,12 @@ export async function runEditorRuntimeVerification(
   const sourceLinkStatus: EditorRuntimeVerification["sourceLinkStatus"] = {
     radius: "",
     graphReveal: "",
+    radiusStepButtons: 0,
+    radiusStepNextValue: null,
+    radiusStepSession: "",
     hiddenAfterClear: false,
     box: "",
+    boxStepButtons: -1,
   };
   let codeEditor: ReturnType<typeof createCodeEditor> | null = null;
   const graphInspector = new GraphInspector(graphRoot, {
@@ -244,6 +252,11 @@ export async function runEditorRuntimeVerification(
     },
     (link, value, options) => {
       if (link.nodeKind !== "sphere" || link.label !== "radius") return;
+      if (options?.editSessionId?.startsWith("source-status-step:")) {
+        sourceLinkStatus.radiusStepNextValue = value;
+        sourceLinkStatus.radiusStepSession = options.editSessionId;
+        return;
+      }
       sourceScrub.keyboardNextValue = value;
       sourceScrub.keyboardEditSession = options?.editSessionId ?? "";
     },
@@ -268,6 +281,23 @@ export async function runEditorRuntimeVerification(
       sourceLinkStatus.radius = visibleSourceLinkStatus(codeRoot);
       if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink, readSourceLinkNumber(fixtureSource, radiusLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.radius || "nothing"} for radius`);
+      }
+      sourceLinkStatus.radiusStepButtons = visibleSourceLinkStepperCount(codeRoot);
+      if (sourceLinkStatus.radiusStepButtons !== 2) {
+        errors.push(`source link status rendered ${sourceLinkStatus.radiusStepButtons} numeric step buttons`);
+      }
+      const increaseButton = codeRoot.querySelector<HTMLButtonElement>(".source-link-status-controls:not([hidden]) .source-link-status-step[data-direction='increase']");
+      if (!increaseButton) {
+        errors.push("source link status did not render an increase step button");
+      } else {
+        increaseButton.click();
+        await nextFrame();
+        if (Math.abs((sourceLinkStatus.radiusStepNextValue ?? 0) - 1.1) > 0.000001) {
+          errors.push(`source link status step emitted ${sourceLinkStatus.radiusStepNextValue ?? "nothing"}`);
+        }
+        if (!sourceLinkStatus.radiusStepSession.startsWith("source-status-step:")) {
+          errors.push(`source link status step session was ${sourceLinkStatus.radiusStepSession || "missing"}`);
+        }
       }
       if (cursorEvents.at(-1) !== "sphere:radius") {
         errors.push(`cursor over radius emitted ${cursorEvents.at(-1) || "nothing"}`);
@@ -390,6 +420,10 @@ export async function runEditorRuntimeVerification(
       sourceLinkStatus.box = visibleSourceLinkStatus(codeRoot);
       if (sourceLinkStatus.box !== sourceLinkStatusText(boxCallLink, readSourceLinkNumber(fixtureSource, boxCallLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.box || "nothing"} for box`);
+      }
+      sourceLinkStatus.boxStepButtons = visibleSourceLinkStepperCount(codeRoot);
+      if (sourceLinkStatus.boxStepButtons !== 0) {
+        errors.push(`box call source link rendered ${sourceLinkStatus.boxStepButtons} numeric step buttons`);
       }
       codeEditor.markSelectedSourceLink(null);
       await nextFrame();
@@ -1137,7 +1171,11 @@ function formatLink(link: GraphSourceLink | null): string {
 }
 
 function visibleSourceLinkStatus(root: HTMLElement): string {
-  return root.querySelector<HTMLElement>(".source-link-status:not([hidden])")?.textContent?.trim() ?? "";
+  return root.querySelector<HTMLElement>(".source-link-status:not([hidden]) .source-link-status-text")?.textContent?.trim() ?? "";
+}
+
+function visibleSourceLinkStepperCount(root: HTMLElement): number {
+  return root.querySelectorAll(".source-link-status-controls:not([hidden]) .source-link-status-step").length;
 }
 
 function verifySourceScrubPath(
