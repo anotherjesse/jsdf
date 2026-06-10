@@ -10,6 +10,7 @@ export default defineConfig({
         appHealthCheck: resolve(__dirname, "app-health-check.html"),
         checks: resolve(__dirname, "checks.html"),
         editorCheck: resolve(__dirname, "editor-check.html"),
+        examplesVisualCheck: resolve(__dirname, "examples-visual-check.html"),
         graphCheck: resolve(__dirname, "graph-check.html"),
         main: resolve(__dirname, "index.html"),
         meshCheck: resolve(__dirname, "mesh-check.html"),

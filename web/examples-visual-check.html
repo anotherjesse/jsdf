@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>examples visual check</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111316;
+        --panel: #1c2026;
+        --line: #343b45;
+        --text: #eef2f6;
+        --muted: #9ca8b5;
+        --ok: #2fb7a8;
+        --warn: #dd6a5c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        display: grid;
+        gap: 18px;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      header {
+        display: grid;
+        gap: 6px;
+      }
+
+      h1,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      p,
+      .example-meta {
+        color: var(--muted);
+      }
+
+      canvas {
+        width: 320px;
+        height: 220px;
+        border: 1px solid var(--line);
+        background: #1b2026;
+      }
+
+      pre {
+        overflow: auto;
+        max-height: 360px;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0d1014;
+        padding: 12px;
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      .example-card {
+        display: grid;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 10px;
+      }
+
+      .example-card[data-ok="true"] {
+        border-color: color-mix(in srgb, var(--ok) 42%, var(--line));
+      }
+
+      .example-card[data-ok="false"] {
+        border-color: color-mix(in srgb, var(--warn) 56%, var(--line));
+      }
+
+      .example-card img {
+        width: 100%;
+        aspect-ratio: 16 / 11;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #1b2026;
+        object-fit: cover;
+      }
+
+      .example-card strong {
+        font-size: 13px;
+      }
+
+      .example-meta {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>examples visual check</h1>
+        <p id="status">Running...</p>
+      </header>
+      <canvas id="canvas" width="320" height="220"></canvas>
+      <section id="gallery" class="gallery" aria-label="Rendered example thumbnails"></section>
+      <pre id="report" aria-live="polite"></pre>
+    </main>
+    <script type="module" src="./src/examples-visual-check.ts"></script>
+  </body>
+</html>
