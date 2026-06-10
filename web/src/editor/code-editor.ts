@@ -656,9 +656,10 @@ export function createCodeEditor(
       sourceLinkStatus.removeAttribute("title");
       return;
     }
-    const isNumber = isScrubbableSourceLink(link) && readSourceLinkNumber(editor.getValue(), link) != null;
+    const value = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
+    const isNumber = value != null;
     sourceLinkStatus.hidden = false;
-    sourceLinkStatus.textContent = sourceLinkStatusText(link);
+    sourceLinkStatus.textContent = sourceLinkStatusText(link, value);
     sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
   };
 
@@ -1144,8 +1145,9 @@ export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean)
     : `Graph: ${target}. Click to select this node; Cmd/Ctrl-click or Cmd/Ctrl+Alt+Enter opens it in Graph.`;
 }
 
-export function sourceLinkStatusText(link: GraphSourceLink): string {
-  return `${link.nodeKind} #${link.nodeId} · ${link.label}`;
+export function sourceLinkStatusText(link: GraphSourceLink, value: number | null = null): string {
+  const label = `${link.nodeKind} #${link.nodeId} · ${link.label}`;
+  return value == null ? label : `${label} = ${formatScrubReadoutValue(value)}`;
 }
 
 function formatScrubReadoutValue(value: number): string {

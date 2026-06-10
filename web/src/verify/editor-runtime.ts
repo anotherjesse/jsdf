@@ -266,7 +266,7 @@ export async function runEditorRuntimeVerification(
     } else {
       await revealAndSettle(codeEditor, radiusLink);
       sourceLinkStatus.radius = visibleSourceLinkStatus(codeRoot);
-      if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink)) {
+      if (sourceLinkStatus.radius !== sourceLinkStatusText(radiusLink, readSourceLinkNumber(fixtureSource, radiusLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.radius || "nothing"} for radius`);
       }
       if (cursorEvents.at(-1) !== "sphere:radius") {
@@ -302,7 +302,7 @@ export async function runEditorRuntimeVerification(
         paramCodeButton.click();
         await nextFrame();
         sourceLinkStatus.graphReveal = visibleSourceLinkStatus(codeRoot);
-        if (sourceLinkStatus.graphReveal !== sourceLinkStatusText(radiusLink)) {
+        if (sourceLinkStatus.graphReveal !== sourceLinkStatusText(radiusLink, readSourceLinkNumber(fixtureSource, radiusLink))) {
           errors.push(`source link status after graph reveal rendered ${sourceLinkStatus.graphReveal || "nothing"}`);
         }
         if (graphRevealEvents.at(-1) !== "sphere:radius") {
@@ -388,7 +388,7 @@ export async function runEditorRuntimeVerification(
     } else {
       await revealAndSettle(codeEditor, boxCallLink);
       sourceLinkStatus.box = visibleSourceLinkStatus(codeRoot);
-      if (sourceLinkStatus.box !== sourceLinkStatusText(boxCallLink)) {
+      if (sourceLinkStatus.box !== sourceLinkStatusText(boxCallLink, readSourceLinkNumber(fixtureSource, boxCallLink))) {
         errors.push(`source link status rendered ${sourceLinkStatus.box || "nothing"} for box`);
       }
       codeEditor.markSelectedSourceLink(null);
