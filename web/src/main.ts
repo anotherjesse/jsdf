@@ -398,7 +398,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   if (!node) return;
   codeEditor?.setFocusedNode(node.id);
 
-  if (options.shiftKey) {
+  if (options.shiftKey && isHighlightableNode(node)) {
     focusPreview = graphInspector.buildSoloPreviewForNodeId(link.nodeId);
     schedulePreview(0);
     setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
@@ -424,7 +424,7 @@ function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
   }
 
   codeEditor?.setFocusedNode(node.id);
-  if (options.shiftKey) {
+  if (options.shiftKey && isHighlightableNode(node)) {
     focusPreview = graphInspector.buildSoloPreviewForNodeId(node.id);
     schedulePreview(0);
     setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
@@ -816,7 +816,25 @@ function isActiveRootNode(node: Node): boolean {
 }
 
 function isHighlightableNode(node: Node): boolean {
-  return !isActiveRootNode(node) && !hiddenNodeIds.has(node.id);
+  return !isActiveRootNode(node) && isNodeEffectivelyVisible(node.id);
+}
+
+function isNodeEffectivelyVisible(nodeId: number): boolean {
+  if (!activeSdf) return false;
+  let visible = false;
+
+  const visit = (node: Node, inheritedHidden: boolean) => {
+    if (visible) return;
+    const hidden = inheritedHidden || hiddenNodeIds.has(node.id);
+    if (node.id === nodeId && !hidden) {
+      visible = true;
+      return;
+    }
+    for (const child of node.children) visit(child.node, hidden);
+  };
+
+  visit(activeSdf.node, false);
+  return visible;
 }
 
 async function showMesh(): Promise<void> {
