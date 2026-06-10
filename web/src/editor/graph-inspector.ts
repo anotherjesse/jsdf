@@ -377,6 +377,21 @@ export class GraphInspector {
       this.toggleNodeVisibility(node, { isolate: event.altKey });
     });
 
+    const soloPreview = this.soloPreviewForNode(node);
+    const isolate = document.createElement("button");
+    isolate.type = "button";
+    isolate.className = "graph-isolate";
+    isolate.disabled = !soloPreview;
+    isolate.title = soloPreview ? "Isolate this node in preview (I)" : "This node cannot be isolated";
+    isolate.setAttribute("aria-label", soloPreview ? `Isolate ${node.kind} #${node.id} in preview` : `${node.kind} #${node.id} cannot be isolated`);
+    isolate.setAttribute("aria-pressed", String(soloPreview ? node.id === this.lockedSoloNodeId : false));
+    if (soloPreview) isolate.setAttribute("aria-keyshortcuts", "I");
+    isolate.append(renderIsolateIcon(), screenReaderText("Isolate"));
+    isolate.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.toggleLockedSolo(node);
+    });
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "graph-node";
@@ -399,7 +414,7 @@ export class GraphInspector {
     button.addEventListener("click", () => this.select(node));
     button.addEventListener("keydown", (event) => this.handleNodeKeyDown(event, node));
     this.attachSoloHover(row, path);
-    row.append(visibility, button);
+    row.append(visibility, button, isolate);
     group.append(row);
 
     node.children.forEach((child) => {

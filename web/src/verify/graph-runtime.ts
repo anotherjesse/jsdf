@@ -24,6 +24,7 @@ export interface GraphRuntimeVerification {
   nodes: number;
   treeHeaders: number;
   eyeButtons: number;
+  isolateButtons: number;
   mapEyes: number;
   links: number;
   selectedNode: string;
@@ -156,6 +157,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     nodes: root.querySelectorAll(".graph-node").length,
     treeHeaders: root.querySelectorAll(".graph-tree-header").length,
     eyeButtons: root.querySelectorAll(".graph-visibility").length,
+    isolateButtons: root.querySelectorAll(".graph-isolate").length,
     mapEyes: root.querySelectorAll(".graph-map-eye").length,
     links: links.length,
     selectedNode,
@@ -537,6 +539,33 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       nodeRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       if (graphHoverLabels.at(-1) !== "") verifyErrors.push("tree node blur did not clear graph hover");
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node blur did not clear source hover");
+    }
+
+    const rowIsolate = nodeRow?.querySelector<HTMLButtonElement>(".graph-isolate");
+    if (!rowIsolate) {
+      verifyErrors.push("selected sphere has no row isolate button");
+    } else {
+      const expectedLabel = `Isolate sphere #${sphere.id} in preview`;
+      if (!rowIsolate.querySelector(".isolate-icon")) verifyErrors.push("row isolate button rendered without icon");
+      if (rowIsolate.getAttribute("aria-keyshortcuts") !== "I") verifyErrors.push("row isolate shortcut missing");
+      if (rowIsolate.getAttribute("aria-label") !== expectedLabel) {
+        verifyErrors.push(`row isolate label was ${rowIsolate.getAttribute("aria-label") || "missing"}`);
+      }
+      rowIsolate.click();
+      const pressedNodeButton = graphRoot.querySelector<HTMLButtonElement>(`.graph-node[data-node-id="${sphere.id}"]`);
+      const pressedRowIsolate = pressedNodeButton
+        ?.closest<HTMLElement>(".graph-node-row")
+        ?.querySelector<HTMLButtonElement>(".graph-isolate") ?? null;
+      if (pressedRowIsolate?.getAttribute("aria-pressed") !== "true") {
+        verifyErrors.push("row isolate did not render pressed state");
+      }
+      if (!soloLabels.at(-1)?.includes("sphere")) {
+        verifyErrors.push("row isolate did not emit solo preview");
+      }
+      pressedRowIsolate?.click();
+      if ((soloLabels.at(-1) ?? "not-cleared") !== "") {
+        verifyErrors.push("row isolate did not clear solo preview");
+      }
     }
 
     const visibilityButton = nodeRow?.querySelector<HTMLButtonElement>(".graph-visibility");

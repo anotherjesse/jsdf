@@ -932,13 +932,14 @@ button:disabled {
 
 .graph-node-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   gap: 6px;
   align-items: center;
   margin-left: calc(var(--depth) * 14px);
 }
 
-.graph-visibility {
+.graph-visibility,
+.graph-isolate {
   display: grid;
   place-items: center;
   width: 28px;
@@ -957,12 +958,16 @@ button:disabled {
 }
 
 .graph-node-row:hover .graph-visibility:not(:disabled),
-.graph-node-row:focus-within .graph-visibility:not(:disabled) {
+.graph-node-row:focus-within .graph-visibility:not(:disabled),
+.graph-node-row:hover .graph-isolate:not(:disabled),
+.graph-node-row:focus-within .graph-isolate:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
 }
 
 .graph-visibility:hover:not(:disabled),
-.graph-visibility:focus-visible {
+.graph-visibility:focus-visible,
+.graph-isolate:hover:not(:disabled),
+.graph-isolate:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 52%, transparent);
   background: color-mix(in srgb, var(--accent) 11%, transparent);
   color: var(--accent);
@@ -982,6 +987,28 @@ button:disabled {
   color: #59636f;
   background: transparent;
   cursor: default;
+}
+
+.graph-isolate {
+  color: color-mix(in srgb, var(--accent-2) 68%, var(--muted));
+}
+
+.graph-isolate:disabled {
+  color: color-mix(in srgb, var(--text) 36%, var(--muted));
+  background: transparent;
+  cursor: default;
+  opacity: 0.48;
+}
+
+.graph-isolate[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+
+.graph-isolate .isolate-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .eye-icon {
