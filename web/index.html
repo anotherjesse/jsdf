@@ -8,38 +8,6 @@
   </head>
   <body>
     <main class="app">
-      <aside class="sidebar">
-        <header class="brand">
-          <div>
-            <h1>sdf</h1>
-            <p>Browser WebGPU port</p>
-          </div>
-          <span id="gpuBadge" class="badge">Checking GPU</span>
-        </header>
-
-        <section class="panel">
-          <h2>Resolution</h2>
-          <label class="range">
-            <span>Ray steps</span>
-            <input id="stepsInput" type="range" min="64" max="320" value="180" step="16">
-            <output id="stepsOutput">180</output>
-          </label>
-          <label class="range">
-            <span>Mesh grid</span>
-            <input id="gridInput" type="range" min="24" max="256" value="52" step="4">
-            <output id="gridOutput">52</output>
-          </label>
-          <div class="field">
-            <span>Mesh style</span>
-            <div class="segmented" aria-label="Mesh style">
-              <button id="surfaceNetButton" type="button" aria-pressed="true">Surface net</button>
-              <button id="tetraMeshButton" type="button" aria-pressed="false">Tetra</button>
-            </div>
-          </div>
-        </section>
-
-      </aside>
-
       <aside class="editor-pane">
         <header class="editor-header">
           <h2>Editor</h2>
@@ -54,12 +22,14 @@
           </div>
         </header>
 
-        <div class="workspace-bar" aria-label="Source workspace">
-          <input id="documentNameInput" type="text" aria-label="Document name" placeholder="Untitled SDF">
-          <select id="sourceLibrarySelect" aria-label="Source library"></select>
-          <select id="sourceVersionSelect" aria-label="Saved version"></select>
+        <div class="workspace-bar" aria-label="Shape file">
+          <div class="document-title-field">
+            <label class="sr-only" for="documentNameInput">Shape name</label>
+            <input id="documentNameInput" type="text" aria-label="Shape name" placeholder="Untitled SDF">
+            <span id="dirtyIndicator" class="document-dirty" hidden>Unsaved</span>
+          </div>
           <button id="loadSourceButton" type="button">Load</button>
-          <button id="saveSourceButton" type="button">Save</button>
+          <button id="saveSourceButton" type="button" disabled>Save</button>
         </div>
 
         <div class="segmented editor-toggle" aria-label="Editor mode">
@@ -78,12 +48,42 @@
 
       <section class="viewport">
         <header class="viewport-header">
-          <div class="segmented view-toggle" aria-label="Render view">
-            <button id="shaderViewButton" type="button" aria-pressed="true">Shader</button>
-            <button id="meshViewButton" type="button" aria-pressed="false">Mesh</button>
-            <button id="downloadButton" class="icon-button" type="button" title="Download STL" aria-label="Download STL" disabled>
-              <span class="download-icon" aria-hidden="true"></span>
-            </button>
+          <div class="viewport-actions">
+            <details class="settings-popover">
+              <summary title="Render settings" aria-label="Render settings">
+                <span class="settings-icon" aria-hidden="true"></span>
+                <span>Settings</span>
+              </summary>
+              <div class="settings-panel">
+                <section class="panel compact">
+                  <h2>Resolution</h2>
+                  <label class="range">
+                    <span>Ray steps</span>
+                    <input id="stepsInput" type="range" min="64" max="320" value="180" step="16">
+                    <output id="stepsOutput">180</output>
+                  </label>
+                  <label class="range">
+                    <span>Mesh grid</span>
+                    <input id="gridInput" type="range" min="24" max="256" value="128" step="4">
+                    <output id="gridOutput">128</output>
+                  </label>
+                  <div class="field">
+                    <span>Mesh style</span>
+                    <div class="segmented" aria-label="Mesh style">
+                      <button id="surfaceNetButton" type="button" aria-pressed="true">Surface net</button>
+                      <button id="tetraMeshButton" type="button" aria-pressed="false">Tetra</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </details>
+            <div class="segmented view-toggle" aria-label="Render view">
+              <button id="shaderViewButton" type="button" aria-pressed="true">Shader</button>
+              <button id="meshViewButton" type="button" aria-pressed="false">Mesh</button>
+              <button id="downloadButton" class="icon-button" type="button" title="Download STL" aria-label="Download STL" disabled>
+                <span class="download-icon" aria-hidden="true"></span>
+              </button>
+            </div>
           </div>
         </header>
         <div class="viewport-canvas">
@@ -96,11 +96,27 @@
           <div><dt>Preview</dt><dd id="previewStat">-</dd></div>
           <div><dt>Mesh</dt><dd id="meshStat">-</dd></div>
           <div><dt>Triangles</dt><dd id="triangleStat">-</dd></div>
+          <div><dt>Renderer</dt><dd id="gpuBadge" class="footer-badge">Checking GPU</dd></div>
           <div><dt>API</dt><dd id="apiStat">-</dd></div>
         </dl>
         <div id="overlay" class="status-message"></div>
       </footer>
     </main>
+
+    <dialog id="sourceDialog" class="source-dialog" aria-labelledby="sourceDialogTitle">
+      <div class="source-dialog-card">
+        <header class="source-dialog-header">
+          <div>
+            <h2 id="sourceDialogTitle">Load</h2>
+            <p>Examples and saved shapes</p>
+          </div>
+          <button id="closeSourceDialogButton" class="icon-button dialog-close" type="button" title="Close" aria-label="Close">
+            <span class="close-icon" aria-hidden="true"></span>
+          </button>
+        </header>
+        <div id="sourceDialogList" class="source-list"></div>
+      </div>
+    </dialog>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

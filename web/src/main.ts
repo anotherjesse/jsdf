@@ -6,6 +6,7 @@ import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
+import { renderSourceDialog } from "./editor/source-dialog";
 import {
   latestSourceVersion,
   listSavedSourceDocuments,
@@ -23,11 +24,13 @@ import { WebGLRaymarchRenderer } from "./preview/webgl-raymarch-renderer";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!;
 const documentNameInput = document.querySelector<HTMLInputElement>("#documentNameInput")!;
-const sourceLibrarySelect = document.querySelector<HTMLSelectElement>("#sourceLibrarySelect")!;
-const sourceVersionSelect = document.querySelector<HTMLSelectElement>("#sourceVersionSelect")!;
+const dirtyIndicator = document.querySelector<HTMLElement>("#dirtyIndicator")!;
 const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
 const saveSourceButton = document.querySelector<HTMLButtonElement>("#saveSourceButton")!;
-const gpuBadge = document.querySelector<HTMLSpanElement>("#gpuBadge")!;
+const sourceDialog = document.querySelector<HTMLDialogElement>("#sourceDialog")!;
+const sourceDialogList = document.querySelector<HTMLElement>("#sourceDialogList")!;
+const closeSourceDialogButton = document.querySelector<HTMLButtonElement>("#closeSourceDialogButton")!;
+const gpuBadge = document.querySelector<HTMLElement>("#gpuBadge")!;
 const shaderViewButton = document.querySelector<HTMLButtonElement>("#shaderViewButton")!;
 const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButton")!;
 const downloadButton = document.querySelector<HTMLButtonElement>("#downloadButton")!;
@@ -56,10 +59,7 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
 type RenderView = "shader" | "mesh";
 type EditorView = "code" | "graph";
-type SourceLibrarySelection =
-  | { type: "example"; id: string }
-  | { type: "saved"; id: string }
-  | { type: "none" };
+type EditorStatusState = "idle" | "ok" | "pending" | "error";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -83,14 +83,19 @@ let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeDocumentId: string | null = null;
+let activeSourceVersionId: string | null = null;
 let activeSourceName = currentExample(activeExampleId).name;
+let cleanSourceSnapshot = sourceForExample(activeExampleId);
+let cleanNameSnapshot = activeSourceName;
+let hasUnsavedChanges = false;
 const graphHistory = new GraphEditHistory();
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
 documentNameInput.value = activeSourceName;
-renderSourceLibrary(sourceValueForExample(activeExampleId));
+updateSaveState();
+renderLoadDialog();
 
 stepsInput.addEventListener("input", () => {
   stepsOutput.value = stepsInput.value;
@@ -117,11 +122,15 @@ meshViewButton.addEventListener("click", () => {
 surfaceNetButton.addEventListener("click", () => setMeshAlgorithm("surface-net"));
 tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
 downloadButton.addEventListener("click", () => {
-  if (lastBlob) downloadBlob(lastBlob, `${slugify(activeSourceName)}.stl`);
+  if (lastBlob) downloadBlob(lastBlob, `${slugify(currentDocumentName())}.stl`);
 });
-sourceLibrarySelect.addEventListener("change", () => updateSourceVersionOptions());
-loadSourceButton.addEventListener("click", loadSelectedSource);
+documentNameInput.addEventListener("input", updateSaveState);
+loadSourceButton.addEventListener("click", openSourceDialog);
 saveSourceButton.addEventListener("click", saveCurrentSource);
+closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
+sourceDialog.addEventListener("click", (event) => {
+  if (event.target === sourceDialog) sourceDialog.close();
+});
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
 undoGraphButton.addEventListener("click", undoGraphEdit);
@@ -151,7 +160,7 @@ async function boot(): Promise<void> {
       onSolo: handleSoloPreview,
     });
     setViewMode("shader");
-    compileEditorSource({ status: "Loaded example", invalidateMesh: false });
+    compileEditorSource({ status: "Ready", statusState: "idle", invalidateMesh: false });
     await renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
     codeEditor = createCodeEditor(
@@ -171,26 +180,26 @@ async function boot(): Promise<void> {
 }
 
 function loadExample(id: string): void {
+  if (!confirmDiscardUnsavedChanges()) return;
   window.clearTimeout(sourceCompileTimer);
   activeExampleId = id;
   activeDocumentId = null;
+  activeSourceVersionId = null;
   activeSourceName = currentExample(id).name;
+  const source = sourceForExample(id);
   documentNameInput.value = activeSourceName;
-  renderSourceLibrary(sourceValueForExample(id));
   selectedNode = null;
   hoveredNode = null;
-  codeEditor?.setValue(sourceForExample(id));
-  compileEditorSource({ status: "Loaded example" });
+  codeEditor?.setValue(source);
+  markSourceClean(source, activeSourceName);
+  renderLoadDialog();
+  sourceDialog.close();
+  compileEditorSource({ status: "Ready", statusState: "idle" });
 }
 
-function loadSelectedSource(): void {
-  const selection = parseSourceLibraryValue(sourceLibrarySelect.value);
-  if (selection.type === "example") {
-    loadExample(selection.id);
-    return;
-  }
-  if (selection.type !== "saved") return;
-  const loaded = loadSavedSourceVersion(selection.id, sourceVersionSelect.value || null);
+function loadSavedSourceById(documentId: string, versionId: string): void {
+  if (!confirmDiscardUnsavedChanges()) return;
+  const loaded = loadSavedSourceVersion(documentId, versionId);
   if (!loaded) {
     setEditorStatus("Saved source not found", "error");
     return;
@@ -201,27 +210,30 @@ function loadSelectedSource(): void {
 function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string): void {
   window.clearTimeout(sourceCompileTimer);
   activeDocumentId = document.id;
+  activeSourceVersionId = versionId;
   activeSourceName = document.name;
   documentNameInput.value = document.name;
-  renderSourceLibrary(sourceValueForSaved(document.id));
-  sourceVersionSelect.value = versionId;
   selectedNode = null;
   hoveredNode = null;
   codeEditor?.setValue(source);
-  compileEditorSource({ status: `Loaded ${document.name}` });
+  markSourceClean(source, document.name);
+  renderLoadDialog();
+  sourceDialog.close();
+  compileEditorSource({ status: "Ready", statusState: "idle" });
 }
 
 function saveCurrentSource(): void {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
-    const saved = saveSourceVersion(documentNameInput.value || activeSourceName, source, activeDocumentId);
+    const saved = saveSourceVersion(currentDocumentName(), source, activeDocumentId);
     const latest = latestSourceVersion(saved);
     activeDocumentId = saved.id;
+    activeSourceVersionId = latest?.id ?? null;
     activeSourceName = saved.name;
     documentNameInput.value = saved.name;
-    renderSourceLibrary(sourceValueForSaved(saved.id));
-    if (latest) sourceVersionSelect.value = latest.id;
-    setEditorStatus(`Saved ${saved.name}`, "ok");
+    markSourceClean(source, saved.name);
+    renderLoadDialog();
+    setEditorStatus("Saved", "ok");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setEditorStatus(`Save failed: ${message}`, "error");
@@ -230,6 +242,7 @@ function saveCurrentSource(): void {
 
 function scheduleSourceCompile(): void {
   window.clearTimeout(sourceCompileTimer);
+  updateSaveState();
   setEditorStatus("Editing...", "pending");
   codeEditor?.setSourceLinks([]);
   sourceCompileTimer = window.setTimeout(() => {
@@ -237,7 +250,9 @@ function scheduleSourceCompile(): void {
   }, 350);
 }
 
-function compileEditorSource(options: { status: string; invalidateMesh?: boolean } = { status: "Compiled" }): boolean {
+function compileEditorSource(
+  options: { status: string; statusState?: EditorStatusState; invalidateMesh?: boolean } = { status: "Compiled" },
+): boolean {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
     const { sdf } = evaluateSource(source);
@@ -247,7 +262,7 @@ function compileEditorSource(options: { status: string; invalidateMesh?: boolean
     codeEditor?.setError(null);
     refreshSourceLinks(source, sdf);
     clearGraphHistory();
-    setEditorStatus(options.status, "ok");
+    setEditorStatus(options.status, options.statusState ?? "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
     schedulePreview(0);
     return true;
@@ -435,6 +450,7 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
   if (!nextSource) return;
   codeEditor.setValue(nextSource);
   codeEditor.setError(null);
+  updateSaveState();
   refreshSourceLinks(nextSource, activeSdf);
 }
 
@@ -662,7 +678,7 @@ async function buildMesh(): Promise<void> {
       if (job !== meshJob) return;
       mesh = result;
       meshRenderer?.render(mesh.triangles, mesh.bounds);
-      lastBlob = binarySTL(mesh.triangles, `sdf-browser ${activeSourceName}`);
+      lastBlob = binarySTL(mesh.triangles, `sdf-browser ${currentDocumentName()}`);
       const total = mesh.sampleTimeMs + mesh.polygonizeTimeMs;
       meshStat.textContent = `${total.toFixed(0)} ms ${mesh.usedGPU ? "GPU" : "CPU"}${mesh.usedWorker ? " worker" : ""} ${algorithmLabel(mesh.algorithm)}`;
       triangleStat.textContent = mesh.triangles.length.toLocaleString();
@@ -694,9 +710,10 @@ async function buildMesh(): Promise<void> {
   }
 }
 
-function setEditorStatus(message: string, state: "ok" | "pending" | "error"): void {
+function setEditorStatus(message: string, state: EditorStatusState): void {
   editorStatus.textContent = message;
-  editorStatus.dataset.state = state;
+  if (state === "idle") editorStatus.removeAttribute("data-state");
+  else editorStatus.dataset.state = state;
   editorStatus.title = message;
 }
 
@@ -713,97 +730,48 @@ function gridLabel(): string {
   return `${grid}^3 (${(grid ** 3).toLocaleString()} samples)`;
 }
 
-function renderSourceLibrary(selectedValue = sourceLibrarySelect.value): void {
-  sourceLibrarySelect.replaceChildren();
-
-  const examplesGroup = document.createElement("optgroup");
-  examplesGroup.label = "Examples";
-  for (const example of examples) {
-    const option = document.createElement("option");
-    option.value = sourceValueForExample(example.id);
-    option.textContent = example.name;
-    examplesGroup.append(option);
-  }
-  sourceLibrarySelect.append(examplesGroup);
-
-  const saved = listSavedSourceDocuments();
-  const savedGroup = document.createElement("optgroup");
-  savedGroup.label = "Saved";
-  if (saved.length === 0) {
-    const option = document.createElement("option");
-    option.disabled = true;
-    option.textContent = "No saved sources";
-    savedGroup.append(option);
-  } else {
-    for (const savedDocument of saved) {
-      const option = document.createElement("option");
-      option.value = sourceValueForSaved(savedDocument.id);
-      option.textContent = savedDocument.name;
-      savedGroup.append(option);
-    }
-  }
-  sourceLibrarySelect.append(savedGroup);
-
-  const fallback = activeDocumentId ? sourceValueForSaved(activeDocumentId) : sourceValueForExample(activeExampleId);
-  sourceLibrarySelect.value = hasOptionValue(sourceLibrarySelect, selectedValue) ? selectedValue : fallback;
-  updateSourceVersionOptions();
+function openSourceDialog(): void {
+  renderLoadDialog();
+  if (sourceDialog.open) return;
+  sourceDialog.showModal();
 }
 
-function updateSourceVersionOptions(): void {
-  sourceVersionSelect.replaceChildren();
-  const selection = parseSourceLibraryValue(sourceLibrarySelect.value);
-  if (selection.type !== "saved") {
-    const option = document.createElement("option");
-    option.textContent = "Example";
-    option.value = "";
-    sourceVersionSelect.append(option);
-    sourceVersionSelect.disabled = true;
-    return;
-  }
-
-  const savedDocument = listSavedSourceDocuments().find((candidate) => candidate.id === selection.id);
-  if (!savedDocument || savedDocument.versions.length === 0) {
-    const option = document.createElement("option");
-    option.textContent = "No versions";
-    option.value = "";
-    sourceVersionSelect.append(option);
-    sourceVersionSelect.disabled = true;
-    return;
-  }
-
-  sourceVersionSelect.disabled = false;
-  for (const version of savedDocument.versions) {
-    const option = document.createElement("option");
-    option.value = version.id;
-    option.textContent = formatVersionLabel(version.createdAt);
-    sourceVersionSelect.append(option);
-  }
-  sourceVersionSelect.value = latestSourceVersion(savedDocument)?.id ?? savedDocument.versions[0].id;
+function renderLoadDialog(): void {
+  renderSourceDialog(sourceDialogList, {
+    examples,
+    savedDocuments: listSavedSourceDocuments(),
+    activeExampleId,
+    activeDocumentId,
+    activeVersionId: activeSourceVersionId,
+  }, {
+    loadExample,
+    loadSaved: loadSavedSourceById,
+  });
 }
 
-function parseSourceLibraryValue(value: string): SourceLibrarySelection {
-  const [type, id] = value.split(":", 2);
-  if (type === "example" && id) return { type, id };
-  if (type === "saved" && id) return { type, id };
-  return { type: "none" };
+function currentDocumentName(): string {
+  return documentNameInput.value.trim() || activeSourceName || "Untitled SDF";
 }
 
-function sourceValueForExample(id: string): string {
-  return `example:${id}`;
+function currentSourceValue(): string {
+  return codeEditor?.getValue() ?? sourceForExample(activeExampleId);
 }
 
-function sourceValueForSaved(id: string): string {
-  return `saved:${id}`;
+function markSourceClean(source: string, name: string): void {
+  cleanSourceSnapshot = source;
+  cleanNameSnapshot = name;
+  updateSaveState();
 }
 
-function hasOptionValue(select: HTMLSelectElement, value: string): boolean {
-  return [...select.options].some((option) => option.value === value);
+function updateSaveState(): void {
+  const nextDirty = currentSourceValue() !== cleanSourceSnapshot || currentDocumentName() !== cleanNameSnapshot;
+  hasUnsavedChanges = nextDirty;
+  saveSourceButton.disabled = !nextDirty;
+  dirtyIndicator.hidden = !nextDirty;
 }
 
-function formatVersionLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+function confirmDiscardUnsavedChanges(): boolean {
+  return !hasUnsavedChanges || window.confirm("Discard unsaved changes and load another shape?");
 }
 
 function slugify(value: string): string {
