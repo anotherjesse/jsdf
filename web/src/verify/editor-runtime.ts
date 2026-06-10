@@ -6,6 +6,7 @@ import { loadEditorPreferences, saveEditorPreferences } from "../editor/editor-p
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
 import { prettifySource } from "../editor/prettify-source";
+import { sourceCompletionContextAt, sourceCompletionEntries } from "../editor/source-completions";
 import {
   apiSuggestionTargetFromDiagnosticMessage,
   replacementTextForSuggestionTarget,
@@ -74,6 +75,10 @@ export interface EditorRuntimeVerification {
     methodCompletions: number;
     easeCompletions: number;
     methodDifference: boolean;
+    methodPartialCompletion: string;
+    methodPartialScope: string;
+    easingPartialCompletion: string;
+    easingPartialScope: string;
     signatureChecks: number;
     sphere: string;
     translate: string;
@@ -371,6 +376,12 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (!sphere?.signature.includes("sphere(")) errors.push("api hints missing sphere signature");
   if (translate?.kind !== "method") errors.push(`api hints classified translate as ${translate?.kind ?? "missing"}`);
   if (!linear?.signature.includes("ease.linear")) errors.push("api hints missing ease.linear signature");
+  const methodPartial = firstCompletionForSource("const f = sphere(1)\nreturn f.diffe", 2, 15);
+  if (methodPartial.context.scope !== "method") errors.push(`f.diffe completion used ${methodPartial.context.scope} scope`);
+  if (methodPartial.first !== "difference") errors.push(`f.diffe completion first offered ${methodPartial.first || "nothing"}`);
+  const easingPartial = firstCompletionForSource("return sphere(ease.lin)", 1, 23);
+  if (easingPartial.context.scope !== "ease") errors.push(`ease.lin completion used ${easingPartial.context.scope} scope`);
+  if (easingPartial.first !== "linear") errors.push(`ease.lin completion first offered ${easingPartial.first || "nothing"}`);
   const signatureChecks = verifyApiSignatureHelp(errors);
 
   return {
@@ -378,11 +389,27 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     methodCompletions: methodCompletions.length,
     easeCompletions: easeCompletions.length,
     methodDifference: methodNames.has("difference"),
+    methodPartialCompletion: methodPartial.first,
+    methodPartialScope: methodPartial.context.scope,
+    easingPartialCompletion: easingPartial.first,
+    easingPartialScope: easingPartial.context.scope,
     signatureChecks,
     sphere: sphere?.signature ?? "",
     translate: translate?.signature ?? "",
     easing: linear?.signature ?? "",
   };
+}
+
+function firstCompletionForSource(
+  source: string,
+  lineNumber: number,
+  column: number,
+): { context: ReturnType<typeof sourceCompletionContextAt>; first: string } {
+  const context = sourceCompletionContextAt(source, lineNumber, column);
+  const first = sourceCompletionEntries(context)
+    .filter(({ entry }) => entry.name.toLowerCase().startsWith(context.token.toLowerCase()))
+    .sort((left, right) => left.sortText.localeCompare(right.sortText))[0]?.entry.name ?? "";
+  return { context, first };
 }
 
 function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorTools"] {

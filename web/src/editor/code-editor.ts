@@ -3,14 +3,13 @@ import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.
 import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import {
-  apiCompletionEntriesForScope,
   apiReferenceForWord,
   type ApiReferenceEntry,
 } from "./api-reference";
 import { apiSignatureHelpAt } from "./api-signature-help";
-import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
 import type { SourceDiagnostic } from "./source-diagnostics";
+import { sourceCompletionContextAt, sourceCompletionEntries } from "./source-completions";
 import {
   apiSuggestionTargetFromDiagnosticMessage,
   markerCodeValue,
@@ -51,18 +50,20 @@ monaco.languages.registerCompletionItemProvider("javascript", {
       startColumn: word.startColumn,
       endColumn: word.endColumn,
     };
-    const scope = completionScopeAtPosition(model, position, word);
+    const context = sourceCompletionContextAt(model.getValue(), position.lineNumber, position.column);
     return {
-      suggestions: apiCompletionEntriesForScope(scope).map((entry) => ({
+      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, sortText }) => ({
         label: entry.name,
         kind: completionKindForApiEntry(entry),
         insertText: entry.name,
+        filterText,
         range,
         detail: entry.signature,
         documentation: {
           value: `${entry.description}\n\n_${entry.group}_`,
         },
-        sortText: `${completionGroupRank(entry.group).toString().padStart(2, "0")}:${entry.name}`,
+        preselect: entry.name.toLowerCase().startsWith(context.token.toLowerCase()) && context.token.length > 0,
+        sortText,
       })),
     };
   },
@@ -768,17 +769,6 @@ function completionKindForApiEntry(entry: ApiReferenceEntry): monaco.languages.C
   return monaco.languages.CompletionItemKind.Function;
 }
 
-function completionScopeAtPosition(
-  model: monaco.editor.ITextModel,
-  position: monaco.Position,
-  word: monaco.editor.IWordAtPosition,
-): ApiCompletionScope {
-  const beforeWord = model.getLineContent(position.lineNumber).slice(0, word.startColumn - 1).trimEnd();
-  if (!beforeWord.endsWith(".")) return "global";
-  const beforeDot = beforeWord.slice(0, -1).trimEnd();
-  return /\bease$/.test(beforeDot) ? "ease" : "method";
-}
-
 function wordQualifierBefore(
   model: monaco.editor.ITextModel,
   position: monaco.Position,
@@ -793,24 +783,6 @@ function wordQualifierBefore(
   let start = end;
   while (start > 0 && /[$\w]/.test(beforeWord[start - 1])) start -= 1;
   return start < end ? beforeWord.slice(start, end) : null;
-}
-
-function completionGroupRank(group: string): number {
-  const order = [
-    "3D Primitives",
-    "2D Primitives",
-    "CSG",
-    "Transforms",
-    "2D/3D",
-    "Workflow",
-    "Math",
-    "Easing",
-    "Classes",
-    "Namespaces",
-    "Helpers",
-  ];
-  const index = order.indexOf(group);
-  return index === -1 ? order.length : index;
 }
 
 function clamp(value: number, min: number, max: number): number {
