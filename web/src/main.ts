@@ -270,9 +270,7 @@ function setViewMode(mode: RenderView): void {
   if (mode === "mesh" && (!mesh || mesh.triangles.length === 0)) {
     shaderViewButton.setAttribute("aria-pressed", "false");
     meshViewButton.setAttribute("aria-pressed", "true");
-    overlay.textContent = meshBuildPromise
-      ? "Sampling and polygonizing the SDF volume..."
-      : "Mesh view builds the STL surface on demand.";
+    overlay.textContent = meshBuildPromise ? "Building mesh..." : "";
     return;
   }
   viewMode = mode;
@@ -280,9 +278,7 @@ function setViewMode(mode: RenderView): void {
   meshViewButton.setAttribute("aria-pressed", String(mode === "mesh"));
   rayRenderer?.setActive(mode === "shader");
   meshRenderer?.setActive(mode === "mesh");
-  overlay.textContent = mode === "shader"
-    ? `Shader preview: direct SDF raymarching with ${stepsInput.value} steps.${selectionLabel()}`
-    : `Mesh preview: ${mesh?.triangles.length.toLocaleString() ?? 0} ${algorithmLabel(mesh?.algorithm ?? meshAlgorithm)} triangles from ${gridLabel()}.`;
+  overlay.textContent = "";
 }
 
 function schedulePreview(delay = 300): void {
@@ -316,9 +312,9 @@ async function renderCurrent(): Promise<void> {
     rayRenderer.render(sdf, currentBounds(), steps, preview?.node ?? selectedNode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
     if (preview) {
-      overlay.textContent = `Solo preview: ${preview.label}${preview.preservedWrappers ? ` with ${preview.preservedWrappers} context wrapper${preview.preservedWrappers === 1 ? "" : "s"}` : ""}.`;
+      overlay.textContent = `Solo: ${preview.label}${preview.preservedWrappers ? ` (${preview.preservedWrappers} context)` : ""}`;
     } else if (viewMode === "shader") {
-      overlay.textContent = `Shader preview: direct SDF raymarching with ${steps} steps.${selectionLabel()}`;
+      overlay.textContent = "";
     }
   } catch (error) {
     overlay.textContent = error instanceof Error ? error.message : String(error);
@@ -382,7 +378,7 @@ async function buildMesh(): Promise<void> {
         overlay.textContent = "Generated no triangles. Try wider bounds or a lower-level example.";
         return;
       }
-      overlay.textContent = `Generated ${mesh.triangles.length.toLocaleString()} ${algorithmLabel(mesh.algorithm)} triangles from ${gridLabel()}.`;
+      overlay.textContent = "";
     } catch (error) {
       if (job !== meshJob) return;
       overlay.textContent = error instanceof Error ? error.message : String(error);
@@ -411,10 +407,6 @@ function setEditorStatus(message: string, state: "ok" | "pending" | "error"): vo
 
 function currentBounds(): Bounds3 {
   return (currentExample(exampleSelect.value).bounds ?? [[-4, -4, -4], [4, 4, 4]]) as Bounds3;
-}
-
-function selectionLabel(): string {
-  return selectedNode ? ` Selected ${selectedNode.kind} #${selectedNode.id}.` : "";
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {

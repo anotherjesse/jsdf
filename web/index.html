@@ -22,17 +22,6 @@
           <select id="exampleSelect"></select>
         </label>
 
-        <section class="panel compact">
-          <h2>View</h2>
-          <div class="segmented view-toggle" aria-label="Render view">
-            <button id="shaderViewButton" type="button" aria-pressed="true">Shader</button>
-            <button id="meshViewButton" type="button" aria-pressed="false">Mesh</button>
-            <button id="downloadButton" class="icon-button" type="button" title="Download STL" aria-label="Download STL" disabled>
-              <span class="download-icon" aria-hidden="true"></span>
-            </button>
-          </div>
-        </section>
-
         <section class="panel">
           <h2>Resolution</h2>
           <label class="range">
@@ -54,15 +43,6 @@
           </div>
         </section>
 
-        <section class="panel">
-          <h2>Stats</h2>
-          <dl class="stats">
-            <div><dt>Preview</dt><dd id="previewStat">-</dd></div>
-            <div><dt>STL mesh</dt><dd id="meshStat">-</dd></div>
-            <div><dt>Triangles</dt><dd id="triangleStat">-</dd></div>
-            <div><dt>API</dt><dd id="apiStat">-</dd></div>
-          </dl>
-        </section>
       </aside>
 
       <aside class="editor-pane">
@@ -86,9 +66,29 @@
       </aside>
 
       <section class="viewport">
-        <canvas id="canvas" width="1280" height="900"></canvas>
-        <div id="overlay" class="overlay"></div>
+        <header class="viewport-header">
+          <div class="segmented view-toggle" aria-label="Render view">
+            <button id="shaderViewButton" type="button" aria-pressed="true">Shader</button>
+            <button id="meshViewButton" type="button" aria-pressed="false">Mesh</button>
+            <button id="downloadButton" class="icon-button" type="button" title="Download STL" aria-label="Download STL" disabled>
+              <span class="download-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </header>
+        <div class="viewport-canvas">
+          <canvas id="canvas" width="1280" height="900"></canvas>
+        </div>
       </section>
+
+      <footer class="status-footer">
+        <dl class="footer-stats">
+          <div><dt>Preview</dt><dd id="previewStat">-</dd></div>
+          <div><dt>Mesh</dt><dd id="meshStat">-</dd></div>
+          <div><dt>Triangles</dt><dd id="triangleStat">-</dd></div>
+          <div><dt>API</dt><dd id="apiStat">-</dd></div>
+        </dl>
+        <div id="overlay" class="status-message"></div>
+      </footer>
     </main>
 
     <script type="module" src="./src/main.ts"></script>
