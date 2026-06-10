@@ -514,7 +514,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
     else schedulePreviewIfHoverChanged(before);
     const selected = graphInspector.getSelected();
     codeEditor?.setFocusedNode(selected?.id ?? null);
-    if (selected) setEditorStatus(`${selected.kind} #${selected.id}`, "ok");
+    restoreSelectionStatus();
     return;
   }
 
@@ -614,7 +614,11 @@ function revealGraphSource(link: GraphSourceLink): void {
 
 function handleGraphSourceHover(link: GraphSourceLink | null): void {
   codeEditor?.markHoveredSourceLink(link);
-  if (link) setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
+  if (link) {
+    setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
+    return;
+  }
+  restoreSelectionStatus();
 }
 
 function selectNode(node: Node | null): void {
@@ -821,6 +825,14 @@ function setSelectedSourceLink(
   if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
 }
 
+function restoreSelectionStatus(): void {
+  if (selectedSourceLink) {
+    setEditorStatus(`${selectedSourceLink.nodeKind} ${selectedSourceLink.label}`, "ok");
+    return;
+  }
+  if (selectedNode) setEditorStatus(`${selectedNode.kind} #${selectedNode.id}`, "ok");
+}
+
 function sourceFocusNodeId(): number | null {
   const node = hoveredNode ?? selectedNode;
   return node && !isActiveRootNode(node) ? node.id : null;
@@ -923,7 +935,7 @@ function clearGraphHistoryEntryHover(): void {
   graphInspector.setHoveredSourceLink(null);
   codeEditor?.markHoveredSourceLink(null);
   codeEditor?.setFocusedNode(selectedNode?.id ?? null);
-  if (selectedNode) setEditorStatus(`${selectedNode.kind} #${selectedNode.id}`, "ok");
+  restoreSelectionStatus();
   schedulePreviewIfHoverChanged(before);
 }
 
