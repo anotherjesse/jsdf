@@ -2,7 +2,12 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from
 import { createCodeEditor } from "../editor/code-editor";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
-import { graphNodeSourceIdentityForNode, sourceLinkForGraphNodeIdentity } from "../editor/graph-source-identity";
+import {
+  graphNodeSourceIdentityForNode,
+  graphSourceLinkIdentityForLink,
+  sourceLinkForGraphNodeIdentity,
+  sourceLinkForGraphSourceLinkIdentity,
+} from "../editor/graph-source-identity";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "../editor/source-link-scrub";
 import type { SDF3 } from "../core/nodes";
 
@@ -37,6 +42,11 @@ export interface EditorRuntimeVerification {
     restoredNode: string;
     previousStart: number;
     restoredStart: number;
+    previousParam: string;
+    restoredParam: string;
+    previousParamStart: number;
+    restoredParamStart: number;
+    selectedParamRows: number;
     selectedNode: string;
   };
   errors: string[];
@@ -242,11 +252,14 @@ function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["se
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
+  const radiusLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
   const identity = boxCallLink ? graphNodeSourceIdentityForNode(links, boxCallLink.nodeId) : null;
-  const shiftedSource = fixtureSource.replace("sphere(1)", "sphere(1.25)");
+  const sourceIdentity = radiusLink ? graphSourceLinkIdentityForLink(links, radiusLink) : null;
+  const shiftedSource = `// shifted source offsets\n${fixtureSource}`;
   const { sdf: shiftedSdf } = evaluateSource(shiftedSource);
   const shiftedLinks = findGraphSourceLinks(shiftedSource, shiftedSdf);
   const restoredLink = identity ? sourceLinkForGraphNodeIdentity(shiftedLinks, identity) : null;
+  const restoredRadiusLink = sourceIdentity ? sourceLinkForGraphSourceLinkIdentity(shiftedLinks, sourceIdentity) : null;
   const root = document.createElement("div");
   let selectedNode = "";
   const inspector = new GraphInspector(root, {
@@ -263,10 +276,18 @@ function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["se
 
   inspector.setSdf(shiftedSdf);
   inspector.setSourceLinks(shiftedLinks);
-  if (restoredLink) inspector.selectNodeById(restoredLink.nodeId);
+  if (restoredRadiusLink) {
+    inspector.selectNodeById(restoredRadiusLink.nodeId);
+    inspector.setSelectedSourceLink(restoredRadiusLink);
+  } else if (restoredLink) {
+    inspector.selectNodeById(restoredLink.nodeId);
+  }
+  const selectedParamRows = root.querySelectorAll(".param-row.source-selected").length;
 
   if (!boxCallLink) errors.push("selection restore fixture has no box call link");
+  if (!radiusLink) errors.push("selection restore fixture has no sphere radius link");
   if (!identity) errors.push("selection restore could not capture box identity");
+  if (!sourceIdentity) errors.push("selection restore could not capture radius source identity");
   if (!restoredLink) {
     errors.push("selection restore did not find shifted box link");
   } else {
@@ -275,13 +296,29 @@ function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["se
       errors.push("selection restore fixture did not shift source offsets");
     }
   }
-  if (!selectedNode.startsWith("box #")) errors.push(`selection restore selected ${selectedNode || "nothing"}`);
+  if (!restoredRadiusLink) {
+    errors.push("selection restore did not find shifted radius link");
+  } else {
+    if (restoredRadiusLink.nodeKind !== "sphere" || restoredRadiusLink.label !== "radius") {
+      errors.push(`selection restore found ${restoredRadiusLink.nodeKind}:${restoredRadiusLink.label}`);
+    }
+    if (radiusLink && restoredRadiusLink.start === radiusLink.start) {
+      errors.push("selection restore radius fixture did not shift source offsets");
+    }
+  }
+  if (selectedParamRows !== 1) errors.push(`selection restore marked ${selectedParamRows} selected param rows`);
+  if (!selectedNode.startsWith("sphere #")) errors.push(`selection restore selected ${selectedNode || "nothing"}`);
 
   return {
     previousNode: boxCallLink ? `${boxCallLink.nodeKind}:${boxCallLink.label}` : "",
     restoredNode: restoredLink ? `${restoredLink.nodeKind}:${restoredLink.label}` : "",
     previousStart: boxCallLink?.start ?? -1,
     restoredStart: restoredLink?.start ?? -1,
+    previousParam: radiusLink ? `${radiusLink.nodeKind}:${radiusLink.label}` : "",
+    restoredParam: restoredRadiusLink ? `${restoredRadiusLink.nodeKind}:${restoredRadiusLink.label}` : "",
+    previousParamStart: radiusLink?.start ?? -1,
+    restoredParamStart: restoredRadiusLink?.start ?? -1,
+    selectedParamRows,
     selectedNode,
   };
 }

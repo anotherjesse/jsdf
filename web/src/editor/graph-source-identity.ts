@@ -5,6 +5,13 @@ export interface GraphNodeSourceIdentity {
   callOrdinal: number;
 }
 
+export interface GraphSourceLinkIdentity {
+  node: GraphNodeSourceIdentity;
+  label: string;
+  path: readonly (string | number)[];
+  scrubbable: boolean;
+}
+
 const GRAPH_IDENTITY_PATTERN = /^([^:]+):(\d+)$/;
 const LEGACY_OFFSET_KEY_PATTERN = /^([^:]+):call:(\d+):(\d+)$/;
 
@@ -29,6 +36,35 @@ export function sourceLinkForGraphNodeIdentity(
 ): GraphSourceLink | null {
   return graphCallLinks(links)
     .filter((link) => link.nodeKind === identity.nodeKind)[identity.callOrdinal] ?? null;
+}
+
+export function graphSourceLinkIdentityForLink(
+  links: readonly GraphSourceLink[],
+  link: GraphSourceLink,
+): GraphSourceLinkIdentity | null {
+  const node = graphNodeSourceIdentityForNode(links, link.nodeId);
+  if (!node) return null;
+  return {
+    node,
+    label: link.label,
+    path: [...link.path],
+    scrubbable: isScrubbableSourceLink(link),
+  };
+}
+
+export function sourceLinkForGraphSourceLinkIdentity(
+  links: readonly GraphSourceLink[],
+  identity: GraphSourceLinkIdentity,
+): GraphSourceLink | null {
+  const nodeLink = sourceLinkForGraphNodeIdentity(links, identity.node);
+  if (!nodeLink) return null;
+  return links.find((link) => {
+    return link.nodeId === nodeLink.nodeId
+      && link.label === identity.label
+      && link.end > link.start
+      && isScrubbableSourceLink(link) === identity.scrubbable
+      && sourcePathsEqual(link.path, identity.path);
+  }) ?? null;
 }
 
 export function graphNodeIdentityKeyForNode(
@@ -79,4 +115,12 @@ function graphCallLinks(links: readonly GraphSourceLink[]): GraphSourceLink[] {
   return links
     .filter((link) => link.label === "call" && link.end > link.start)
     .sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function isScrubbableSourceLink(link: GraphSourceLink): boolean {
+  return link.scrubbable !== false;
+}
+
+function sourcePathsEqual(a: readonly (string | number)[], b: readonly (string | number)[]): boolean {
+  return a.length === b.length && a.every((part, index) => part === b[index]);
 }

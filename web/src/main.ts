@@ -10,9 +10,12 @@ import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./e
 import {
   graphNodeIdentityKeyForNode,
   graphNodeSourceIdentityForNode,
+  graphSourceLinkIdentityForLink,
   sourceLinkForGraphNodeIdentityKey,
   sourceLinkForGraphNodeIdentity,
+  sourceLinkForGraphSourceLinkIdentity,
   type GraphNodeSourceIdentity,
+  type GraphSourceLinkIdentity,
 } from "./editor/graph-source-identity";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
@@ -96,6 +99,7 @@ let focusPreview: SoloPreview | null = null;
 let soloPreview: SoloPreview | null = null;
 let hiddenNodeIds = new Set<number>();
 let currentSourceLinks: readonly GraphSourceLink[] = [];
+let selectedSourceLink: GraphSourceLink | null = null;
 let pendingHiddenNodeKeys: readonly string[] = [];
 let boundsEditor: BoundsEditor | null = null;
 let mesh: MeshResult | null = null;
@@ -251,6 +255,7 @@ function loadExample(id: string): void {
   const source = sourceForExample(id);
   documentNameInput.value = activeSourceName;
   selectedNode = null;
+  selectedSourceLink = null;
   hoveredNode = null;
   focusPreview = null;
   hiddenNodeIds = new Set();
@@ -281,6 +286,7 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
   else pendingHiddenNodeKeys = [];
   documentNameInput.value = document.name;
   selectedNode = null;
+  selectedSourceLink = null;
   hoveredNode = null;
   focusPreview = null;
   hiddenNodeIds = new Set();
@@ -313,6 +319,7 @@ function restoreSourceDraft(): boolean {
     boundsEditor?.setBounds(activeBounds);
   }
   selectedNode = null;
+  selectedSourceLink = null;
   hoveredNode = null;
   focusPreview = null;
   hiddenNodeIds = new Set();
@@ -389,6 +396,9 @@ function compileEditorSource(
   options: { status: string; statusState?: EditorStatusState; invalidateMesh?: boolean } = { status: "Compiled" },
 ): boolean {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
+  const previousSelectedSourceIdentity = selectedSourceLink
+    ? graphSourceLinkIdentityForLink(currentSourceLinks, selectedSourceLink)
+    : null;
   const previousSelectedIdentity = selectedNode && !isActiveRootNode(selectedNode)
     ? graphNodeSourceIdentityForNode(currentSourceLinks, selectedNode.id)
     : null;
@@ -405,7 +415,7 @@ function compileEditorSource(
     graphInspector?.setSdf(sdf, restoredHiddenNodeIds);
     codeEditor?.setError(null);
     refreshSourceLinks(source, sdf, sourceLinks);
-    restoreSelectedGraphNode(previousSelectedIdentity, sourceLinks);
+    restoreSelectedGraphSelection(previousSelectedSourceIdentity, previousSelectedIdentity, sourceLinks);
     clearGraphHistory();
     setEditorStatus(options.status, options.statusState ?? "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
@@ -418,10 +428,21 @@ function compileEditorSource(
     codeEditor?.setSourceLinks([]);
     graphInspector?.setSourceLinks([]);
     currentSourceLinks = [];
+    selectedSourceLink = null;
     setEditorStatus(message, "error");
     overlay.textContent = `Code error: ${message}`;
     return false;
   }
+}
+
+function restoreSelectedGraphSelection(
+  sourceIdentity: GraphSourceLinkIdentity | null,
+  nodeIdentity: GraphNodeSourceIdentity | null,
+  sourceLinks: readonly GraphSourceLink[],
+): void {
+  const sourceLink = sourceIdentity ? sourceLinkForGraphSourceLinkIdentity(sourceLinks, sourceIdentity) : null;
+  if (sourceLink && selectRestoredSourceLink(sourceLink)) return;
+  restoreSelectedGraphNode(nodeIdentity, sourceLinks);
 }
 
 function restoreSelectedGraphNode(
@@ -431,10 +452,15 @@ function restoreSelectedGraphNode(
   if (!identity || !graphInspector) return;
   const link = sourceLinkForGraphNodeIdentity(sourceLinks, identity);
   if (!link) return;
+  selectRestoredSourceLink(link);
+}
+
+function selectRestoredSourceLink(link: GraphSourceLink): boolean {
+  if (!graphInspector) return false;
   const node = graphInspector.selectNodeById(link.nodeId);
-  if (!node) return;
-  graphInspector.setSelectedSourceLink(link);
-  codeEditor?.markSelectedSourceLink(link);
+  if (!node) return false;
+  setSelectedSourceLink(link);
+  return true;
 }
 
 function handleSourceLinkSelect(link: GraphSourceLink): void {
@@ -443,13 +469,12 @@ function handleSourceLinkSelect(link: GraphSourceLink): void {
 
 function handleSourceLinkCursor(link: GraphSourceLink | null): void {
   if (!link) {
-    graphInspector?.setSelectedSourceLink(null);
+    setSelectedSourceLink(null, { markCode: false });
     return;
   }
   const node = graphInspector?.selectNodeById(link.nodeId);
   if (!node) return;
-  graphInspector?.setSelectedSourceLink(link);
-  codeEditor?.markSelectedSourceLink(link);
+  setSelectedSourceLink(link);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
   scheduleActivePreview(0);
 }
@@ -580,8 +605,7 @@ function previewOverlayText(prefix: "Focus" | "Solo", preview: SoloPreview): str
 function revealGraphSource(link: GraphSourceLink): void {
   setEditorView("code");
   codeEditor?.setFocusedNode(link.nodeId);
-  graphInspector?.setSelectedSourceLink(link);
-  codeEditor?.markSelectedSourceLink(link);
+  setSelectedSourceLink(link);
   window.requestAnimationFrame(() => {
     codeEditor?.revealSourceLink(link);
   });
@@ -596,8 +620,7 @@ function handleGraphSourceHover(link: GraphSourceLink | null): void {
 function selectNode(node: Node | null): void {
   selectedNode = node;
   const sourceLink = node ? sourceLinkForNodeId(node.id) : null;
-  graphInspector?.setSelectedSourceLink(sourceLink);
-  codeEditor?.markSelectedSourceLink(sourceLink);
+  setSelectedSourceLink(sourceLink);
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
@@ -771,8 +794,7 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
   updateSaveState();
   refreshSourceLinks(nextSource, activeSdf, nextSourceLinks);
   if (editedLink) {
-    graphInspector?.setSelectedSourceLink(editedLink);
-    codeEditor.markSelectedSourceLink(editedLink);
+    setSelectedSourceLink(editedLink);
   }
   codeEditor.markEditedSourceLink(editedLink, { reveal: editorView === "code" });
   return true;
@@ -788,6 +810,15 @@ function refreshSourceLinks(
   codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
   graphInspector?.setSourceLinks(links);
   codeEditor.setFocusedNode(sourceFocusNodeId());
+}
+
+function setSelectedSourceLink(
+  link: GraphSourceLink | null,
+  options: { markCode?: boolean } = {},
+): void {
+  selectedSourceLink = link;
+  graphInspector?.setSelectedSourceLink(link);
+  if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
 }
 
 function sourceFocusNodeId(): number | null {
