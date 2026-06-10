@@ -123,6 +123,8 @@ export interface EditorRuntimeVerification {
     propertyOnlyErrorColumn: number;
     danglingMemberErrorLine: number;
     danglingMemberErrorColumn: number;
+    trailingDotErrorLine: number;
+    trailingDotErrorColumn: number;
     danglingMemberMessage: string;
     quickFixTitle: string;
     quickFixReplacement: string;
@@ -638,6 +640,19 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     errors.push(`dangling member diagnostic message ${danglingMemberDiagnostic.message}`);
   }
 
+  const trailingDotSource = "return sphere(1).";
+  const trailingDotDiagnostic = diagnosticForSource(trailingDotSource, errors, "trailing member access");
+  if (
+    trailingDotDiagnostic.lineNumber !== 1
+    || trailingDotDiagnostic.column !== 17
+    || trailingDotDiagnostic.endColumn !== 18
+  ) {
+    errors.push(`trailing dot diagnostic range ${trailingDotDiagnostic.lineNumber}:${trailingDotDiagnostic.column}-${trailingDotDiagnostic.endColumn}`);
+  }
+  if (!trailingDotDiagnostic.message.includes("Trailing dot")) {
+    errors.push(`trailing dot diagnostic message ${trailingDotDiagnostic.message}`);
+  }
+
   return {
     autoReturnExpressionKind: autoReturnExpression.sdf.node.kind,
     autoReturnVariableKind: autoReturnVariable.sdf.node.kind,
@@ -656,6 +671,8 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     propertyOnlyErrorColumn: propertyOnlyDiagnostic.column,
     danglingMemberErrorLine: danglingMemberDiagnostic.lineNumber,
     danglingMemberErrorColumn: danglingMemberDiagnostic.column,
+    trailingDotErrorLine: trailingDotDiagnostic.lineNumber,
+    trailingDotErrorColumn: trailingDotDiagnostic.column,
     danglingMemberMessage: danglingMemberDiagnostic.message,
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,

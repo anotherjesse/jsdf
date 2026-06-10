@@ -26,12 +26,12 @@ export function sourceDiagnosticFromError(error: unknown, source: string): Sourc
       ...runtimeRange.range,
     };
   }
-  const stackRange = rangeFromStack(stack, source);
-  if (stackRange) return { message, ...stackRange };
   const danglingMemberAccess = rangeFromDanglingMemberAccess(source);
   if (danglingMemberAccess) {
     return { message: DANGLING_MEMBER_MESSAGE, code: SDF_DANGLING_MEMBER_MARKER_CODE, ...danglingMemberAccess };
   }
+  const stackRange = rangeFromStack(stack, source);
+  if (stackRange) return { message, ...stackRange };
 
   const syntaxRange = rangeFromSyntaxMessage(message, source);
   if (syntaxRange) return { message, ...syntaxRange };
