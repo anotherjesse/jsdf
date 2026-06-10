@@ -123,6 +123,7 @@ export interface EditorRuntimeVerification {
     propertyOnlyErrorColumn: number;
     danglingMemberErrorLine: number;
     danglingMemberErrorColumn: number;
+    danglingMemberMessage: string;
     quickFixTitle: string;
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
@@ -633,6 +634,9 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
   ) {
     errors.push(`dangling member diagnostic range ${danglingMemberDiagnostic.lineNumber}:${danglingMemberDiagnostic.column}-${danglingMemberDiagnostic.endColumn}`);
   }
+  if (!danglingMemberDiagnostic.message.includes("Trailing dot")) {
+    errors.push(`dangling member diagnostic message ${danglingMemberDiagnostic.message}`);
+  }
 
   return {
     autoReturnExpressionKind: autoReturnExpression.sdf.node.kind,
@@ -652,6 +656,7 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     propertyOnlyErrorColumn: propertyOnlyDiagnostic.column,
     danglingMemberErrorLine: danglingMemberDiagnostic.lineNumber,
     danglingMemberErrorColumn: danglingMemberDiagnostic.column,
+    danglingMemberMessage: danglingMemberDiagnostic.message,
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,

@@ -13,6 +13,7 @@ export interface SourceDiagnostic {
 
 const GENERATED_FUNCTION_LINE_OFFSETS = [3, 2, 1, 0] as const;
 const IDENTIFIER_RE = /^[$A-Z_a-z][$\w]*$/;
+const DANGLING_MEMBER_MESSAGE = "Trailing dot. Remove it or finish the method call.";
 
 export function sourceDiagnosticFromError(error: unknown, source: string): SourceDiagnostic {
   const message = error instanceof Error ? error.message : String(error);
@@ -29,7 +30,7 @@ export function sourceDiagnosticFromError(error: unknown, source: string): Sourc
   if (stackRange) return { message, ...stackRange };
   const danglingMemberAccess = rangeFromDanglingMemberAccess(source);
   if (danglingMemberAccess) {
-    return { message, code: SDF_DANGLING_MEMBER_MARKER_CODE, ...danglingMemberAccess };
+    return { message: DANGLING_MEMBER_MESSAGE, code: SDF_DANGLING_MEMBER_MARKER_CODE, ...danglingMemberAccess };
   }
 
   const syntaxRange = rangeFromSyntaxMessage(message, source);
