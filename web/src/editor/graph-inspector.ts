@@ -529,18 +529,33 @@ export class GraphInspector {
     titleText.append(kind, id);
     title.append(titleText);
 
+    const actions = document.createElement("div");
+    actions.className = "param-title-actions";
+    const nodeSourceLink = this.sourceLinkForNode(node.id);
+    if (nodeSourceLink) {
+      const source = document.createElement("button");
+      source.type = "button";
+      source.className = "param-title-button";
+      source.textContent = "Code";
+      source.title = `Reveal ${node.kind} #${node.id} in code`;
+      source.setAttribute("aria-label", `Reveal ${node.kind} #${node.id} in code`);
+      source.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
+      actions.append(source);
+    }
+
     const soloPreview = this.soloPreviewForNode(node);
     if (soloPreview) {
       const isolate = document.createElement("button");
       isolate.type = "button";
-      isolate.className = "param-isolate";
+      isolate.className = "param-title-button param-isolate";
       isolate.textContent = "Isolate";
       isolate.title = "Isolate selected node in preview";
       isolate.setAttribute("aria-label", "Isolate selected node in preview");
       isolate.setAttribute("aria-pressed", String(node.id === this.lockedSoloNodeId));
       isolate.addEventListener("click", () => this.toggleLockedSolo(node));
-      title.append(isolate);
+      actions.append(isolate);
     }
+    if (actions.childElementCount > 0) title.append(actions);
     this.params.append(title);
 
     const breadcrumb = this.renderBreadcrumb(node);
@@ -759,6 +774,14 @@ export class GraphInspector {
         && link.end > link.start
         && link.scrubbable === false
         && pathStartsWith(path, link.path);
+    }) ?? null;
+  }
+
+  private sourceLinkForNode(nodeId: number): GraphSourceLink | null {
+    return this.sourceLinks.find((link) => {
+      return link.nodeId === nodeId && link.label === "call" && link.end > link.start;
+    }) ?? this.sourceLinks.find((link) => {
+      return link.nodeId === nodeId && link.end > link.start;
     }) ?? null;
   }
 }

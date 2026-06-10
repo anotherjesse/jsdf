@@ -629,12 +629,23 @@ button:disabled {
   white-space: nowrap;
 }
 
-.param-isolate {
+.param-title-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.param-title-button {
   flex: 0 0 auto;
   min-height: 28px;
   border-radius: 6px;
   padding: 3px 9px;
   font-size: 12px;
+}
+
+.param-title-button:not(.param-isolate) {
+  color: var(--accent);
 }
 
 .param-isolate[aria-pressed="true"] {
