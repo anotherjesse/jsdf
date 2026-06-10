@@ -1411,6 +1411,40 @@ canvas:active {
   padding: 18px;
 }
 
+.source-search-bar {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  margin: -18px -18px 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 94%, #111316);
+  padding: 14px 18px;
+}
+
+.source-search-input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 8px 11px;
+}
+
+.source-search-input::placeholder {
+  color: #737f8b;
+}
+
+.source-search-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  outline-offset: 1px;
+}
+
+.source-dialog-results {
+  display: grid;
+  gap: 18px;
+}
+
 .source-section {
   display: grid;
   gap: 8px;

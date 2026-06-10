@@ -3,6 +3,9 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphEditHistory } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
+import { renderSourceDialog } from "../editor/source-dialog";
+import type { SavedSourceDocument } from "../editor/workspace-storage";
+import { examples } from "../examples";
 
 export interface GraphRuntimeVerification {
   ok: boolean;
@@ -22,6 +25,14 @@ export interface GraphRuntimeVerification {
     sameSessionCount: number;
     separateSessionCount: number;
     timedCount: number;
+  };
+  sourceDialog: {
+    initialCards: number;
+    chainMatches: string[];
+    savedMatches: string[];
+    emptyMessages: string[];
+    loadedExample: string;
+    loadedSaved: string;
   };
   errors: string[];
 }
@@ -76,6 +87,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   }
 
   const history = verifyHistoryCoalescing(errors);
+  const sourceDialog = verifySourceDialog(errors);
 
   return {
     ok: errors.length === 0,
@@ -92,6 +104,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     sourcePatch: verifySourcePatch(lastEdit, sdf, errors),
     vectorSourcePatches: verifyVectorSourcePatches(errors),
     history,
+    sourceDialog,
     errors,
   };
 
@@ -222,6 +235,99 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     nodeButton.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
     if (revealedSource !== "sphere:call") verifyErrors.push(`keyboard code reveal emitted ${revealedSource || "nothing"}`);
   }
+}
+
+function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceDialog"] {
+  const root = document.createElement("div");
+  const savedDocuments: SavedSourceDocument[] = [{
+    id: "saved-vessel",
+    name: "Saved Vessel",
+    updatedAt: "2026-06-10T09:00:00.000Z",
+    versions: [
+      { id: "version-latest", createdAt: "2026-06-10T09:00:00.000Z", source: "return sphere(1)" },
+      { id: "version-old", createdAt: "2026-06-09T09:00:00.000Z", source: "return box(1)" },
+    ],
+  }];
+  let loadedExample = "";
+  let loadedSaved = "";
+
+  renderSourceDialog(root, {
+    examples,
+    savedDocuments,
+    activeExampleId: examples[0]?.id ?? "",
+    activeDocumentId: null,
+    activeVersionId: null,
+  }, {
+    loadExample(id) {
+      loadedExample = id;
+    },
+    loadSaved(documentId, versionId) {
+      loadedSaved = `${documentId}:${versionId}`;
+    },
+    deleteDocument() {},
+    deleteVersion() {},
+  });
+
+  const search = root.querySelector<HTMLInputElement>(".source-search-input");
+  if (!search) {
+    errors.push("source dialog search input did not render");
+    return {
+      initialCards: 0,
+      chainMatches: [],
+      savedMatches: [],
+      emptyMessages: [],
+      loadedExample,
+      loadedSaved,
+    };
+  }
+
+  const initialCards = sourceCardLabels(root).length;
+  if (initialCards < examples.length + savedDocuments.length) {
+    errors.push(`source dialog rendered too few cards: ${initialCards}`);
+  }
+
+  search.value = "chain";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  const chainMatches = sourceCardLabels(root);
+  if (!chainMatches.includes("Chain links")) errors.push("source dialog search did not find Chain links");
+  if (chainMatches.includes("CSG example")) errors.push("source dialog search left unrelated example visible");
+  clickSourceCard(root, "Chain links");
+  if (loadedExample !== "chain") errors.push(`source dialog example load emitted ${loadedExample || "nothing"}`);
+
+  search.value = "vessel";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  const savedMatches = sourceCardLabels(root);
+  if (!savedMatches.includes("Saved Vessel")) errors.push("source dialog search did not find saved shape");
+  clickSourceCard(root, "Saved Vessel");
+  if (loadedSaved !== "saved-vessel:version-latest") {
+    errors.push(`source dialog saved load emitted ${loadedSaved || "nothing"}`);
+  }
+
+  search.value = "zzzzzzz";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  const emptyMessages = [...root.querySelectorAll<HTMLElement>(".source-empty")].map((item) => item.textContent ?? "");
+  if (!emptyMessages.includes("No matching examples")) errors.push("source dialog missing no matching examples state");
+  if (!emptyMessages.includes("No saved shapes match")) errors.push("source dialog missing no saved matches state");
+
+  return {
+    initialCards,
+    chainMatches,
+    savedMatches,
+    emptyMessages,
+    loadedExample,
+    loadedSaved,
+  };
+}
+
+function sourceCardLabels(root: HTMLElement): string[] {
+  return [...root.querySelectorAll<HTMLElement>(".source-card strong, .source-version-button strong")]
+    .map((item) => item.textContent ?? "");
+}
+
+function clickSourceCard(root: HTMLElement, label: string): void {
+  const target = [...root.querySelectorAll<HTMLButtonElement>(".source-card, .source-version-button")]
+    .find((button) => button.querySelector("strong")?.textContent === label);
+  target?.click();
 }
 
 function verifySourcePatch(edit: GraphParamEdit | null, sdf: SDF3, errors: string[]): string {

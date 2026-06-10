@@ -21,16 +21,47 @@ export function renderSourceDialog(
   state: SourceDialogState,
   actions: SourceDialogActions,
 ): void {
-  root.replaceChildren(
-    renderExampleSection(state, actions),
-    renderSavedSection(state, actions),
-  );
+  const search = document.createElement("input");
+  search.type = "search";
+  search.className = "source-search-input";
+  search.placeholder = "Find a shape";
+  search.autofocus = true;
+  search.setAttribute("aria-label", "Find examples and saved shapes");
+
+  const searchBar = document.createElement("div");
+  searchBar.className = "source-search-bar";
+  searchBar.append(search);
+
+  const results = document.createElement("div");
+  results.className = "source-dialog-results";
+
+  const renderResults = () => {
+    const query = normalizeSearch(search.value);
+    const filteredState = {
+      ...state,
+      examples: filterExamples(state.examples, query),
+      savedDocuments: filterSavedDocuments(state.savedDocuments, query),
+    };
+    results.replaceChildren(
+      renderExampleSection(filteredState, actions, query),
+      renderSavedSection(filteredState, actions, query),
+    );
+  };
+
+  search.addEventListener("input", renderResults);
+  renderResults();
+  root.replaceChildren(searchBar, results);
 }
 
-function renderExampleSection(state: SourceDialogState, actions: SourceDialogActions): HTMLElement {
+function renderExampleSection(state: SourceDialogState, actions: SourceDialogActions, query = ""): HTMLElement {
   const section = document.createElement("section");
   section.className = "source-section";
   section.append(renderSectionTitle("Examples"));
+
+  if (state.examples.length === 0) {
+    section.append(renderEmpty(query ? "No matching examples" : "No examples"));
+    return section;
+  }
 
   const grid = document.createElement("div");
   grid.className = "source-card-grid";
@@ -47,16 +78,13 @@ function renderExampleSection(state: SourceDialogState, actions: SourceDialogAct
   return section;
 }
 
-function renderSavedSection(state: SourceDialogState, actions: SourceDialogActions): HTMLElement {
+function renderSavedSection(state: SourceDialogState, actions: SourceDialogActions, query = ""): HTMLElement {
   const section = document.createElement("section");
   section.className = "source-section";
   section.append(renderSectionTitle("Saved"));
 
   if (state.savedDocuments.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "source-empty";
-    empty.textContent = "No saved shapes yet";
-    section.append(empty);
+    section.append(renderEmpty(query ? "No saved shapes match" : "No saved shapes yet"));
     return section;
   }
 
@@ -168,6 +196,13 @@ function renderSourceButton(options: {
   return button;
 }
 
+function renderEmpty(message: string): HTMLElement {
+  const empty = document.createElement("div");
+  empty.className = "source-empty";
+  empty.textContent = message;
+  return empty;
+}
+
 function renderDeleteButton(label: string, onClick: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
@@ -196,4 +231,30 @@ function formatVersionLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function filterExamples(examples: readonly Example[], query: string): readonly Example[] {
+  if (!query) return examples;
+  return examples.filter((example) => {
+    return matchesQuery(example.name, query) || matchesQuery(example.id, query);
+  });
+}
+
+function filterSavedDocuments(
+  savedDocuments: readonly SavedSourceDocument[],
+  query: string,
+): readonly SavedSourceDocument[] {
+  if (!query) return savedDocuments;
+  return savedDocuments.filter((document) => {
+    return matchesQuery(document.name, query)
+      || document.versions.some((version) => matchesQuery(formatVersionLabel(version.createdAt), query));
+  });
+}
+
+function matchesQuery(value: string, query: string): boolean {
+  return normalizeSearch(value).includes(query);
+}
+
+function normalizeSearch(value: string): string {
+  return value.trim().toLocaleLowerCase();
 }
