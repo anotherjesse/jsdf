@@ -932,20 +932,35 @@ button:disabled {
   white-space: nowrap;
 }
 
-.param-source-chip {
+.param-title .param-source-chip {
   display: inline-grid;
   place-items: center;
   min-width: 0;
+  min-height: 18px;
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
   border-radius: 5px;
+  background: transparent;
   padding: 2px 6px;
   color: color-mix(in srgb, var(--accent) 82%, var(--muted));
+  cursor: default;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
 }
 
-.param-source-chip[data-state="derived"] {
+.param-title button.param-source-chip {
+  cursor: pointer;
+}
+
+.param-title button.param-source-chip:hover,
+.param-title button.param-source-chip:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  outline: 0;
+}
+
+.param-title .param-source-chip[data-state="derived"] {
   border-color: color-mix(in srgb, var(--muted) 32%, var(--line));
   color: #8d98a6;
 }

@@ -198,8 +198,12 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!linkedChip || linkedChip.dataset.state !== "linked" || linkedChip.textContent !== "Code") {
       verifyErrors.push(`selected sphere source chip rendered ${linkedChip?.dataset.state || "nothing"} ${linkedChip?.textContent || ""}`);
     }
-    if (linkedChip?.getAttribute("aria-label") !== "This node maps back to editable code") {
+    if (linkedChip?.getAttribute("aria-label") !== "Reveal this node in editable code") {
       verifyErrors.push("linked source chip had unclear label");
+    }
+    linkedChip?.click();
+    if (revealedSource !== "sphere:call") {
+      verifyErrors.push(`linked source chip emitted ${revealedSource || "nothing"}`);
     }
     graphInspector.setSourceLinks([]);
     const derivedChip = graphRoot.querySelector<HTMLElement>(".param-source-chip");

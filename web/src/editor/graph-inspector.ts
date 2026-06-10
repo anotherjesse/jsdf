@@ -936,7 +936,11 @@ export class GraphInspector {
     kind.textContent = node.kind;
     const id = document.createElement("span");
     id.textContent = `#${node.id}`;
-    titleText.append(kind, id, renderSourceStatusChip(nodeSourceLink));
+    const sourceChip = renderSourceStatusChip(nodeSourceLink);
+    if (nodeSourceLink) {
+      sourceChip.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
+    }
+    titleText.append(kind, id, sourceChip);
     title.append(titleText);
 
     const actions = document.createElement("div");
@@ -1712,13 +1716,22 @@ function renderCodeLinkButton(label: string, className: string): HTMLButtonEleme
 }
 
 function renderSourceStatusChip(sourceLink: GraphSourceLink | null): HTMLElement {
+  if (sourceLink) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "param-source-chip";
+    chip.dataset.state = "linked";
+    chip.textContent = "Code";
+    chip.title = "Reveal this node in editable code";
+    chip.setAttribute("aria-label", chip.title);
+    return chip;
+  }
+
   const chip = document.createElement("span");
   chip.className = "param-source-chip";
-  chip.dataset.state = sourceLink ? "linked" : "derived";
-  chip.textContent = sourceLink ? "Code" : "Derived";
-  chip.title = sourceLink
-    ? "This node maps back to editable code"
-    : "This node has no direct editable source range";
+  chip.dataset.state = "derived";
+  chip.textContent = "Derived";
+  chip.title = "This node has no direct editable source range";
   chip.setAttribute("aria-label", chip.title);
   return chip;
 }
