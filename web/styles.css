@@ -242,11 +242,18 @@ button:disabled {
   min-width: 0;
 }
 
+.change-entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 3px;
+  min-width: 0;
+  max-width: 136px;
+}
+
 .change-entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  max-width: 108px;
   min-height: 28px;
   border-radius: 6px;
   padding: 3px 7px;
@@ -255,6 +262,24 @@ button:disabled {
 
 .change-entry[data-has-source="true"] {
   border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line));
+}
+
+.change-entry-source {
+  width: 24px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0;
+  color: var(--accent);
+}
+
+.change-entry-source .code-link-icon {
+  width: 13px;
+  height: 11px;
+}
+
+.change-entry-source .code-link-icon::before,
+.change-entry-source .code-link-icon::after {
+  font-size: 11px;
 }
 
 .change-entry-node,

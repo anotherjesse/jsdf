@@ -782,7 +782,10 @@ function renderGraphChangeJournal(): void {
   graphChangeJournal.append(count, list);
 }
 
-function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLButtonElement {
+function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "change-entry-row";
+
   const button = document.createElement("button");
   button.type = "button";
   button.className = "change-entry";
@@ -805,7 +808,23 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLButtonElement {
   button.addEventListener("click", (event) => {
     selectGraphHistoryEntry(entry, { revealSource: event.metaKey || event.ctrlKey });
   });
-  return button;
+  row.append(button);
+
+  if (sourceLink) {
+    const source = document.createElement("button");
+    source.type = "button";
+    source.className = "change-entry-source icon-button";
+    source.title = `Reveal ${entry.nodeKind} ${entry.label} in code`;
+    source.setAttribute("aria-label", source.title);
+    const icon = document.createElement("span");
+    icon.className = "code-link-icon";
+    icon.setAttribute("aria-hidden", "true");
+    source.append(icon);
+    source.addEventListener("click", () => selectGraphHistoryEntry(entry, { revealSource: true }));
+    row.append(source);
+  }
+
+  return row;
 }
 
 function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSource?: boolean } = {}): void {
