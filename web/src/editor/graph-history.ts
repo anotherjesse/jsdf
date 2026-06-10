@@ -1,4 +1,4 @@
-import type { GraphParamEdit, ParamPath } from "./graph-inspector";
+import type { GraphParamEdit, ParamPath, ParamValue } from "./graph-inspector";
 
 export interface GraphHistoryEntry {
   id: number;
@@ -6,8 +6,8 @@ export interface GraphHistoryEntry {
   nodeKind: string;
   path: ParamPath;
   label: string;
-  previousValue: number;
-  nextValue: number;
+  previousValue: ParamValue;
+  nextValue: ParamValue;
   timestamp: number;
 }
 
@@ -86,6 +86,11 @@ export function samePath(a: ParamPath, b: ParamPath): boolean {
   return a.length === b.length && a.every((part, index) => part === b[index]);
 }
 
-export function formatGraphValue(value: number): string {
+export function formatGraphValue(value: ParamValue): string {
+  if (typeof value !== "number") {
+    if (Array.isArray(value)) return "[...]";
+    if (value && typeof value === "object") return "{...}";
+    return String(value);
+  }
   return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(4).replace(/\.?0+$/, "");
 }

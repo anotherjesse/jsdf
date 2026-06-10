@@ -3,6 +3,7 @@ import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeVie
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
 export type ParamPath = Array<string | number>;
+export type ParamValue = unknown;
 
 export interface GraphParamEdit {
   node: Node;
@@ -10,8 +11,8 @@ export interface GraphParamEdit {
   nodeKind: string;
   path: ParamPath;
   label: string;
-  previousValue: number;
-  nextValue: number;
+  previousValue: ParamValue;
+  nextValue: ParamValue;
 }
 
 export interface GraphInspectorOptions {
@@ -24,9 +25,11 @@ export class GraphInspector {
   private sdf: SDF3 | null = null;
   private selected: Node | null = null;
   private filter = "";
+  private showMap = false;
   private soloKey: string | null = null;
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
+  private readonly mapButton = document.createElement("button");
   private readonly summary = document.createElement("span");
   private readonly map = document.createElement("div");
   private readonly tree = document.createElement("div");
@@ -41,9 +44,20 @@ export class GraphInspector {
     this.filterInput.type = "search";
     this.filterInput.placeholder = "Filter";
     this.filterInput.setAttribute("aria-label", "Filter graph nodes");
+    this.mapButton.type = "button";
+    this.mapButton.className = "graph-map-toggle";
+    this.mapButton.textContent = "Map";
+    this.mapButton.title = "Toggle graph map";
+    this.mapButton.setAttribute("aria-label", "Toggle graph map");
+    this.mapButton.setAttribute("aria-pressed", "false");
     this.summary.className = "graph-summary";
     this.filterInput.addEventListener("input", () => {
       this.filter = this.filterInput.value;
+      this.render();
+    });
+    this.mapButton.addEventListener("click", () => {
+      this.showMap = !this.showMap;
+      this.mapButton.setAttribute("aria-pressed", String(this.showMap));
       this.render();
     });
     window.addEventListener("pointermove", (event) => {
@@ -54,7 +68,7 @@ export class GraphInspector {
       if (event.key === "Shift") this.clearSolo();
     });
     window.addEventListener("blur", () => this.clearSolo());
-    this.toolbar.append(this.filterInput, this.summary);
+    this.toolbar.append(this.filterInput, this.mapButton, this.summary);
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
     this.params.className = "param-editor";
@@ -85,7 +99,7 @@ export class GraphInspector {
     return this.selected;
   }
 
-  setParamValue(nodeId: number, path: ParamPath, value: number): Node | null {
+  setParamValue(nodeId: number, path: ParamPath, value: ParamValue): Node | null {
     if (!this.sdf) return null;
     const node = findNode(this.sdf.node, nodeId);
     if (!node) return null;
@@ -103,7 +117,8 @@ export class GraphInspector {
     if (!this.sdf) return;
     const model = buildGraphModel(this.sdf.node, this.filter);
     this.renderSummary(model);
-    this.renderMap(model);
+    this.map.hidden = !this.showMap;
+    if (this.showMap) this.renderMap(model);
     if (model.visibleNodeIds.size === 0) {
       const empty = document.createElement("div");
       empty.className = "param-empty graph-empty";
@@ -160,7 +175,6 @@ export class GraphInspector {
       return;
     }
 
-    const width = 390;
     const levels = new Map<number, GraphNodeView[]>();
     for (const view of nodes) {
       const level = levels.get(view.depth) ?? [];
@@ -170,7 +184,8 @@ export class GraphInspector {
     for (const level of levels.values()) level.sort((a, b) => a.node.id - b.node.id);
 
     const maxRows = Math.max(...[...levels.values()].map((level) => level.length), 1);
-    const height = Math.max(148, Math.min(300, 42 + maxRows * 32));
+    const width = Math.max(390, 80 + (model.maxDepth + 1) * 112);
+    const height = Math.max(148, 42 + maxRows * 34);
     const xSpan = width - 64;
     const ySpan = height - 40;
     const positions = new Map<number, { x: number; y: number }>();
@@ -187,6 +202,7 @@ export class GraphInspector {
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "SDF graph");
     this.map.style.setProperty("--graph-map-height", `${height}px`);
+    this.map.style.setProperty("--graph-map-width", `${width}px`);
 
     for (const edge of model.edges) {
       const from = positions.get(edge.from);
@@ -359,6 +375,7 @@ export class GraphInspector {
         ? clamp(value, Number(range.min), Number(range.max))
         : value;
       const previousValue = getAtPath(node.params, field.path);
+      if (typeof previousValue !== "number") return;
       if (previousValue === nextValue) return;
       setAtPath(node.params, field.path, nextValue);
       input.value = formatValue(nextValue);
@@ -429,7 +446,7 @@ function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void 
   }
 }
 
-function setAtPath(root: Record<string, unknown>, path: ParamPath, value: number): void {
+function setAtPath(root: Record<string, unknown>, path: ParamPath, value: ParamValue): void {
   let target: Record<string, unknown> | unknown[] = root;
   for (let i = 0; i < path.length - 1; i += 1) {
     const part = path[i];
@@ -445,14 +462,14 @@ function setAtPath(root: Record<string, unknown>, path: ParamPath, value: number
   }
 }
 
-function getAtPath(root: Record<string, unknown>, path: ParamPath): number {
+function getAtPath(root: Record<string, unknown>, path: ParamPath): ParamValue {
   let target: unknown = root;
   for (const part of path) {
     target = Array.isArray(target)
       ? target[part as number]
       : (target as Record<string, unknown>)[part as string];
   }
-  return typeof target === "number" ? target : Number.NaN;
+  return target;
 }
 
 function findNode(root: Node, id: number, visited = new Set<number>()): Node | null {

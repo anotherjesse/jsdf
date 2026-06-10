@@ -1,11 +1,11 @@
 import type { Node, SDF3 } from "./core/nodes";
+import { patchGraphEditSource, type GraphSourceEdit } from "./editor/clean-source-patch";
 import type { CodeEditor } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
-import { sourceFromSdf } from "./editor/source-from-graph";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { type Bounds3 } from "./mesh/bounds";
@@ -194,7 +194,7 @@ function handleGraphEdit(edit: GraphParamEdit): void {
   if (!activeSdf) return;
   soloPreview = null;
   recordGraphEdit(edit);
-  applyGraphMutationStatus(`Edited ${edit.nodeKind} ${edit.label}`);
+  applyGraphMutationStatus(`Edited ${edit.nodeKind} ${edit.label}`, edit, edit.nextValue);
 }
 
 function handleSoloPreview(preview: SoloPreview | null): void {
@@ -236,7 +236,7 @@ function undoGraphEdit(): void {
   });
   updateGraphHistoryControls();
   if (!entry) return;
-  applyGraphMutationStatus(`Undid ${entry.nodeKind} ${entry.label}`);
+  applyGraphMutationStatus(`Undid ${entry.nodeKind} ${entry.label}`, entry, entry.previousValue);
 }
 
 function redoGraphEdit(): void {
@@ -245,7 +245,7 @@ function redoGraphEdit(): void {
   });
   updateGraphHistoryControls();
   if (!entry) return;
-  applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`);
+  applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
 }
 
 function resetGraphEdits(): void {
@@ -256,6 +256,7 @@ function resetGraphEdits(): void {
       return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.previousValue));
     });
     if (!entry) break;
+    syncCodeFromGraphEdit(entry, entry.previousValue);
     didReset = true;
   }
   graphHistory.clear();
@@ -265,16 +266,18 @@ function resetGraphEdits(): void {
   }
 }
 
-function applyGraphMutationStatus(message: string): void {
-  syncCodeFromGraph();
+function applyGraphMutationStatus(message: string, edit?: GraphSourceEdit, value?: unknown): void {
+  if (edit) syncCodeFromGraphEdit(edit, value);
   setEditorStatus(message, "ok");
   invalidateMeshForActiveSdf();
   schedulePreview(0);
 }
 
-function syncCodeFromGraph(): void {
+function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
   if (!activeSdf || !codeEditor) return;
-  codeEditor.setValue(sourceFromSdf(activeSdf));
+  const nextSource = patchGraphEditSource(codeEditor.getValue(), activeSdf, edit, value);
+  if (!nextSource) return;
+  codeEditor.setValue(nextSource);
   codeEditor.setError(null);
 }
 
