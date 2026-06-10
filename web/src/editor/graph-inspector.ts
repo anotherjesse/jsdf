@@ -49,7 +49,7 @@ export class GraphInspector {
   private hoveredSourceLink: GraphSourceLink | null = null;
   private selectedSourceLink: GraphSourceLink | null = null;
   private pointerHoverPath: Node[] | null = null;
-  private hoverSoloKey: string | null = null;
+  private focusHoverNodeId: number | null = null;
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
   private revealSelectedAfterRender = false;
@@ -135,22 +135,17 @@ export class GraphInspector {
       if (!(event.target instanceof globalThis.Node) || !this.root.contains(event.target)) {
         this.clearHover();
       }
-      if (!event.shiftKey) this.clearSolo();
     }, { capture: true });
-    window.addEventListener("pointerup", () => this.clearSolo(), { capture: true });
     window.addEventListener("keydown", (event) => {
       if (event.key === "Shift" && !event.repeat) this.refreshPointerHover(true);
     });
     window.addEventListener("keyup", (event) => {
       if (event.key === "Shift") {
         this.refreshPointerHover(false);
-        this.clearSolo();
       }
     });
-    window.addEventListener("blur", () => this.clearSolo());
     root.addEventListener("pointerleave", () => {
       this.clearHover();
-      this.clearSolo();
     });
     this.toolbar.append(
       this.filterInput,
@@ -172,7 +167,7 @@ export class GraphInspector {
     this.hoveredSourceLink = null;
     this.selectedSourceLink = null;
     this.pointerHoverPath = null;
-    this.hoverSoloKey = null;
+    this.focusHoverNodeId = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
     this.hiddenNodeIds.clear();
@@ -374,6 +369,7 @@ export class GraphInspector {
     if (inheritedHidden && !directlyHidden) button.classList.add("inherited-hidden");
     if (this.filter && view?.matched) button.classList.add("matched");
     if (this.hovered?.id === node.id) button.classList.add("hovered");
+    if (this.focusHoverNodeId === node.id) button.classList.add("focus-peek");
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
     if (this.dirtyNodeIds.has(node.id)) button.classList.add("edited");
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
@@ -501,6 +497,7 @@ export class GraphInspector {
     group.classList.add("graph-map-node");
     if (this.selected?.id === view.node.id) group.classList.add("selected");
     if (this.hovered?.id === view.node.id) group.classList.add("hovered");
+    if (this.focusHoverNodeId === view.node.id) group.classList.add("focus-peek");
     if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
     if (this.dirtyNodeIds.has(view.node.id)) group.classList.add("edited");
     const directlyHidden = this.hiddenNodeIds.has(view.node.id);
@@ -761,7 +758,6 @@ export class GraphInspector {
         this.options.onSourceHover(null);
       }
       this.clearHover();
-      this.clearSolo();
     });
     target.addEventListener("focusin", (event) => {
       this.updateHover(path, event);
@@ -773,7 +769,6 @@ export class GraphInspector {
       }
       if (!containsEventTarget(target, relatedEventTarget(event))) {
         this.clearHover();
-        this.clearSolo();
       }
     });
   }
@@ -789,44 +784,44 @@ export class GraphInspector {
 
   private emitHover(path: Node[], shiftKey: boolean): void {
     const target = path.at(-1) ?? null;
+    const targetId = target?.id ?? null;
+    const previousFocusHoverNodeId = this.focusHoverNodeId;
+    const nextFocusHoverNodeId = shiftKey ? targetId : null;
+    const hoverChanged = (this.hovered?.id ?? null) !== targetId;
+    this.focusHoverNodeId = nextFocusHoverNodeId;
     this.setHoveredNodeById(target?.id ?? null);
+    if (!hoverChanged) this.syncFocusHoverClass(previousFocusHoverNodeId, nextFocusHoverNodeId);
     this.options.onHover(target, { shiftKey });
-  }
-
-  private updateSolo(path: Node[], event: Event): void {
-    if (this.lockedSoloKey) return;
-    if (!(event instanceof PointerEvent) || !event.shiftKey) {
-      this.clearSolo();
-      return;
-    }
-    const preview = buildSoloPreview(path);
-    if (!preview) {
-      this.clearSolo();
-      return;
-    }
-    if (preview.key === this.hoverSoloKey) return;
-    this.hoverSoloKey = preview.key;
-    this.options.onSolo(preview);
   }
 
   private clearHover(): void {
     this.pointerHoverPath = null;
+    const previousFocusHoverNodeId = this.focusHoverNodeId;
+    this.focusHoverNodeId = null;
     this.setHoveredNodeById(null);
+    this.syncFocusHoverClass(previousFocusHoverNodeId, null);
     this.options.onHover(null, { shiftKey: false });
   }
 
-  private clearSolo(): void {
-    if (!this.hoverSoloKey) return;
-    this.hoverSoloKey = null;
-    if (this.lockedSoloKey) return;
-    this.options.onSolo(null);
+  private syncFocusHoverClass(previousId: number | null, nextId: number | null): void {
+    if (previousId === nextId) return;
+    const ids = new Set<number>();
+    if (previousId != null) ids.add(previousId);
+    if (nextId != null) ids.add(nextId);
+    for (const id of ids) {
+      const isFocused = id === nextId;
+      for (const element of this.root.querySelectorAll<HTMLElement | SVGElement>(`[data-node-id="${id}"]`)) {
+        if (element.classList.contains("graph-node") || element.classList.contains("graph-map-node")) {
+          element.classList.toggle("focus-peek", isFocused);
+        }
+      }
+    }
   }
 
   private toggleLockedSolo(node: Node, options: { focus?: boolean } = {}): void {
     const preview = this.soloPreviewForNode(node);
     if (!preview) return;
 
-    this.hoverSoloKey = null;
     if (this.lockedSoloKey === preview.key) {
       this.lockedSoloKey = null;
       this.lockedSoloNodeId = null;
@@ -850,7 +845,6 @@ export class GraphInspector {
     if (preview?.key === this.lockedSoloKey) return;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
-    this.hoverSoloKey = null;
     this.options.onSolo(null);
   }
 

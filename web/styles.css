@@ -543,6 +543,12 @@ button:disabled {
   stroke-width: 1.8;
 }
 
+.graph-map-node.focus-peek .graph-map-card {
+  fill: color-mix(in srgb, var(--accent) 24%, #20262e);
+  stroke: color-mix(in srgb, var(--text) 24%, var(--accent));
+  stroke-width: 2.2;
+}
+
 .graph-map-node.selected .graph-map-card {
   fill: color-mix(in srgb, var(--accent) 24%, #20262e);
   stroke: var(--accent);
@@ -812,6 +818,12 @@ button:disabled {
 .graph-node.hovered:not([aria-pressed="true"]) {
   border-color: color-mix(in srgb, var(--accent-2) 68%, var(--line));
   background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
+.graph-node.focus-peek {
+  border-color: color-mix(in srgb, var(--text) 22%, var(--accent));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 54%, transparent);
 }
 
 .graph-node.isolated {

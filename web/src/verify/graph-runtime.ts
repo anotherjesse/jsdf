@@ -342,9 +342,18 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       if (graphHoverLabels.at(-1) !== sphereHoverLabel || hoverEvents.at(-1)?.shiftKey !== true) {
         verifyErrors.push("tree node Shift keydown did not focus hovered node");
       }
+      if (!graphRoot.querySelector(`.graph-node[data-node-id="${sphere.id}"].focus-peek`)) {
+        verifyErrors.push("tree node Shift keydown did not mark focused graph row");
+      }
+      if (!graphRoot.querySelector(`.graph-map-node[data-node-id="${sphere.id}"].focus-peek`)) {
+        verifyErrors.push("tree node Shift keydown did not mark focused graph map node");
+      }
       window.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift" }));
       if (graphHoverLabels.at(-1) !== sphereHoverLabel || hoverEvents.at(-1)?.shiftKey !== false) {
         verifyErrors.push("tree node Shift keyup did not restore normal hover");
+      }
+      if (graphRoot.querySelector(".graph-node.focus-peek, .graph-map-node.focus-peek")) {
+        verifyErrors.push("tree node Shift keyup left focused graph node marked");
       }
       nodeRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("tree node leave did not clear source hover");
