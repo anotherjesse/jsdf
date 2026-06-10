@@ -247,7 +247,7 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 24px;
   gap: 3px;
   min-width: 0;
-  max-width: 136px;
+  max-width: 172px;
 }
 
 .change-entry {

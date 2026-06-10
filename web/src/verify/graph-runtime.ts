@@ -1,7 +1,7 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
-import { GraphEditHistory } from "../editor/graph-history";
+import { GraphEditHistory, formatGraphChangeValue } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
 import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";
@@ -42,6 +42,7 @@ export interface GraphRuntimeVerification {
     sameSessionCount: number;
     separateSessionCount: number;
     timedCount: number;
+    changeLabel: string;
   };
   sourceDialog: {
     initialCards: number;
@@ -803,11 +804,16 @@ function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["hi
   timed.record(edit(undefined, 1, 1.1), 0);
   timed.record(edit(undefined, 1.1, 1.2), 100);
   if (timed.dirtyCount !== 1) errors.push(`timed edit history count ${timed.dirtyCount} !== 1`);
+  const changeLabel = formatGraphChangeValue(timed.current()[0]);
+  if (changeLabel !== "radius 1 -> 1.2") {
+    errors.push(`graph change label rendered ${changeLabel}`);
+  }
 
   return {
     sameSessionCount: sameSession.dirtyCount,
     separateSessionCount: separateSession.dirtyCount,
     timedCount: timed.dirtyCount,
+    changeLabel,
   };
 }
 

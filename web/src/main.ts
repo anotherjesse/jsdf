@@ -4,7 +4,7 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type 
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
-import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
+import { GraphEditHistory, formatGraphChangeValue, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
@@ -840,7 +840,8 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
   button.className = "change-entry";
   const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
   const sourceHint = sourceLink ? "; Cmd/Ctrl-click to show code" : "";
-  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${entry.label} ${formatGraphValue(entry.previousValue)} -> ${formatGraphValue(entry.nextValue)}${sourceHint}`;
+  const changeLabel = formatGraphChangeValue(entry);
+  button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${changeLabel}${sourceHint}`;
   button.setAttribute("aria-label", button.title);
   button.dataset.nodeId = String(entry.nodeId);
   if (sourceLink) button.dataset.hasSource = "true";
@@ -851,7 +852,7 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
 
   const value = document.createElement("span");
   value.className = "change-entry-value";
-  value.textContent = `${entry.label} ${formatGraphValue(entry.nextValue)}`;
+  value.textContent = changeLabel;
 
   button.append(node, value);
   button.addEventListener("click", (event) => {

@@ -101,3 +101,7 @@ export function formatGraphValue(value: ParamValue): string {
   }
   return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(4).replace(/\.?0+$/, "");
 }
+
+export function formatGraphChangeValue(entry: Pick<GraphHistoryEntry, "label" | "previousValue" | "nextValue">): string {
+  return `${entry.label} ${formatGraphValue(entry.previousValue)} -> ${formatGraphValue(entry.nextValue)}`;
+}
