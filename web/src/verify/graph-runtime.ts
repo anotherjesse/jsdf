@@ -194,6 +194,20 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       verifyErrors.push("could not select sphere node");
       return;
     }
+    const linkedChip = graphRoot.querySelector<HTMLElement>(".param-source-chip");
+    if (!linkedChip || linkedChip.dataset.state !== "linked" || linkedChip.textContent !== "Code") {
+      verifyErrors.push(`selected sphere source chip rendered ${linkedChip?.dataset.state || "nothing"} ${linkedChip?.textContent || ""}`);
+    }
+    if (linkedChip?.getAttribute("aria-label") !== "This node maps back to editable code") {
+      verifyErrors.push("linked source chip had unclear label");
+    }
+    graphInspector.setSourceLinks([]);
+    const derivedChip = graphRoot.querySelector<HTMLElement>(".param-source-chip");
+    if (!derivedChip || derivedChip.dataset.state !== "derived" || derivedChip.textContent !== "Derived") {
+      verifyErrors.push(`unlinked source chip rendered ${derivedChip?.dataset.state || "nothing"} ${derivedChip?.textContent || ""}`);
+    }
+    graphInspector.setSourceLinks(sourceLinks);
+    graphInspector.selectNodeById(sphere.id);
     const sphereHoverLabel = `${sphere.kind} #${sphere.id}`;
 
     graphInspector.setFocusHoveredNodeById(sphere.id);

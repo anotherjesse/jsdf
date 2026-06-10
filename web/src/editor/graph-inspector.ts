@@ -929,13 +929,14 @@ export class GraphInspector {
     title.className = "param-title";
     if (this.dirtyNodeIds.has(node.id)) title.classList.add("edited");
     if (this.sourceLinkMatchesNode(this.selectedSourceLink, node.id)) title.classList.add("source-selected");
+    const nodeSourceLink = this.sourceLinkForNode(node.id);
     const titleText = document.createElement("div");
     titleText.className = "param-title-text";
     const kind = document.createElement("strong");
     kind.textContent = node.kind;
     const id = document.createElement("span");
     id.textContent = `#${node.id}`;
-    titleText.append(kind, id);
+    titleText.append(kind, id, renderSourceStatusChip(nodeSourceLink));
     title.append(titleText);
 
     const actions = document.createElement("div");
@@ -958,7 +959,6 @@ export class GraphInspector {
     visibility.addEventListener("click", (event) => this.toggleNodeVisibility(node, { isolate: event.altKey }));
     actions.append(visibility);
 
-    const nodeSourceLink = this.sourceLinkForNode(node.id);
     if (nodeSourceLink) {
       const source = renderCodeLinkButton(`Reveal ${node.kind} #${node.id} in code (C)`, "param-title-button param-code-link");
       source.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
@@ -1709,6 +1709,18 @@ function renderCodeLinkButton(label: string, className: string): HTMLButtonEleme
   icon.setAttribute("aria-hidden", "true");
   button.append(icon);
   return button;
+}
+
+function renderSourceStatusChip(sourceLink: GraphSourceLink | null): HTMLElement {
+  const chip = document.createElement("span");
+  chip.className = "param-source-chip";
+  chip.dataset.state = sourceLink ? "linked" : "derived";
+  chip.textContent = sourceLink ? "Code" : "Derived";
+  chip.title = sourceLink
+    ? "This node maps back to editable code"
+    : "This node has no direct editable source range";
+  chip.setAttribute("aria-label", chip.title);
+  return chip;
 }
 
 let nextGraphEditSession = 1;
