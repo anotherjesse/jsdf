@@ -36,7 +36,7 @@ input {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(320px, 460px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 280px) minmax(420px, 560px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
   min-height: 100%;
@@ -147,7 +147,7 @@ button:disabled {
 
 .editor-pane {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--line);
@@ -208,6 +208,37 @@ button:disabled {
 
 .editor-status[data-state="error"] {
   color: var(--danger);
+}
+
+.workspace-bar {
+  display: grid;
+  grid-template-columns: minmax(108px, 0.95fr) minmax(130px, 1fr) minmax(118px, 0.85fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  padding: 0 14px 12px;
+}
+
+.workspace-bar input,
+.workspace-bar select {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 7px 9px;
+}
+
+.workspace-bar input::placeholder {
+  color: #737f8b;
+}
+
+.workspace-bar button {
+  min-width: 58px;
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 5px 10px;
 }
 
 .change-journal {

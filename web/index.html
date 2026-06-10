@@ -17,11 +17,6 @@
           <span id="gpuBadge" class="badge">Checking GPU</span>
         </header>
 
-        <label class="field">
-          <span>Example</span>
-          <select id="exampleSelect"></select>
-        </label>
-
         <section class="panel">
           <h2>Resolution</h2>
           <label class="range">
@@ -58,6 +53,14 @@
             <div id="graphChangeJournal" class="change-journal" aria-label="Graph changes" hidden></div>
           </div>
         </header>
+
+        <div class="workspace-bar" aria-label="Source workspace">
+          <input id="documentNameInput" type="text" aria-label="Document name" placeholder="Untitled SDF">
+          <select id="sourceLibrarySelect" aria-label="Source library"></select>
+          <select id="sourceVersionSelect" aria-label="Saved version"></select>
+          <button id="loadSourceButton" type="button">Load</button>
+          <button id="saveSourceButton" type="button">Save</button>
+        </div>
 
         <div class="segmented editor-toggle" aria-label="Editor mode">
           <button id="codeModeButton" type="button" aria-pressed="true">Code</button>

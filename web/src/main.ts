@@ -6,6 +6,13 @@ import { sourceForExample } from "./editor/example-source";
 import { GraphEditHistory, formatGraphValue, type GraphHistoryEntry } from "./editor/graph-history";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import type { SoloPreview } from "./editor/solo-preview";
+import {
+  latestSourceVersion,
+  listSavedSourceDocuments,
+  loadSavedSourceVersion,
+  saveSourceVersion,
+  type SavedSourceDocument,
+} from "./editor/workspace-storage";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { type Bounds3 } from "./mesh/bounds";
@@ -15,7 +22,11 @@ import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
 import { WebGLRaymarchRenderer } from "./preview/webgl-raymarch-renderer";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!;
-const exampleSelect = document.querySelector<HTMLSelectElement>("#exampleSelect")!;
+const documentNameInput = document.querySelector<HTMLInputElement>("#documentNameInput")!;
+const sourceLibrarySelect = document.querySelector<HTMLSelectElement>("#sourceLibrarySelect")!;
+const sourceVersionSelect = document.querySelector<HTMLSelectElement>("#sourceVersionSelect")!;
+const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
+const saveSourceButton = document.querySelector<HTMLButtonElement>("#saveSourceButton")!;
 const gpuBadge = document.querySelector<HTMLSpanElement>("#gpuBadge")!;
 const shaderViewButton = document.querySelector<HTMLButtonElement>("#shaderViewButton")!;
 const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButton")!;
@@ -45,6 +56,10 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
 type RenderView = "shader" | "mesh";
 type EditorView = "code" | "graph";
+type SourceLibrarySelection =
+  | { type: "example"; id: string }
+  | { type: "saved"; id: string }
+  | { type: "none" };
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -66,18 +81,16 @@ let viewMode: RenderView = "shader";
 let desiredViewMode: RenderView = "shader";
 let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
+let activeExampleId = examples[0]?.id ?? "canonical";
+let activeDocumentId: string | null = null;
+let activeSourceName = currentExample(activeExampleId).name;
 const graphHistory = new GraphEditHistory();
-
-for (const example of examples) {
-  const option = document.createElement("option");
-  option.value = example.id;
-  option.textContent = example.name;
-  exampleSelect.append(option);
-}
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
+documentNameInput.value = activeSourceName;
+renderSourceLibrary(sourceValueForExample(activeExampleId));
 
 stepsInput.addEventListener("input", () => {
   stepsOutput.value = stepsInput.value;
@@ -104,9 +117,11 @@ meshViewButton.addEventListener("click", () => {
 surfaceNetButton.addEventListener("click", () => setMeshAlgorithm("surface-net"));
 tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
 downloadButton.addEventListener("click", () => {
-  if (lastBlob) downloadBlob(lastBlob, `${exampleSelect.value}.stl`);
+  if (lastBlob) downloadBlob(lastBlob, `${slugify(activeSourceName)}.stl`);
 });
-exampleSelect.addEventListener("change", () => loadExample(exampleSelect.value));
+sourceLibrarySelect.addEventListener("change", () => updateSourceVersionOptions());
+loadSourceButton.addEventListener("click", loadSelectedSource);
+saveSourceButton.addEventListener("click", saveCurrentSource);
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
 undoGraphButton.addEventListener("click", undoGraphEdit);
@@ -141,7 +156,7 @@ async function boot(): Promise<void> {
     const { createCodeEditor } = await import("./editor/code-editor");
     codeEditor = createCodeEditor(
       codeEditorElement,
-      sourceForExample(exampleSelect.value),
+      sourceForExample(activeExampleId),
       scheduleSourceCompile,
       handleSourceLinkSelect,
       handleSourceLinkValueChange,
@@ -157,10 +172,60 @@ async function boot(): Promise<void> {
 
 function loadExample(id: string): void {
   window.clearTimeout(sourceCompileTimer);
+  activeExampleId = id;
+  activeDocumentId = null;
+  activeSourceName = currentExample(id).name;
+  documentNameInput.value = activeSourceName;
+  renderSourceLibrary(sourceValueForExample(id));
   selectedNode = null;
   hoveredNode = null;
   codeEditor?.setValue(sourceForExample(id));
   compileEditorSource({ status: "Loaded example" });
+}
+
+function loadSelectedSource(): void {
+  const selection = parseSourceLibraryValue(sourceLibrarySelect.value);
+  if (selection.type === "example") {
+    loadExample(selection.id);
+    return;
+  }
+  if (selection.type !== "saved") return;
+  const loaded = loadSavedSourceVersion(selection.id, sourceVersionSelect.value || null);
+  if (!loaded) {
+    setEditorStatus("Saved source not found", "error");
+    return;
+  }
+  loadSavedSource(loaded.document, loaded.version.id, loaded.version.source);
+}
+
+function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string): void {
+  window.clearTimeout(sourceCompileTimer);
+  activeDocumentId = document.id;
+  activeSourceName = document.name;
+  documentNameInput.value = document.name;
+  renderSourceLibrary(sourceValueForSaved(document.id));
+  sourceVersionSelect.value = versionId;
+  selectedNode = null;
+  hoveredNode = null;
+  codeEditor?.setValue(source);
+  compileEditorSource({ status: `Loaded ${document.name}` });
+}
+
+function saveCurrentSource(): void {
+  const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
+  try {
+    const saved = saveSourceVersion(documentNameInput.value || activeSourceName, source, activeDocumentId);
+    const latest = latestSourceVersion(saved);
+    activeDocumentId = saved.id;
+    activeSourceName = saved.name;
+    documentNameInput.value = saved.name;
+    renderSourceLibrary(sourceValueForSaved(saved.id));
+    if (latest) sourceVersionSelect.value = latest.id;
+    setEditorStatus(`Saved ${saved.name}`, "ok");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setEditorStatus(`Save failed: ${message}`, "error");
+  }
 }
 
 function scheduleSourceCompile(): void {
@@ -173,7 +238,7 @@ function scheduleSourceCompile(): void {
 }
 
 function compileEditorSource(options: { status: string; invalidateMesh?: boolean } = { status: "Compiled" }): boolean {
-  const source = codeEditor?.getValue() ?? sourceForExample(exampleSelect.value);
+  const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
     const { sdf } = evaluateSource(source);
     soloPreview = null;
@@ -578,7 +643,6 @@ async function buildMesh(): Promise<void> {
     return;
   }
 
-  const example = currentExample(exampleSelect.value);
   const job = meshJob + 1;
   meshJob = job;
   meshViewButton.disabled = true;
@@ -598,7 +662,7 @@ async function buildMesh(): Promise<void> {
       if (job !== meshJob) return;
       mesh = result;
       meshRenderer?.render(mesh.triangles, mesh.bounds);
-      lastBlob = binarySTL(mesh.triangles, `sdf-browser ${example.name}`);
+      lastBlob = binarySTL(mesh.triangles, `sdf-browser ${activeSourceName}`);
       const total = mesh.sampleTimeMs + mesh.polygonizeTimeMs;
       meshStat.textContent = `${total.toFixed(0)} ms ${mesh.usedGPU ? "GPU" : "CPU"}${mesh.usedWorker ? " worker" : ""} ${algorithmLabel(mesh.algorithm)}`;
       triangleStat.textContent = mesh.triangles.length.toLocaleString();
@@ -637,7 +701,7 @@ function setEditorStatus(message: string, state: "ok" | "pending" | "error"): vo
 }
 
 function currentBounds(): Bounds3 {
-  return (currentExample(exampleSelect.value).bounds ?? [[-4, -4, -4], [4, 4, 4]]) as Bounds3;
+  return (currentExample(activeExampleId).bounds ?? [[-4, -4, -4], [4, 4, 4]]) as Bounds3;
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {
@@ -647,4 +711,102 @@ function algorithmLabel(algorithm: MeshAlgorithm): string {
 function gridLabel(): string {
   const grid = Number(gridInput.value);
   return `${grid}^3 (${(grid ** 3).toLocaleString()} samples)`;
+}
+
+function renderSourceLibrary(selectedValue = sourceLibrarySelect.value): void {
+  sourceLibrarySelect.replaceChildren();
+
+  const examplesGroup = document.createElement("optgroup");
+  examplesGroup.label = "Examples";
+  for (const example of examples) {
+    const option = document.createElement("option");
+    option.value = sourceValueForExample(example.id);
+    option.textContent = example.name;
+    examplesGroup.append(option);
+  }
+  sourceLibrarySelect.append(examplesGroup);
+
+  const saved = listSavedSourceDocuments();
+  const savedGroup = document.createElement("optgroup");
+  savedGroup.label = "Saved";
+  if (saved.length === 0) {
+    const option = document.createElement("option");
+    option.disabled = true;
+    option.textContent = "No saved sources";
+    savedGroup.append(option);
+  } else {
+    for (const savedDocument of saved) {
+      const option = document.createElement("option");
+      option.value = sourceValueForSaved(savedDocument.id);
+      option.textContent = savedDocument.name;
+      savedGroup.append(option);
+    }
+  }
+  sourceLibrarySelect.append(savedGroup);
+
+  const fallback = activeDocumentId ? sourceValueForSaved(activeDocumentId) : sourceValueForExample(activeExampleId);
+  sourceLibrarySelect.value = hasOptionValue(sourceLibrarySelect, selectedValue) ? selectedValue : fallback;
+  updateSourceVersionOptions();
+}
+
+function updateSourceVersionOptions(): void {
+  sourceVersionSelect.replaceChildren();
+  const selection = parseSourceLibraryValue(sourceLibrarySelect.value);
+  if (selection.type !== "saved") {
+    const option = document.createElement("option");
+    option.textContent = "Example";
+    option.value = "";
+    sourceVersionSelect.append(option);
+    sourceVersionSelect.disabled = true;
+    return;
+  }
+
+  const savedDocument = listSavedSourceDocuments().find((candidate) => candidate.id === selection.id);
+  if (!savedDocument || savedDocument.versions.length === 0) {
+    const option = document.createElement("option");
+    option.textContent = "No versions";
+    option.value = "";
+    sourceVersionSelect.append(option);
+    sourceVersionSelect.disabled = true;
+    return;
+  }
+
+  sourceVersionSelect.disabled = false;
+  for (const version of savedDocument.versions) {
+    const option = document.createElement("option");
+    option.value = version.id;
+    option.textContent = formatVersionLabel(version.createdAt);
+    sourceVersionSelect.append(option);
+  }
+  sourceVersionSelect.value = latestSourceVersion(savedDocument)?.id ?? savedDocument.versions[0].id;
+}
+
+function parseSourceLibraryValue(value: string): SourceLibrarySelection {
+  const [type, id] = value.split(":", 2);
+  if (type === "example" && id) return { type, id };
+  if (type === "saved" && id) return { type, id };
+  return { type: "none" };
+}
+
+function sourceValueForExample(id: string): string {
+  return `example:${id}`;
+}
+
+function sourceValueForSaved(id: string): string {
+  return `saved:${id}`;
+}
+
+function hasOptionValue(select: HTMLSelectElement, value: string): boolean {
+  return [...select.options].some((option) => option.value === value);
+}
+
+function formatVersionLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function slugify(value: string): string {
+  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "sdf";
 }
