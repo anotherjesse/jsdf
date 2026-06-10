@@ -803,12 +803,7 @@ export class GraphInspector {
 
     const nodeSourceLink = this.sourceLinkForNode(node.id);
     if (nodeSourceLink) {
-      const source = document.createElement("button");
-      source.type = "button";
-      source.className = "param-title-button";
-      source.textContent = "Code";
-      source.title = `Reveal ${node.kind} #${node.id} in code (C)`;
-      source.setAttribute("aria-label", `Reveal ${node.kind} #${node.id} in code`);
+      const source = renderCodeLinkButton(`Reveal ${node.kind} #${node.id} in code (C)`, "param-title-button param-code-link");
       source.addEventListener("click", () => this.options.onRevealSource(nodeSourceLink));
       actions.append(source);
     }
@@ -970,12 +965,7 @@ export class GraphInspector {
     nameGroup.append(name);
 
     if (sourceLink) {
-      const source = document.createElement("button");
-      source.type = "button";
-      source.className = "param-source-link";
-      source.textContent = "Code";
-      source.title = `Reveal ${field.label} in code`;
-      source.setAttribute("aria-label", `Reveal ${field.label} in code`);
+      const source = renderCodeLinkButton(`Reveal ${field.label} in code`, "param-source-link");
       source.addEventListener("click", (event) => {
         event.preventDefault();
         this.options.onRevealSource(sourceLink);
@@ -1308,6 +1298,20 @@ function mapLabel(kind: string): string {
 
 function visibilityShortcutTitle(title: string): string {
   return title === "Root stays visible" ? title : `${title} (V)`;
+}
+
+function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+
+  const icon = document.createElement("span");
+  icon.className = "code-link-icon";
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon);
+  return button;
 }
 
 let nextGraphEditSession = 1;

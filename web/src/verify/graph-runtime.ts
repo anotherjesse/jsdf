@@ -107,6 +107,14 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       return;
     }
 
+    const nodeCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-code-link");
+    if (!nodeCodeButton) {
+      verifyErrors.push("selected node has no code icon button");
+    } else {
+      nodeCodeButton.click();
+      if (revealedSource !== "sphere:call") verifyErrors.push(`node code icon emitted ${revealedSource || "nothing"}`);
+    }
+
     const mapToggle = graphRoot.querySelector<HTMLButtonElement>(".graph-map-toggle");
     if (!mapToggle) {
       verifyErrors.push("graph map toggle not found");
@@ -127,6 +135,13 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!radiusInput) {
       verifyErrors.push("selected sphere has no numeric input");
       return;
+    }
+    const paramCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-row .param-source-link");
+    if (!paramCodeButton) {
+      verifyErrors.push("selected sphere radius has no code icon button");
+    } else {
+      paramCodeButton.click();
+      if (revealedSource !== "sphere:radius") verifyErrors.push(`param code icon emitted ${revealedSource || "nothing"}`);
     }
     radiusInput.dispatchEvent(new FocusEvent("focus"));
     radiusInput.value = "1.2";

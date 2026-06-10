@@ -765,6 +765,8 @@ button:disabled {
 }
 
 .param-title-button {
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
   min-height: 28px;
   border-radius: 6px;
@@ -774,6 +776,11 @@ button:disabled {
 
 .param-title-button:not(.param-isolate) {
   color: var(--accent);
+}
+
+.param-code-link {
+  width: 30px;
+  padding: 0;
 }
 
 .param-visibility {
@@ -888,14 +895,41 @@ button:disabled {
 }
 
 .param-source-link {
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
+  width: 24px;
   min-height: 22px;
   border-radius: 5px;
-  padding: 2px 6px;
+  padding: 0;
   color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
+}
+
+.code-link-icon {
+  position: relative;
+  width: 15px;
+  height: 12px;
+}
+
+.code-link-icon::before,
+.code-link-icon::after {
+  position: absolute;
+  top: 1px;
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.code-link-icon::before {
+  left: 0;
+  content: "<";
+}
+
+.code-link-icon::after {
+  right: 0;
+  content: ">";
 }
 
 .axis-control {
