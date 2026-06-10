@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sdf verification checks</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111316;
+        --panel: #1c2026;
+        --panel-2: #242a32;
+        --line: #343b45;
+        --text: #eef2f6;
+        --muted: #9ca8b5;
+        --ok: #2fb7a8;
+        --warn: #dfb64d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        display: grid;
+        gap: 20px;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      header {
+        display: grid;
+        gap: 6px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 14px;
+        letter-spacing: 0;
+      }
+
+      p {
+        color: var(--muted);
+      }
+
+      .checks-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+
+      .check-card {
+        display: grid;
+        gap: 10px;
+        min-height: 172px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+
+      .check-card p {
+        min-height: 58px;
+      }
+
+      .check-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tag {
+        border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+        border-radius: 999px;
+        color: var(--muted);
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+
+      .tag.safe {
+        color: var(--ok);
+      }
+
+      .tag.warn {
+        color: var(--warn);
+      }
+
+      a {
+        align-self: end;
+        justify-self: start;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 7px 10px;
+        text-decoration: none;
+      }
+
+      a:hover {
+        border-color: var(--ok);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>sdf verification checks</h1>
+        <p>Focused browser checks for the editor, graph inspector, preview, API, and mesh pipeline.</p>
+      </header>
+
+      <section class="checks-grid" aria-label="Verification checks">
+        <article class="check-card">
+          <h2>App health</h2>
+          <p>Loads the real app in health-check mode and verifies editor readiness, toolbar wiring, source links, preview mode, and Monaco warning counts.</p>
+          <div class="check-meta">
+            <span class="tag safe">non-destructive</span>
+            <span class="tag safe">fast</span>
+          </div>
+          <a href="./app-health-check.html">Open check</a>
+        </article>
+
+        <article class="check-card">
+          <h2>Editor integration</h2>
+          <p>Exercises Monaco source links, graph selection, parameter scrubbing, completions, diagnostics, and source prettifying.</p>
+          <div class="check-meta">
+            <span class="tag safe">fixture state</span>
+            <span class="tag">Monaco</span>
+          </div>
+          <a href="./editor-check.html">Open check</a>
+        </article>
+
+        <article class="check-card">
+          <h2>Graph inspector</h2>
+          <p>Verifies graph controls, source dialogs, visibility state, hover/focus behavior, history coalescing, and storage helpers.</p>
+          <div class="check-meta">
+            <span class="tag safe">memory storage</span>
+            <span class="tag">graph</span>
+          </div>
+          <a href="./graph-check.html">Open check</a>
+        </article>
+
+        <article class="check-card">
+          <h2>API surface</h2>
+          <p>Checks exported Python-style APIs, SDF methods, example source parity, GLSL/WGSL compilation, slices, and workflow helpers.</p>
+          <div class="check-meta">
+            <span class="tag safe">non-destructive</span>
+            <span class="tag">API</span>
+          </div>
+          <a href="./api-check.html">Open check</a>
+        </article>
+
+        <article class="check-card">
+          <h2>Preview renderer</h2>
+          <p>Renders shader and mesh previews, then samples the canvas to confirm nonblank output and highlight uniform state.</p>
+          <div class="check-meta">
+            <span class="tag safe">non-destructive</span>
+            <span class="tag warn">WebGL</span>
+          </div>
+          <a href="./preview-check.html">Open check</a>
+        </article>
+
+        <article class="check-card">
+          <h2>Mesh pipeline</h2>
+          <p>Builds surface-net and tetra meshes through worker paths and validates triangle data plus binary STL sizing.</p>
+          <div class="check-meta">
+            <span class="tag safe">non-destructive</span>
+            <span class="tag warn">heavier</span>
+          </div>
+          <a href="./mesh-check.html">Open check</a>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
