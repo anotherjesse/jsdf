@@ -925,9 +925,14 @@ export class GraphInspector {
 
     const orientationControl = this.renderOrientationControl(node);
     if (orientationControl) this.params.append(orientationControl);
+    const matrixControl = this.renderMatrixControl(node);
+    if (matrixControl) this.params.append(matrixControl);
 
     const fields = collectNumericParams(node.params)
-      .filter((field) => orientationControl == null || this.shouldShowMatrixFields(node, field));
+      .filter((field) => {
+        if (matrixControl && field.path[0] === "matrix") return false;
+        return orientationControl == null || this.shouldShowMatrixFields(node, field);
+      });
     if (fields.length === 0 && !orientationControl) {
       const empty = document.createElement("div");
       empty.className = "param-empty";
@@ -1025,6 +1030,66 @@ export class GraphInspector {
     return group;
   }
 
+  private renderMatrixControl(node: Node): HTMLElement | null {
+    if (node.kind !== "rotate3") return null;
+    const matrix = matrixParam(node.params.matrix);
+    if (!matrix) return null;
+    const activeAxis = axisForMatrix(matrix);
+    if (activeAxis !== "custom" && !this.customMatrixNodeIds.has(node.id)) return null;
+
+    const sourceLink = this.sourceLinkForParam(node.id, ["matrix"]);
+    const group = document.createElement("div");
+    group.className = "matrix-control";
+    if (matrixCellPaths().some((path) => this.dirtyParamKeys.has(paramKey(node.id, path)))) group.classList.add("edited");
+    if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
+    if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
+    this.attachSourceHover(group, sourceLink);
+
+    const header = document.createElement("div");
+    header.className = "matrix-control-header";
+    const label = document.createElement("span");
+    label.className = "matrix-label";
+    label.textContent = "Matrix";
+    header.append(label);
+    if (sourceLink) {
+      const source = renderCodeLinkButton("Reveal orientation in code", "param-source-link matrix-source-link");
+      source.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.options.onRevealSource(sourceLink);
+      });
+      header.append(source);
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "matrix-grid";
+    matrix.forEach((row, rowIndex) => {
+      row.forEach((value, columnIndex) => {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.step = "0.01";
+        input.min = "-1";
+        input.max = "1";
+        input.value = formatValue(value);
+        input.setAttribute("aria-label", `Matrix row ${rowIndex + 1} column ${columnIndex + 1}`);
+
+        let editSessionId: string | null = null;
+        input.addEventListener("focus", () => {
+          editSessionId = nextEditSessionId("matrix-cell");
+        });
+        input.addEventListener("blur", () => {
+          editSessionId = null;
+        });
+        input.addEventListener("input", () => {
+          this.updateMatrixCell(node, rowIndex, columnIndex, Number(input.value), editSessionId);
+        });
+        grid.append(input);
+      });
+    });
+
+    group.append(header, grid);
+    return group;
+  }
+
   private setOrientationAxis(node: Node, previous: number[][], axis: OrientationAxis): void {
     const nextValue = orientationMatrix(axis);
     if (matricesClose(previous, nextValue)) {
@@ -1044,6 +1109,31 @@ export class GraphInspector {
       label: "axis",
       previousValue: cloneMatrix(previous),
       nextValue: cloneMatrix(nextValue),
+    });
+  }
+
+  private updateMatrixCell(
+    node: Node,
+    rowIndex: number,
+    columnIndex: number,
+    value: number,
+    editSessionId: string | null,
+  ): void {
+    if (!Number.isFinite(value)) return;
+    const path: ParamPath = ["matrix", rowIndex, columnIndex];
+    const previousValue = getAtPath(node.params, path);
+    if (typeof previousValue !== "number" || previousValue === value) return;
+    setAtPath(node.params, path, value);
+    this.customMatrixNodeIds.add(node.id);
+    this.options.onEdit({
+      node,
+      nodeId: node.id,
+      nodeKind: node.kind,
+      path,
+      label: formatPath(path),
+      previousValue,
+      nextValue: value,
+      ...(editSessionId ? { editSessionId } : {}),
     });
   }
 
@@ -1226,6 +1316,13 @@ interface NumericRange {
 type OrientationAxis = "x" | "y" | "z";
 
 const ORIENTATION_AXES: OrientationAxis[] = ["x", "y", "z"];
+const MATRIX_CELL_PATHS: ParamPath[] = [0, 1, 2].flatMap((row) => {
+  return [0, 1, 2].map((column) => ["matrix", row, column]);
+});
+
+function matrixCellPaths(): ParamPath[] {
+  return MATRIX_CELL_PATHS;
+}
 
 function collectNumericParams(params: Record<string, unknown>): NumericParam[] {
   const out: NumericParam[] = [];

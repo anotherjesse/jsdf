@@ -429,12 +429,18 @@ function verifyOrientationControl(errors: string[]): void {
   const { sdf } = evaluateSource("return cylinder(0.25).orient(X)");
   const links = findGraphSourceLinks("return cylinder(0.25).orient(X)", sdf);
   const sourceHoverLabels: string[] = [];
+  const edits: GraphParamEdit[] = [];
+  let revealedSource = "";
   const inspector = new GraphInspector(root, {
     onSelect() {},
     onHover() {},
-    onEdit() {},
+    onEdit(edit) {
+      edits.push(edit);
+    },
     onSolo() {},
-    onRevealSource() {},
+    onRevealSource(link) {
+      revealedSource = `${link.nodeKind}:${link.label}`;
+    },
     onSourceHover(link) {
       sourceHoverLabels.push(link ? `${link.nodeKind}:${link.label}` : "");
     },
@@ -481,6 +487,46 @@ function verifyOrientationControl(errors: string[]): void {
   if (!root.querySelector(".axis-control.source-hovered")) errors.push("source hover did not mark orientation control");
   inspector.setHoveredSourceLink(null);
   if (root.querySelector(".axis-control.source-hovered")) errors.push("clearing source hover left orientation marked");
+
+  const customButton = [...axis.querySelectorAll<HTMLButtonElement>("button")]
+    .find((button) => button.textContent === "Custom");
+  if (!customButton) {
+    errors.push("orientation control had no custom matrix button");
+    return;
+  }
+  customButton.click();
+
+  const matrixControl = root.querySelector<HTMLElement>(".matrix-control");
+  const matrixInputs = [...root.querySelectorAll<HTMLInputElement>(".matrix-grid input")];
+  if (!matrixControl) {
+    errors.push("custom orientation did not render matrix grid");
+    return;
+  }
+  if (matrixInputs.length !== 9) {
+    errors.push(`custom orientation rendered ${matrixInputs.length} matrix inputs`);
+  }
+
+  const matrixSourceButton = matrixControl.querySelector<HTMLButtonElement>(".matrix-source-link");
+  if (!matrixSourceButton) {
+    errors.push("custom orientation matrix had no source reveal button");
+  } else {
+    matrixSourceButton.click();
+    if (revealedSource !== "rotate3:axis") errors.push(`matrix source reveal emitted ${revealedSource || "nothing"}`);
+  }
+
+  const firstOffDiagonal = matrixInputs[1];
+  if (!firstOffDiagonal) return;
+  firstOffDiagonal.dispatchEvent(new FocusEvent("focus"));
+  firstOffDiagonal.value = "0.25";
+  firstOffDiagonal.dispatchEvent(new Event("input", { bubbles: true }));
+  firstOffDiagonal.dispatchEvent(new FocusEvent("blur"));
+  const lastEdit = edits.at(-1);
+  if (!lastEdit || lastEdit.nodeId !== rotate.id || lastEdit.label !== "matrix[0][1]" || lastEdit.nextValue !== 0.25) {
+    errors.push(`custom matrix edit emitted ${lastEdit ? `${lastEdit.label}:${String(lastEdit.nextValue)}` : "nothing"}`);
+  }
+  if (inspector.getParamValue(rotate.id, ["matrix", 0, 1]) !== 0.25) {
+    errors.push("custom matrix edit did not update graph param");
+  }
 }
 
 function sourceCardLabels(root: HTMLElement): string[] {
