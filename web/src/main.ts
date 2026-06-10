@@ -97,6 +97,7 @@ const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
 const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
 const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
+const SOURCE_PRETTIFY_SHORTCUT = "Alt+Shift+F";
 const SELECTED_TARGET_SHORTCUTS = "Control+Alt+Enter Meta+Alt+Enter";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
@@ -812,6 +813,12 @@ function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
     return;
   }
 
+  if (isPrettifyShortcut(event) && !isEditableEventTarget(event.target)) {
+    event.preventDefault();
+    if (!event.repeat) prettifyCurrentSource();
+    return;
+  }
+
   if (isLoadShortcut(event)) {
     event.preventDefault();
     if (!event.repeat) openSourceDialog();
@@ -851,6 +858,11 @@ function editorModeShortcut(event: KeyboardEvent): EditorView | null {
 function isSourceHintsShortcut(event: KeyboardEvent): boolean {
   if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
   return event.code === "KeyH" || event.key.toLowerCase() === "h";
+}
+
+function isPrettifyShortcut(event: KeyboardEvent): boolean {
+  if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
+  return event.code === "KeyF" || event.key.toLowerCase() === "f";
 }
 
 function isSelectedTargetShortcut(event: KeyboardEvent): boolean {
@@ -1454,6 +1466,7 @@ function appHealthDiagnostics() {
     hasSaveButton: Boolean(saveSourceButton),
     workspaceButtons: workspaceButtonLabels(),
     workspaceButtonShortcuts: workspaceButtonShortcuts(),
+    prettifyShortcut: SOURCE_PRETTIFY_SHORTCUT,
     editorModeShortcuts: editorModeButtonShortcuts(),
     graphActionButtons: graphActionButtonLabels(),
     graphActionShortcuts: graphActionButtonShortcuts(),

@@ -26,6 +26,7 @@ export interface AppHealthDiagnostics {
   hasSaveButton: boolean;
   workspaceButtons: readonly string[];
   workspaceButtonShortcuts: readonly string[];
+  prettifyShortcut: string;
   editorModeShortcuts: readonly string[];
   graphActionButtons: readonly string[];
   graphActionShortcuts: readonly string[];

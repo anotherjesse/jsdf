@@ -40,6 +40,12 @@ export interface AppHealthRuntimeVerification {
     restoredDefault: boolean;
     status: string;
   };
+  prettifyShortcut: {
+    shortcut: string;
+    preventedDefault: boolean;
+    editablePreventedDefault: boolean;
+    status: string;
+  };
   editorModeShortcutSwitch: {
     codeShortcut: string;
     graphShortcut: string;
@@ -101,6 +107,7 @@ export async function runAppHealthRuntimeVerification(
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
   const sourceHintsShortcutSwitch = await verifySourceHintsShortcutSwitch(frame, errors);
+  const prettifyShortcut = await verifyPrettifyShortcut(frame, errors);
   const selectionFocusButton = await verifySelectionFocusButton(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
@@ -121,6 +128,7 @@ export async function runAppHealthRuntimeVerification(
     graphHoverStatus,
     sourceDialogFocus,
     sourceHintsShortcutSwitch,
+    prettifyShortcut,
     editorModeShortcutSwitch,
     selectionFocusButton,
     graphCodeReveal,
@@ -146,6 +154,7 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
   verifyWorkspaceButtonShortcuts("health", health.workspaceButtonShortcuts, errors);
+  if (health.prettifyShortcut !== "Alt+Shift+F") errors.push(`health prettify shortcut rendered ${health.prettifyShortcut || "nothing"}`);
   verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
   if (!health.selectionFocusVisible) errors.push("selection focus button was not visible in app health");
   if (!health.selectionFocusLabel.includes("#")) errors.push(`selection focus label rendered ${health.selectionFocusLabel || "nothing"}`);
@@ -461,6 +470,68 @@ async function verifySourceHintsShortcutSwitch(
     restoredPressed,
     preventedDefault,
     restoredDefault,
+    status: statusText,
+  };
+}
+
+async function verifyPrettifyShortcut(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["prettifyShortcut"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    shortcut: "",
+    preventedDefault: false,
+    editablePreventedDefault: false,
+    status: "",
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for prettify shortcut verification");
+    return empty;
+  }
+
+  const prettifyButton = frameDocument.querySelector<HTMLButtonElement>("#prettifySourceButton");
+  const status = frameDocument.querySelector<HTMLElement>("#editorStatus");
+  const documentName = frameDocument.querySelector<HTMLInputElement>("#documentNameInput");
+  if (!prettifyButton || !status || !documentName) {
+    errors.push("app frame missing prettify shortcut controls");
+    return empty;
+  }
+
+  const shortcut = prettifyButton.getAttribute("aria-keyshortcuts") ?? "";
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const preventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "f",
+    code: "KeyF",
+    altKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await settleFrame(frameWindow);
+  const statusText = status.textContent ?? "";
+
+  const editablePreventedDefault = !documentName.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "f",
+    code: "KeyF",
+    altKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+
+  if (shortcut !== "Alt+Shift+F") errors.push(`prettify button advertised shortcut as ${shortcut || "nothing"}`);
+  if (!preventedDefault) errors.push("prettify shortcut did not prevent the browser default");
+  if (editablePreventedDefault) errors.push("prettify shortcut intercepted an editable text field");
+  if (statusText !== "Prettified" && statusText !== "Already pretty") {
+    errors.push(`prettify shortcut status rendered ${statusText || "nothing"}`);
+  }
+
+  return {
+    shortcut,
+    preventedDefault,
+    editablePreventedDefault,
     status: statusText,
   };
 }
