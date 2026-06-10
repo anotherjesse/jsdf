@@ -8,6 +8,7 @@ export interface AppHealthRuntimeVerification {
     title: string;
     canvasMode: string;
     workspaceButtons: readonly string[];
+    editorModeShortcuts: readonly string[];
     graphActionButtons: readonly string[];
     graphActionShortcuts: readonly string[];
     graphActionIcons: readonly string[];
@@ -25,6 +26,16 @@ export interface AppHealthRuntimeVerification {
     shortcutPreventedDefault: boolean;
     onOpen: string;
     afterClose: string;
+  };
+  editorModeShortcutSwitch: {
+    codeShortcut: string;
+    graphShortcut: string;
+    codePreventedDefault: boolean;
+    graphPreventedDefault: boolean;
+    afterCodeView: string;
+    afterGraphView: string;
+    codeVisible: boolean;
+    graphVisible: boolean;
   };
   graphCodeReveal: {
     selectedBefore: string;
@@ -64,6 +75,7 @@ export async function runAppHealthRuntimeVerification(
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
+  const editorModeShortcutSwitch = await verifyEditorModeShortcutSwitch(frame, errors);
 
   if (!health) {
     errors.push("app health hook never became available");
@@ -79,6 +91,7 @@ export async function runAppHealthRuntimeVerification(
     dom,
     graphHoverStatus,
     sourceDialogFocus,
+    editorModeShortcutSwitch,
     graphCodeReveal,
     codeGraphReveal,
     errors,
@@ -101,6 +114,7 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Save")) errors.push("workspace health missing Save button");
   if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
+  verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
   if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
   if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
   if (!health.graphActionButtons.includes("Reset graph edits")) errors.push("graph action health missing Reset button");
@@ -120,6 +134,7 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
   if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
   if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
+  verifyEditorModeShortcuts("DOM", dom.editorModeShortcuts, errors);
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
   if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
@@ -135,6 +150,15 @@ function verifyGraphActionShortcuts(label: string, shortcuts: readonly string[],
   }
   if (!shortcuts.includes("Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y")) {
     errors.push(`${label} graph shortcuts missing redo binding`);
+  }
+}
+
+function verifyEditorModeShortcuts(label: string, shortcuts: readonly string[], errors: string[]): void {
+  if (!shortcuts.includes("Control+Alt+1 Meta+Alt+1")) {
+    errors.push(`${label} editor mode shortcuts missing Code binding`);
+  }
+  if (!shortcuts.includes("Control+Alt+2 Meta+Alt+2")) {
+    errors.push(`${label} editor mode shortcuts missing Graph binding`);
   }
 }
 
@@ -187,6 +211,8 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     canvasMode: frameDocument?.querySelector<HTMLCanvasElement>("#canvas")?.dataset.previewMode ?? "",
     workspaceButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    editorModeShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-toggle button") ?? [])
+      .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     graphActionButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
     graphActionShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
@@ -296,6 +322,88 @@ async function verifySourceDialogFocus(
   }
 
   return { loadShortcut, shortcutPreventedDefault, onOpen, afterClose };
+}
+
+async function verifyEditorModeShortcutSwitch(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["editorModeShortcutSwitch"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    codeShortcut: "",
+    graphShortcut: "",
+    codePreventedDefault: false,
+    graphPreventedDefault: false,
+    afterCodeView: "",
+    afterGraphView: "",
+    codeVisible: false,
+    graphVisible: false,
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for editor mode shortcut verification");
+    return empty;
+  }
+
+  const codeMode = frameDocument.querySelector<HTMLButtonElement>("#codeModeButton");
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const codePanel = frameDocument.querySelector<HTMLElement>("#codePanel");
+  const graphPanel = frameDocument.querySelector<HTMLElement>("#graphPanel");
+  if (!codeMode || !graphMode || !codePanel || !graphPanel) {
+    errors.push("app frame missing editor mode shortcut controls");
+    return empty;
+  }
+
+  const codeShortcut = codeMode.getAttribute("aria-keyshortcuts") ?? "";
+  const graphShortcut = graphMode.getAttribute("aria-keyshortcuts") ?? "";
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const codePreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "1",
+    ctrlKey: true,
+    altKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  const afterCodeView = readAppHealth(frame)?.editorView ?? "";
+  const codeVisible = !codePanel.classList.contains("hidden");
+
+  const graphPreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "2",
+    ctrlKey: true,
+    altKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await nextFrame(frameWindow);
+  await nextFrame(frameWindow);
+  const afterGraphView = readAppHealth(frame)?.editorView ?? "";
+  const graphVisible = !graphPanel.classList.contains("hidden");
+
+  if (!codeShortcut.includes("Control+Alt+1") || !codeShortcut.includes("Meta+Alt+1")) {
+    errors.push(`code mode button advertised shortcut as ${codeShortcut || "nothing"}`);
+  }
+  if (!graphShortcut.includes("Control+Alt+2") || !graphShortcut.includes("Meta+Alt+2")) {
+    errors.push(`graph mode button advertised shortcut as ${graphShortcut || "nothing"}`);
+  }
+  if (!codePreventedDefault) errors.push("code mode shortcut did not prevent the browser default");
+  if (!graphPreventedDefault) errors.push("graph mode shortcut did not prevent the browser default");
+  if (afterCodeView !== "code") errors.push(`code mode shortcut left editor in ${afterCodeView || "unknown"} view`);
+  if (afterGraphView !== "graph") errors.push(`graph mode shortcut left editor in ${afterGraphView || "unknown"} view`);
+  if (!codeVisible) errors.push("code mode shortcut left code panel hidden");
+  if (!graphVisible) errors.push("graph mode shortcut left graph panel hidden");
+
+  return {
+    codeShortcut,
+    graphShortcut,
+    codePreventedDefault,
+    graphPreventedDefault,
+    afterCodeView,
+    afterGraphView,
+    codeVisible,
+    graphVisible,
+  };
 }
 
 async function verifyGraphCodeReveal(

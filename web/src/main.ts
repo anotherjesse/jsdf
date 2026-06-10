@@ -93,6 +93,8 @@ type EditorStatusState = "idle" | "ok" | "pending" | "error";
 type PreviewProfile = SavedSourcePreview;
 
 const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
+const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
+const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -140,6 +142,7 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
 
+configureEditorModeShortcuts();
 configureGraphHistoryButtons();
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
@@ -772,7 +775,21 @@ function configureGraphHistoryButtons(): void {
   redoGraphButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y");
 }
 
+function configureEditorModeShortcuts(): void {
+  codeModeButton.title = "Code (Cmd/Ctrl+Alt+1)";
+  codeModeButton.setAttribute("aria-keyshortcuts", EDITOR_CODE_SHORTCUTS);
+  graphModeButton.title = "Graph (Cmd/Ctrl+Alt+2)";
+  graphModeButton.setAttribute("aria-keyshortcuts", EDITOR_GRAPH_SHORTCUTS);
+}
+
 function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
+  const editorShortcutMode = editorModeShortcut(event);
+  if (editorShortcutMode) {
+    event.preventDefault();
+    if (!event.repeat) setEditorView(editorShortcutMode);
+    return;
+  }
+
   if (isLoadShortcut(event)) {
     event.preventDefault();
     if (!event.repeat) openSourceDialog();
@@ -799,6 +816,14 @@ function isLoadShortcut(event: KeyboardEvent): boolean {
 
 function isSaveShortcut(event: KeyboardEvent): boolean {
   return isCommandShortcut(event, "s");
+}
+
+function editorModeShortcut(event: KeyboardEvent): EditorView | null {
+  if (!(event.metaKey || event.ctrlKey) || !event.altKey || event.shiftKey) return null;
+  const key = event.key.toLowerCase();
+  if (key === "1") return "code";
+  if (key === "2") return "graph";
+  return null;
 }
 
 function isCommandShortcut(event: KeyboardEvent, key: string): boolean {
@@ -1339,6 +1364,7 @@ function appHealthDiagnostics() {
     hasLoadButton: Boolean(loadSourceButton),
     hasSaveButton: Boolean(saveSourceButton),
     workspaceButtons: workspaceButtonLabels(),
+    editorModeShortcuts: editorModeButtonShortcuts(),
     graphActionButtons: graphActionButtonLabels(),
     graphActionShortcuts: graphActionButtonShortcuts(),
     recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
@@ -1349,6 +1375,11 @@ function appHealthDiagnostics() {
 function workspaceButtonLabels(): string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
     .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
+}
+
+function editorModeButtonShortcuts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-toggle button"))
+    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
 }
 
 function graphActionButtonLabels(): string[] {

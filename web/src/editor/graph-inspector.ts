@@ -715,6 +715,7 @@ export class GraphInspector {
     const focus = this.focusSelectedAfterRender;
     this.focusSelectedAfterRender = false;
     const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
+    if (focus) target?.focus({ preventScroll: true });
     window.requestAnimationFrame(() => {
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
       if (!focus) return;
