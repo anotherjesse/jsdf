@@ -5,7 +5,15 @@ import { GraphEditHistory } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
 import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";
-import type { SavedSourceDocument } from "../editor/workspace-storage";
+import {
+  clearSourceDraft,
+  loadSavedSourceVersion,
+  loadSourceDraft,
+  saveSourceDraft,
+  saveSourceVersion,
+  type SavedSourceDocument,
+  type SavedSourcePreview,
+} from "../editor/workspace-storage";
 import { examples } from "../examples";
 
 export interface GraphRuntimeVerification {
@@ -42,6 +50,12 @@ export interface GraphRuntimeVerification {
     emptyMessages: string[];
     loadedExample: string;
     loadedSaved: string;
+  };
+  workspaceStorage: {
+    savedHiddenKeys: string[];
+    draftHiddenKeys: string[];
+    normalizedHiddenKeys: string[];
+    draftCleared: boolean;
   };
   errors: string[];
 }
@@ -105,6 +119,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   const history = verifyHistoryCoalescing(errors);
   const scrubValues = verifyScrubValues(errors);
   const sourceDialog = verifySourceDialog(errors);
+  const workspaceStorage = verifyWorkspaceStorage(errors);
 
   return {
     ok: errors.length === 0,
@@ -126,6 +141,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     scrubValues,
     history,
     sourceDialog,
+    workspaceStorage,
     errors,
   };
 
@@ -440,6 +456,49 @@ function verifySourceDialog(errors: string[]): GraphRuntimeVerification["sourceD
   };
 }
 
+function verifyWorkspaceStorage(errors: string[]): GraphRuntimeVerification["workspaceStorage"] {
+  const storage = new MemoryStorage();
+  const normalizedHiddenKeys = ["box:call:20:26", "sphere:call:6:15"];
+  const preview: SavedSourcePreview = {
+    bounds: [[-1, -1, -1], [1, 1, 1]],
+    meshGrid: 128,
+    raySteps: 192,
+    meshAlgorithm: "surface-net",
+    hiddenNodeKeys: [" sphere:call:6:15 ", "box:call:20:26", "sphere:call:6:15", "", " "],
+  };
+
+  const saved = saveSourceVersion("Visibility test", "return sphere(1)", null, preview, storage);
+  const loaded = loadSavedSourceVersion(saved.id, null, storage);
+  const savedHiddenKeys = loaded?.version.preview?.hiddenNodeKeys ?? [];
+  if (!sameStrings(savedHiddenKeys, normalizedHiddenKeys)) {
+    errors.push(`saved hidden keys normalized to ${savedHiddenKeys.join(",") || "nothing"}`);
+  }
+
+  saveSourceDraft({
+    name: "Visibility draft",
+    source: "return box(1)",
+    preview,
+    activeDocumentId: saved.id,
+    activeVersionId: loaded?.version.id ?? null,
+    activeExampleId: "canonical",
+  }, storage);
+  const draftHiddenKeys = loadSourceDraft(storage)?.preview?.hiddenNodeKeys ?? [];
+  if (!sameStrings(draftHiddenKeys, normalizedHiddenKeys)) {
+    errors.push(`draft hidden keys normalized to ${draftHiddenKeys.join(",") || "nothing"}`);
+  }
+
+  clearSourceDraft(storage);
+  const draftCleared = loadSourceDraft(storage) == null;
+  if (!draftCleared) errors.push("clearing source draft left saved visibility draft behind");
+
+  return {
+    savedHiddenKeys,
+    draftHiddenKeys,
+    normalizedHiddenKeys,
+    draftCleared,
+  };
+}
+
 function verifyOrientationControl(errors: string[]): void {
   const root = document.createElement("div");
   const { sdf } = evaluateSource("return cylinder(0.25).orient(X)");
@@ -679,6 +738,10 @@ function closeTo(a: number, b: number): boolean {
   return Math.abs(a - b) < 1e-9;
 }
 
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 function graphEdit(
   node: Node,
   path: Array<string | number>,
@@ -695,6 +758,34 @@ function graphEdit(
     previousValue,
     nextValue,
   };
+}
+
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
 }
 
 function verifyHistoryCoalescing(errors: string[]): GraphRuntimeVerification["history"] {

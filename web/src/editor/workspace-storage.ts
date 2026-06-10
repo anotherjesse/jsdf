@@ -232,9 +232,7 @@ function normalizePreview(value: unknown): SavedSourcePreview | null {
   if (meshGrid == null || raySteps == null) return null;
 
   const meshAlgorithm = candidate.meshAlgorithm === "tetra" ? "tetra" : "surface-net";
-  const hiddenNodeKeys = Array.isArray(candidate.hiddenNodeKeys)
-    ? candidate.hiddenNodeKeys.filter((key): key is string => typeof key === "string" && key.length > 0)
-    : [];
+  const hiddenNodeKeys = normalizeHiddenNodeKeys(candidate.hiddenNodeKeys);
   return {
     bounds,
     meshGrid,
@@ -242,6 +240,14 @@ function normalizePreview(value: unknown): SavedSourcePreview | null {
     meshAlgorithm,
     ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
   };
+}
+
+function normalizeHiddenNodeKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys = value
+    .map((key) => typeof key === "string" ? key.trim() : "")
+    .filter((key) => key.length > 0);
+  return [...new Set(keys)].sort();
 }
 
 function normalizeBounds(value: unknown): SavedBounds3 | null {
