@@ -9,6 +9,11 @@ export interface GraphSourceEdit {
   label: string;
 }
 
+export interface GraphSourceLink extends GraphSourceEdit {
+  start: number;
+  end: number;
+}
+
 interface CallPatch {
   fns: string[];
   arg: number;
@@ -232,6 +237,41 @@ export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourc
   return patchNthCallArgument(source, patch, ordinal, value);
 }
 
+export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink[] {
+  const links: GraphSourceLink[] = [];
+  for (const [nodeKind, labels] of Object.entries(CALL_PATCHES)) {
+    for (const [label, patch] of Object.entries(labels)) {
+      const nodes = patchableNodes(sdf.node, nodeKind, label);
+      nodes.forEach((node, ordinal) => {
+        const range = findNthCallArgumentRange(source, patch, ordinal);
+        if (!range) return;
+        links.push({
+          nodeId: node.id,
+          nodeKind,
+          path: labelToPath(label),
+          label,
+          ...range,
+        });
+      });
+    }
+  }
+
+  const orientNodes = orientPatchableNodes(sdf.node);
+  orientNodes.forEach((node, ordinal) => {
+    const range = findNthOrientArgumentRange(source, ordinal);
+    if (!range) return;
+    links.push({
+      nodeId: node.id,
+      nodeKind: "rotate3",
+      path: ["matrix"],
+      label: "axis",
+      ...range,
+    });
+  });
+
+  return links.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
 function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
   const axis = axisForMatrix(value);
   if (!axis) return null;
@@ -241,10 +281,14 @@ function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, val
 }
 
 function ordinalForEdit(root: Node, edit: GraphSourceEdit): number {
-  const nodes = collectNodes(root)
-    .filter((node) => node.kind === edit.nodeKind && hasParamLabel(node, edit.label))
-    .sort((a, b) => a.id - b.id);
+  const nodes = patchableNodes(root, edit.nodeKind, edit.label);
   return nodes.findIndex((node) => node.id === edit.nodeId);
+}
+
+function patchableNodes(root: Node, nodeKind: string, label: string): Node[] {
+  return collectNodes(root)
+    .filter((node) => node.kind === nodeKind && hasParamLabel(node, label))
+    .sort((a, b) => a.id - b.id);
 }
 
 function collectNodes(root: Node): Node[] {
@@ -261,10 +305,14 @@ function collectNodes(root: Node): Node[] {
 }
 
 function orientOrdinalForEdit(root: Node, edit: GraphSourceEdit): number {
-  const nodes = collectNodes(root)
+  const nodes = orientPatchableNodes(root);
+  return nodes.findIndex((node) => node.id === edit.nodeId);
+}
+
+function orientPatchableNodes(root: Node): Node[] {
+  return collectNodes(root)
     .filter((node) => node.kind === "rotate3" && axisForMatrix(node.params.matrix))
     .sort((a, b) => a.id - b.id);
-  return nodes.findIndex((node) => node.id === edit.nodeId);
 }
 
 function hasParamLabel(node: Node, label: string): boolean {
@@ -294,6 +342,12 @@ function labelToPath(label: string): ParamPath {
 }
 
 function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number): string | null {
+  const range = findNthCallArgumentRange(source, patch, ordinal);
+  if (!range) return null;
+  return replaceRange(source, range.start, range.end, formatNumberLike(source.slice(range.start, range.end), value));
+}
+
+function findNthCallArgumentRange(source: string, patch: CallPatch, ordinal: number): SourceRange | null {
   const calls = findCalls(source, patch.fns);
   const call = calls[ordinal];
   if (!call) return null;
@@ -301,18 +355,28 @@ function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number,
   if (!arg) return null;
   if (patch.element == null) {
     if (!isNumericLiteral(arg.text)) return null;
-    return replaceRange(source, arg.start, arg.end, formatNumberLike(arg.text, value));
+    return trimRange(source, arg.start, arg.end);
   }
-  return patchVectorElement(source, arg, patch.element, value);
+  return findVectorElementRange(source, arg, patch.element);
 }
 
 function patchNthOrientArgument(source: string, ordinal: number, axis: OrientationAxis): string | null {
+  const range = findNthOrientArgumentRange(source, ordinal);
+  if (!range) return null;
+  return replaceRange(source, range.start, range.end, axis.toUpperCase());
+}
+
+function findNthOrientArgumentRange(source: string, ordinal: number): SourceRange | null {
   const calls = findCalls(source, "orient");
   const call = calls[ordinal];
   if (!call || call.args.length === 0) return null;
   const arg = call.args[0];
-  if (!isAxisExpression(arg.text)) return null;
-  return replaceRange(source, arg.start, arg.end, axis.toUpperCase());
+  return findAxisExpressionRange(arg);
+}
+
+interface SourceRange {
+  start: number;
+  end: number;
 }
 
 interface CallArg {
@@ -395,11 +459,11 @@ function splitArgs(source: string, start: number, end: number): CallArg[] {
   return args;
 }
 
-function patchVectorElement(source: string, arg: CallArg, element: number, value: number): string | null {
-  return patchArrayElement(source, arg, element, value) ?? patchAxisScaledElement(source, arg, element, value);
+function findVectorElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
+  return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element);
 }
 
-function patchArrayElement(source: string, arg: CallArg, element: number, value: number): string | null {
+function findArrayElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
   const open = firstNonWhitespace(source, arg.start, arg.end);
   if (open < 0 || source[open] !== "[") return null;
   const close = findMatchingParen(source, open);
@@ -409,16 +473,29 @@ function patchArrayElement(source: string, arg: CallArg, element: number, value:
   const elements = splitArgs(source, open + 1, close);
   const target = elements[element];
   if (!target || !isNumericLiteral(target.text)) return null;
-  return replaceRange(source, target.start, target.end, formatNumberLike(target.text, value));
+  return trimRange(source, target.start, target.end);
 }
 
-function patchAxisScaledElement(source: string, arg: CallArg, element: number, value: number): string | null {
+function findAxisScaledElementRange(arg: CallArg, element: number): SourceRange | null {
   const match = /^(\s*mul\(\s*([XYZ])\s*,\s*)(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(\s*\)\s*)$/i.exec(arg.text);
   if (!match) return null;
   if (axisElement(match[2].toUpperCase()) !== element) return null;
   const start = arg.start + match[1].length;
   const end = start + match[3].length;
-  return replaceRange(source, start, end, formatNumber(value));
+  return { start, end };
+}
+
+function findAxisExpressionRange(arg: CallArg): SourceRange | null {
+  const direct = /^(\s*)([XYZ])(\s*)$/i.exec(arg.text);
+  if (direct) {
+    const start = arg.start + direct[1].length;
+    return { start, end: start + direct[2].length };
+  }
+
+  const scaled = /^(\s*mul\(\s*)([XYZ])(\s*,\s*-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*\)\s*)$/i.exec(arg.text);
+  if (!scaled) return null;
+  const start = arg.start + scaled[1].length;
+  return { start, end: start + scaled[2].length };
 }
 
 function firstNonWhitespace(source: string, start: number, end: number): number {
@@ -469,12 +546,16 @@ function matricesClose(a: number[][], b: number[][]): boolean {
   });
 }
 
-function isAxisExpression(value: string): boolean {
-  return /^\s*[XYZ]\s*$/.test(value);
-}
-
 function replaceRange(source: string, start: number, end: number, value: string): string {
   return `${source.slice(0, start)}${value}${source.slice(end)}`;
+}
+
+function trimRange(source: string, start: number, end: number): SourceRange {
+  let trimmedStart = start;
+  let trimmedEnd = end;
+  while (trimmedStart < trimmedEnd && /\s/.test(source[trimmedStart])) trimmedStart += 1;
+  while (trimmedEnd > trimmedStart && /\s/.test(source[trimmedEnd - 1])) trimmedEnd -= 1;
+  return { start: trimmedStart, end: trimmedEnd };
 }
 
 function escapeRegExp(value: string): string {

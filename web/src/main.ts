@@ -1,5 +1,5 @@
 import type { Node, SDF3 } from "./core/nodes";
-import { patchGraphEditSource, type GraphSourceEdit } from "./editor/clean-source-patch";
+import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
 import type { CodeEditor } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
 import { sourceForExample } from "./editor/example-source";
@@ -137,7 +137,8 @@ async function boot(): Promise<void> {
     compileEditorSource({ status: "Loaded example", invalidateMesh: false });
     await renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
-    codeEditor = createCodeEditor(codeEditorElement, sourceForExample(exampleSelect.value), scheduleSourceCompile);
+    codeEditor = createCodeEditor(codeEditorElement, sourceForExample(exampleSelect.value), scheduleSourceCompile, handleSourceLinkSelect);
+    refreshSourceLinks();
   } catch (error) {
     gpuBadge.textContent = "Preview error";
     gpuBadge.classList.add("warn");
@@ -155,6 +156,7 @@ function loadExample(id: string): void {
 function scheduleSourceCompile(): void {
   window.clearTimeout(sourceCompileTimer);
   setEditorStatus("Editing...", "pending");
+  codeEditor?.setSourceLinks([]);
   sourceCompileTimer = window.setTimeout(() => {
     compileEditorSource({ status: "Compiled" });
   }, 350);
@@ -168,6 +170,7 @@ function compileEditorSource(options: { status: string; invalidateMesh?: boolean
     activeSdf = sdf;
     graphInspector?.setSdf(sdf);
     codeEditor?.setError(null);
+    refreshSourceLinks(source, sdf);
     clearGraphHistory();
     setEditorStatus(options.status, "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
@@ -176,10 +179,18 @@ function compileEditorSource(options: { status: string; invalidateMesh?: boolean
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     codeEditor?.setError(message);
+    codeEditor?.setSourceLinks([]);
     setEditorStatus(message, "error");
     overlay.textContent = `Code error: ${message}`;
     return false;
   }
+}
+
+function handleSourceLinkSelect(link: GraphSourceLink): void {
+  const node = graphInspector?.selectNodeById(link.nodeId);
+  if (!node) return;
+  setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
+  schedulePreview(0);
 }
 
 function selectNode(node: Node | null): void {
@@ -279,6 +290,12 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
   if (!nextSource) return;
   codeEditor.setValue(nextSource);
   codeEditor.setError(null);
+  refreshSourceLinks(nextSource, activeSdf);
+}
+
+function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
+  if (!codeEditor || !source || !sdf) return;
+  codeEditor.setSourceLinks(findGraphSourceLinks(source, sdf));
 }
 
 function clearGraphHistory(): void {

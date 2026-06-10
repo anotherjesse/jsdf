@@ -3,6 +3,7 @@ import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.
 import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import * as api from "../api";
+import type { GraphSourceLink } from "./clean-source-patch";
 
 interface MonacoEnvironment {
   getWorker(): Worker;
@@ -39,11 +40,17 @@ export interface CodeEditor {
   setValue(value: string): void;
   getValue(): string;
   setError(message: string | null): void;
+  setSourceLinks(links: readonly GraphSourceLink[]): void;
   layout(): void;
   dispose(): void;
 }
 
-export function createCodeEditor(element: HTMLElement, initialValue: string, onChange: (value: string) => void): CodeEditor {
+export function createCodeEditor(
+  element: HTMLElement,
+  initialValue: string,
+  onChange: (value: string) => void,
+  onSourceLinkSelect: (link: GraphSourceLink) => void = () => {},
+): CodeEditor {
   const editor = monaco.editor.create(element, {
     value: initialValue,
     language: "javascript",
@@ -62,8 +69,20 @@ export function createCodeEditor(element: HTMLElement, initialValue: string, onC
   });
 
   let suppress = false;
+  let sourceLinks: readonly GraphSourceLink[] = [];
+  let sourceLinkDecorations: string[] = [];
   const subscription = editor.onDidChangeModelContent(() => {
     if (!suppress) onChange(editor.getValue());
+  });
+  const linkSubscription = editor.onMouseDown((event) => {
+    const model = editor.getModel();
+    const position = event.target.position;
+    if (!model || !position) return;
+    const offset = model.getOffsetAt(position);
+    const link = sourceLinks.find((candidate) => offset >= candidate.start && offset <= candidate.end);
+    if (!link) return;
+    event.event.preventDefault();
+    onSourceLinkSelect(link);
   });
 
   return {
@@ -89,11 +108,32 @@ export function createCodeEditor(element: HTMLElement, initialValue: string, onC
         }]
         : []);
     },
+    setSourceLinks(links: readonly GraphSourceLink[]) {
+      sourceLinks = [...links];
+      const model = editor.getModel();
+      if (!model) return;
+      sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
+        .filter((link) => link.end > link.start)
+        .map((link) => {
+          const start = model.getPositionAt(link.start);
+          const end = model.getPositionAt(link.end);
+          return {
+            range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
+            options: {
+              inlineClassName: "source-graph-link",
+              hoverMessage: {
+                value: `Graph: ${link.nodeKind} #${link.nodeId} ${link.label}`,
+              },
+            },
+          };
+        }));
+    },
     layout() {
       editor.layout();
     },
     dispose() {
       subscription.dispose();
+      linkSubscription.dispose();
       editor.dispose();
     },
   };

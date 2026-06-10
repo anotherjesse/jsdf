@@ -293,6 +293,12 @@ button:disabled {
   border-top: 1px solid var(--line);
 }
 
+.source-graph-link {
+  border-bottom: 1px dotted color-mix(in srgb, var(--accent) 76%, transparent);
+  color: color-mix(in srgb, var(--text) 82%, var(--accent)) !important;
+  cursor: pointer;
+}
+
 .graph-inspector {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
