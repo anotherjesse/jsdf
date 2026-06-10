@@ -8,6 +8,8 @@ export interface AppHealthRuntimeVerification {
     title: string;
     canvasMode: string;
     workspaceButtons: readonly string[];
+    graphActionButtons: readonly string[];
+    graphActionIcons: readonly string[];
     codeEditor: boolean;
     graphInspector: boolean;
     status: string;
@@ -69,6 +71,9 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Save")) errors.push("workspace health missing Save button");
   if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
+  if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
+  if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
+  if (!health.graphActionButtons.includes("Reset graph edits")) errors.push("graph action health missing Reset button");
   if (health.sourceLinks <= 0) errors.push("app health reported no source links");
   if (health.viewMode !== "shader") errors.push(`initial view mode was ${health.viewMode}`);
   if (health.editorView !== "code") errors.push(`initial editor view was ${health.editorView}`);
@@ -84,6 +89,12 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
   if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
   if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
+  if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
+  if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
+  if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
+  for (const icon of ["undo-icon", "redo-icon", "reset-icon"]) {
+    if (!dom.graphActionIcons.includes(icon)) errors.push(`app frame DOM missing ${icon}`);
+  }
 }
 
 function waitForFrameLoad(frame: HTMLIFrameElement, timeoutMs: number): Promise<void> {
@@ -135,6 +146,10 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     canvasMode: frameDocument?.querySelector<HTMLCanvasElement>("#canvas")?.dataset.previewMode ?? "",
     workspaceButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    graphActionButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    graphActionIcons: Array.from(frameDocument?.querySelectorAll<HTMLElement>(".editor-actions button > span[aria-hidden='true']") ?? [])
+      .flatMap((icon) => [...icon.classList]),
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",

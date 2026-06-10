@@ -13,9 +13,18 @@
           <h2>Editor</h2>
           <div class="editor-meta">
             <div class="editor-actions" aria-label="Graph edit history">
-              <button id="undoGraphButton" type="button" title="Undo graph edit (Cmd/Ctrl+Z)" aria-label="Undo graph edit" disabled>Undo</button>
-              <button id="redoGraphButton" type="button" title="Redo graph edit (Cmd/Ctrl+Shift+Z)" aria-label="Redo graph edit" disabled>Redo</button>
-              <button id="resetGraphButton" type="button" title="Reset graph edits" aria-label="Reset graph edits" disabled>Reset</button>
+              <button id="undoGraphButton" class="history-tool icon-button" type="button" title="Undo graph edit (Cmd/Ctrl+Z)" aria-label="Undo graph edit" disabled>
+                <span class="undo-icon" aria-hidden="true"></span>
+                <span class="sr-only">Undo</span>
+              </button>
+              <button id="redoGraphButton" class="history-tool icon-button" type="button" title="Redo graph edit (Cmd/Ctrl+Shift+Z)" aria-label="Redo graph edit" disabled>
+                <span class="redo-icon" aria-hidden="true"></span>
+                <span class="sr-only">Redo</span>
+              </button>
+              <button id="resetGraphButton" class="history-tool icon-button" type="button" title="Reset graph edits" aria-label="Reset graph edits" disabled>
+                <span class="reset-icon" aria-hidden="true"></span>
+                <span class="sr-only">Reset</span>
+              </button>
             </div>
             <span id="editorStatus" class="editor-status">Ready</span>
             <div id="graphChangeJournal" class="change-journal" aria-label="Graph changes" hidden></div>

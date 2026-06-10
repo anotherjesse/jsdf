@@ -1267,6 +1267,7 @@ function appHealthDiagnostics() {
     hasLoadButton: Boolean(loadSourceButton),
     hasSaveButton: Boolean(saveSourceButton),
     workspaceButtons: workspaceButtonLabels(),
+    graphActionButtons: graphActionButtonLabels(),
     recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
     lastRecursiveDecorationMessage: appHealthMonitor.lastRecursiveDecorationMessage,
   };
@@ -1274,6 +1275,11 @@ function appHealthDiagnostics() {
 
 function workspaceButtonLabels(): string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
+}
+
+function graphActionButtonLabels(): string[] {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-actions button"))
     .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
 }
 
