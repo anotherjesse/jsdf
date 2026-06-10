@@ -7,6 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         apiCheck: resolve(__dirname, "api-check.html"),
+        graphCheck: resolve(__dirname, "graph-check.html"),
         main: resolve(__dirname, "index.html"),
         meshCheck: resolve(__dirname, "mesh-check.html"),
         previewCheck: resolve(__dirname, "preview-check.html"),
