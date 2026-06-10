@@ -488,6 +488,13 @@ export function createCodeEditor(
     });
   };
 
+  const selectedLinkAtPosition = (position: monaco.Position | null | undefined): GraphSourceLink | null => {
+    const model = editor.getModel();
+    if (!model || !position || !selectedSourceLink || selectedSourceLink.end <= selectedSourceLink.start) return null;
+    const offset = model.getOffsetAt(position);
+    return offset >= selectedSourceLink.start && offset <= selectedSourceLink.end ? selectedSourceLink : null;
+  };
+
   const rangeForSourceLink = (link: GraphSourceLink): monaco.Range | null => {
     const model = editor.getModel();
     if (!model || link.end <= link.start) return null;
@@ -576,7 +583,7 @@ export function createCodeEditor(
 
   const syncCursorSourceLink = (position: monaco.Position | null | undefined) => {
     if (suppress || activeScrub) return;
-    const link = linkAtPosition(position);
+    const link = linkAtPosition(position) ?? selectedLinkAtPosition(position);
     const key = sourceLinkKey(link);
     if (key === cursorLinkKey) return;
     cursorLinkKey = key;
@@ -1057,6 +1064,7 @@ export function createCodeEditor(
       applyFocusedNodeDecorations(Boolean(options.reveal));
     },
     markSelectedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
+      cancelCursorSourceLinkSync();
       cursorLinkKey = sourceLinkKey(link);
       markSelectedSourceLink(link, options);
     },
@@ -1082,6 +1090,8 @@ export function createCodeEditor(
     revealSourceLink(link: GraphSourceLink) {
       const range = rangeForSourceLink(link);
       if (!range) return;
+      cancelCursorSourceLinkSync();
+      cursorLinkKey = sourceLinkKey(link);
       selectedSourceLink = link;
       updateSourceLinkStatus(link);
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{

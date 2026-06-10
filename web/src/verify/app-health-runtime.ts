@@ -78,6 +78,19 @@ export interface AppHealthRuntimeVerification {
     codeVisible: boolean;
     revealedMarks: number;
   };
+  graphHistoryActionLabels: {
+    undoBefore: string;
+    redoBefore: string;
+    resetBefore: string;
+    editedNode: string;
+    editedField: string;
+    undoAfterEdit: string;
+    redoAfterEdit: string;
+    resetAfterEdit: string;
+    undoAfterUndo: string;
+    redoAfterUndo: string;
+    resetAfterUndo: string;
+  };
   graphCodeReveal: {
     selectedBefore: string;
     selectedAfter: string;
@@ -119,6 +132,7 @@ export async function runAppHealthRuntimeVerification(
   const prettifyShortcut = await verifyPrettifyShortcut(frame, errors);
   const graphFilterShortcut = await verifyGraphFilterShortcut(frame, errors);
   const selectionFocusButton = await verifySelectionFocusButton(frame, errors);
+  const graphHistoryActionLabels = await verifyGraphHistoryActionLabels(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
   const editorModeShortcutSwitch = await verifyEditorModeShortcutSwitch(frame, errors);
@@ -142,6 +156,7 @@ export async function runAppHealthRuntimeVerification(
     graphFilterShortcut,
     editorModeShortcutSwitch,
     selectionFocusButton,
+    graphHistoryActionLabels,
     graphCodeReveal,
     codeGraphReveal,
     errors,
@@ -728,6 +743,143 @@ async function verifySelectionFocusButton(
     codeVisible,
     revealedMarks,
   };
+}
+
+async function verifyGraphHistoryActionLabels(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["graphHistoryActionLabels"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    undoBefore: "",
+    redoBefore: "",
+    resetBefore: "",
+    editedNode: "",
+    editedField: "",
+    undoAfterEdit: "",
+    redoAfterEdit: "",
+    resetAfterEdit: "",
+    undoAfterUndo: "",
+    redoAfterUndo: "",
+    resetAfterUndo: "",
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for graph history label verification");
+    return empty;
+  }
+
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const undoButton = frameDocument.querySelector<HTMLButtonElement>("#undoGraphButton");
+  if (!graphMode || !undoButton) {
+    errors.push("app frame missing graph history label controls");
+    return empty;
+  }
+
+  graphMode.click();
+  await settleFrame(frameWindow);
+  const before = readGraphActionLabels(frameDocument);
+  const editable = await findEditableGraphNumberInput(frameDocument, frameWindow);
+  if (!editable) {
+    errors.push("app frame had no editable graph number input for history labels");
+    return {
+      ...empty,
+      undoBefore: before.undo,
+      redoBefore: before.redo,
+      resetBefore: before.reset,
+    };
+  }
+
+  const previousValue = Number(editable.input.value);
+  const nextValue = Number.isFinite(previousValue) ? Number((previousValue + 0.1).toFixed(4)) : 0.1;
+  editable.input.focus();
+  editable.input.value = String(nextValue);
+  dispatchInput(frameWindow, editable.input);
+  await settleFrame(frameWindow);
+  const afterEdit = readGraphActionLabels(frameDocument);
+
+  undoButton.click();
+  await settleFrame(frameWindow);
+  const afterUndo = readGraphActionLabels(frameDocument);
+
+  if (before.undo !== "Undo graph edit") errors.push(`graph undo label started as ${before.undo || "nothing"}`);
+  if (before.redo !== "Redo graph edit") errors.push(`graph redo label started as ${before.redo || "nothing"}`);
+  if (before.reset !== "Reset graph edits") errors.push(`graph reset label started as ${before.reset || "nothing"}`);
+  if (!afterEdit.undo.startsWith("Undo ") || !afterEdit.undo.includes("#") || !afterEdit.undo.includes("->")) {
+    errors.push(`graph undo label after edit was ${afterEdit.undo || "nothing"}`);
+  }
+  if (afterEdit.redo !== "Redo graph edit") errors.push(`graph redo label after edit was ${afterEdit.redo || "nothing"}`);
+  if (afterEdit.reset !== "Reset 1 graph edit") {
+    errors.push(`graph reset label after edit was ${afterEdit.reset || "nothing"}`);
+  }
+  if (afterUndo.undo !== "Undo graph edit") errors.push(`graph undo label after undo was ${afterUndo.undo || "nothing"}`);
+  if (!afterUndo.redo.startsWith("Redo ") || !afterUndo.redo.includes("#") || !afterUndo.redo.includes("->")) {
+    errors.push(`graph redo label after undo was ${afterUndo.redo || "nothing"}`);
+  }
+  if (afterUndo.reset !== "Reset graph edits") {
+    errors.push(`graph reset label after undo was ${afterUndo.reset || "nothing"}`);
+  }
+
+  return {
+    undoBefore: before.undo,
+    redoBefore: before.redo,
+    resetBefore: before.reset,
+    editedNode: editable.nodeLabel,
+    editedField: editable.fieldLabel,
+    undoAfterEdit: afterEdit.undo,
+    redoAfterEdit: afterEdit.redo,
+    resetAfterEdit: afterEdit.reset,
+    undoAfterUndo: afterUndo.undo,
+    redoAfterUndo: afterUndo.redo,
+    resetAfterUndo: afterUndo.reset,
+  };
+}
+
+function readGraphActionLabels(frameDocument: Document): { undo: string; redo: string; reset: string } {
+  const undo = frameDocument.querySelector<HTMLButtonElement>("#undoGraphButton")?.getAttribute("aria-label") ?? "";
+  const redo = frameDocument.querySelector<HTMLButtonElement>("#redoGraphButton")?.getAttribute("aria-label") ?? "";
+  const reset = frameDocument.querySelector<HTMLButtonElement>("#resetGraphButton")?.getAttribute("aria-label") ?? "";
+  return { undo, redo, reset };
+}
+
+async function findEditableGraphNumberInput(
+  frameDocument: Document,
+  frameWindow: Window,
+): Promise<{ input: HTMLInputElement; nodeLabel: string; fieldLabel: string } | null> {
+  const graphNodes = Array.from(frameDocument.querySelectorAll<HTMLElement>(".graph-node[data-node-id]"));
+  const preferredNodes = [
+    ...graphNodes.filter((node) => /\b(sphere|roundedBox|box|cylinder|torus)\b/i.test(node.textContent ?? "")),
+    ...graphNodes,
+  ];
+  const visited = new Set<HTMLElement>();
+  for (const node of preferredNodes) {
+    if (visited.has(node)) continue;
+    visited.add(node);
+    node.click();
+    await settleFrame(frameWindow);
+    const input = frameDocument.querySelector<HTMLInputElement>("#graphInspector .param-row input[type='number']:not([disabled])");
+    if (!input) continue;
+    return {
+      input,
+      nodeLabel: node.textContent?.trim().replace(/\s+/g, " ") ?? "",
+      fieldLabel: input.getAttribute("aria-label") ?? "",
+    };
+  }
+  return null;
+}
+
+function dispatchInput(frameWindow: Window, input: HTMLInputElement): void {
+  const InputEventCtor = (frameWindow as Window & { InputEvent?: typeof InputEvent }).InputEvent;
+  if (InputEventCtor) {
+    input.dispatchEvent(new InputEventCtor("input", {
+      bubbles: true,
+      cancelable: true,
+      data: input.value,
+      inputType: "insertText",
+    }));
+    return;
+  }
+  input.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
 }
 
 async function verifyEditorModeShortcutSwitch(
