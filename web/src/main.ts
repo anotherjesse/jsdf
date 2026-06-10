@@ -109,6 +109,7 @@ let boundsAreValid = true;
 let activeDocumentId: string | null = null;
 let activeSourceVersionId: string | null = null;
 let activeSourceName = currentExample(activeExampleId).name;
+let graphHistoryHoverKey: string | null = null;
 let cleanSourceSnapshot = sourceForExample(activeExampleId);
 let cleanNameSnapshot = activeSourceName;
 let cleanPreviewSnapshot = "";
@@ -813,6 +814,7 @@ function updateGraphHistoryControls(): void {
 
 function renderGraphChangeJournal(): void {
   const entries = graphHistory.current();
+  graphHistoryHoverKey = null;
   graphChangeJournal.replaceChildren();
   graphChangeJournal.hidden = entries.length === 0;
   if (entries.length === 0) return;
@@ -865,6 +867,14 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
     selectGraphHistoryEntry(entry, { revealSource: event.metaKey || event.ctrlKey });
   });
   row.append(button);
+  row.addEventListener("pointerenter", (event) => hoverGraphHistoryEntry(entry, event));
+  row.addEventListener("pointermove", (event) => hoverGraphHistoryEntry(entry, event));
+  row.addEventListener("pointerleave", clearGraphHistoryEntryHover);
+  row.addEventListener("focusin", () => hoverGraphHistoryEntry(entry));
+  row.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof globalThis.Node && row.contains(event.relatedTarget)) return;
+    clearGraphHistoryEntryHover();
+  });
 
   if (sourceLink) {
     const source = document.createElement("button");
@@ -881,6 +891,53 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry): HTMLElement {
   }
 
   return row;
+}
+
+function hoverGraphHistoryEntry(entry: GraphHistoryEntry, event?: PointerEvent): void {
+  if (!graphInspector) return;
+  const focus = Boolean(event?.shiftKey);
+  const hoverKey = `${entry.id}:${focus}`;
+  if (hoverKey === graphHistoryHoverKey) return;
+  graphHistoryHoverKey = hoverKey;
+  const before = previewHoverSignature();
+  const node = graphInspector.setHoveredNodeById(entry.nodeId);
+  const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
+  hoveredNode = node;
+  graphInspector.setHoveredSourceLink(sourceLink);
+  codeEditor?.markHoveredSourceLink(sourceLink);
+  if (!node) {
+    graphInspector.setFocusHoveredNodeById(null);
+    focusPreview = null;
+    schedulePreviewIfHoverChanged(before);
+    return;
+  }
+
+  codeEditor?.setFocusedNode(node.id);
+  if (focus && isHighlightableNode(node)) {
+    graphInspector.setFocusHoveredNodeById(node.id);
+    focusPreview = graphInspector.buildSoloPreviewForNodeId(node.id);
+    setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
+  } else {
+    graphInspector.setFocusHoveredNodeById(null);
+    focusPreview = null;
+    setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
+  }
+  schedulePreviewIfHoverChanged(before);
+}
+
+function clearGraphHistoryEntryHover(): void {
+  if (!graphInspector) return;
+  graphHistoryHoverKey = null;
+  const before = previewHoverSignature();
+  hoveredNode = null;
+  focusPreview = null;
+  graphInspector.setHoveredNodeById(null);
+  graphInspector.setFocusHoveredNodeById(null);
+  graphInspector.setHoveredSourceLink(null);
+  codeEditor?.markHoveredSourceLink(null);
+  codeEditor?.setFocusedNode(selectedNode?.id ?? null);
+  if (selectedNode) setEditorStatus(`${selectedNode.kind} #${selectedNode.id}`, "ok");
+  schedulePreviewIfHoverChanged(before);
 }
 
 function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSource?: boolean } = {}): void {
