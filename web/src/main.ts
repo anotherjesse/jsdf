@@ -1288,11 +1288,15 @@ function appHealthDiagnostics() {
     hasPrettifyButton: Boolean(prettifySourceButton),
     hasLoadButton: Boolean(loadSourceButton),
     hasSaveButton: Boolean(saveSourceButton),
-    workspaceButtons: Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
-      .map((button) => button.textContent?.trim() ?? ""),
+    workspaceButtons: workspaceButtonLabels(),
     recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
     lastRecursiveDecorationMessage: appHealthMonitor.lastRecursiveDecorationMessage,
   };
+}
+
+function workspaceButtonLabels(): string[] {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
 }
 
 function currentBounds(): Bounds3 {

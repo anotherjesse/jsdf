@@ -60,7 +60,8 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.hasSaveButton) errors.push("save button missing from app health");
   if (!health.workspaceButtons.includes("Load")) errors.push("workspace health missing Load button");
   if (!health.workspaceButtons.includes("Save")) errors.push("workspace health missing Save button");
-  if (!health.workspaceButtons.includes("Prettify")) errors.push("workspace health missing Prettify button");
+  if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
+  if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
   if (health.sourceLinks <= 0) errors.push("app health reported no source links");
   if (health.viewMode !== "shader") errors.push(`initial view mode was ${health.viewMode}`);
   if (health.editorView !== "code") errors.push(`initial editor view was ${health.editorView}`);
@@ -74,7 +75,8 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (!dom.codeEditor) errors.push("app frame had no code editor element");
   if (!dom.graphInspector) errors.push("app frame had no graph inspector element");
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
-  if (!dom.workspaceButtons.includes("Prettify")) errors.push("app frame DOM missing Prettify button");
+  if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
+  if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
 }
 
 function waitForFrameLoad(frame: HTMLIFrameElement, timeoutMs: number): Promise<void> {
@@ -125,7 +127,7 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     title: frameDocument?.title ?? "",
     canvasMode: frameDocument?.querySelector<HTMLCanvasElement>("#canvas")?.dataset.previewMode ?? "",
     workspaceButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
-      .map((button) => button.textContent?.trim() ?? ""),
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",

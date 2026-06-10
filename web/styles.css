@@ -170,7 +170,7 @@ button:disabled {
 
 .workspace-bar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
   gap: 8px;
   align-items: center;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
@@ -214,6 +214,149 @@ button:disabled {
   min-height: 34px;
   border-radius: 7px;
   padding: 5px 10px;
+}
+
+.workspace-bar .workspace-tool {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.workspace-tool[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  color: var(--accent);
+}
+
+.load-icon,
+.save-icon,
+.format-icon,
+.hints-icon {
+  position: relative;
+  display: block;
+  color: currentColor;
+}
+
+.load-icon {
+  width: 18px;
+  height: 13px;
+  border: 1.7px solid currentColor;
+  border-radius: 3px;
+  transform: translateY(1px);
+}
+
+.load-icon::before {
+  position: absolute;
+  top: -5px;
+  left: 1px;
+  width: 8px;
+  height: 5px;
+  border: 1.7px solid currentColor;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  content: "";
+}
+
+.load-icon::after {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 8px;
+  height: 1.7px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.save-icon {
+  width: 16px;
+  height: 16px;
+  border: 1.8px solid currentColor;
+  border-radius: 3px;
+}
+
+.save-icon::before {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  left: 5px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+  content: "";
+}
+
+.save-icon::after {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  left: 3px;
+  height: 5px;
+  border: 1.5px solid currentColor;
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  content: "";
+}
+
+.format-icon {
+  width: 19px;
+  height: 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.format-icon::before,
+.format-icon::after {
+  position: absolute;
+  top: -1px;
+  color: currentColor;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.format-icon::before {
+  left: 0;
+  content: "{";
+}
+
+.format-icon::after {
+  right: 0;
+  content: "}";
+}
+
+.hints-icon {
+  width: 18px;
+  height: 16px;
+}
+
+.hints-icon::before,
+.hints-icon::after {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border: 1.6px solid currentColor;
+  border-radius: 999px;
+  background: var(--panel-2);
+  content: "";
+}
+
+.hints-icon::before {
+  top: 1px;
+  left: 2px;
+  box-shadow: 8px 8px 0 -1.6px var(--panel-2), 8px 8px 0 0 currentColor;
+}
+
+.hints-icon::after {
+  top: 4px;
+  left: 7px;
+  width: 8px;
+  height: 1.6px;
+  border: 0;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(44deg);
+  transform-origin: left center;
 }
 
 .change-journal {
@@ -1992,7 +2135,7 @@ canvas:active {
   }
 
   .workspace-bar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) repeat(4, 34px);
   }
 
   .document-title-field {

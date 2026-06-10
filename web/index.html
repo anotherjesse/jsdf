@@ -28,10 +28,22 @@
             <input id="documentNameInput" type="text" aria-label="Shape name" placeholder="Untitled SDF">
             <span id="dirtyIndicator" class="document-dirty" hidden>Unsaved</span>
           </div>
-          <button id="loadSourceButton" type="button">Load</button>
-          <button id="saveSourceButton" type="button" title="Save (Cmd/Ctrl+S)" disabled>Save</button>
-          <button id="prettifySourceButton" type="button" title="Prettify code (Alt+Shift+F)" aria-label="Prettify code" aria-keyshortcuts="Alt+Shift+F">Prettify</button>
-          <button id="sourceHintsButton" type="button" title="Toggle graph hints" aria-pressed="true">Hints</button>
+          <button id="loadSourceButton" class="workspace-tool" type="button" title="Load" aria-label="Load">
+            <span class="load-icon" aria-hidden="true"></span>
+            <span class="sr-only">Load</span>
+          </button>
+          <button id="saveSourceButton" class="workspace-tool" type="button" title="Save (Cmd/Ctrl+S)" aria-label="Save" disabled>
+            <span class="save-icon" aria-hidden="true"></span>
+            <span class="sr-only">Save</span>
+          </button>
+          <button id="prettifySourceButton" class="workspace-tool" type="button" title="Prettify code (Alt+Shift+F)" aria-label="Prettify code" aria-keyshortcuts="Alt+Shift+F">
+            <span class="format-icon" aria-hidden="true"></span>
+            <span class="sr-only">Prettify</span>
+          </button>
+          <button id="sourceHintsButton" class="workspace-tool" type="button" title="Toggle graph hints" aria-label="Toggle graph hints" aria-pressed="true">
+            <span class="hints-icon" aria-hidden="true"></span>
+            <span class="sr-only">Hints</span>
+          </button>
         </div>
 
         <div class="segmented editor-toggle" aria-label="Editor mode">
