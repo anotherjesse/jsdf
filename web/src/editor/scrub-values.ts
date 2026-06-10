@@ -13,6 +13,16 @@ export function scrubNumericParamValue(
   return normalizeScrubbedValue(label, startValue + deltaPixels * step);
 }
 
+export function nudgeNumericParamValue(
+  label: string,
+  startValue: number,
+  direction: -1 | 1,
+  modifiers: ScrubModifiers,
+): number {
+  if (isCountParamLabel(label)) return normalizeScrubbedValue(label, startValue + direction);
+  return scrubNumericParamValue(label, startValue, direction * 4, modifiers);
+}
+
 function scrubStepFor(label: string, startValue: number, modifiers: ScrubModifiers): number {
   if (isCountParamLabel(label)) {
     return modifiers.altKey ? 0.05 : modifiers.shiftKey ? 0.2 : 1;

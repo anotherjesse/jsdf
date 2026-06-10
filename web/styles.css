@@ -1124,6 +1124,13 @@ button:disabled {
   color: var(--accent-2);
 }
 
+.param-name:focus-visible {
+  border-radius: 4px;
+  color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+
 .param-source-link {
   display: grid;
   place-items: center;

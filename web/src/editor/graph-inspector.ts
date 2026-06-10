@@ -3,7 +3,7 @@ import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
-import { isCountParamLabel, isNonNegativeParamLabel, scrubNumericParamValue } from "./scrub-values";
+import { isCountParamLabel, isNonNegativeParamLabel, nudgeNumericParamValue, scrubNumericParamValue } from "./scrub-values";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
 export type ParamPath = Array<string | number>;
@@ -1225,8 +1225,11 @@ export class GraphInspector {
     const name = document.createElement("span");
     name.className = "param-name";
     name.textContent = field.label;
-    name.title = "Drag horizontally to scrub";
-    name.setAttribute("aria-label", `${field.label} value`);
+    name.tabIndex = 0;
+    name.title = "Drag horizontally, or use arrow keys, to scrub";
+    name.setAttribute("role", "button");
+    name.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
+    name.setAttribute("aria-label", `${field.label} scrub handle`);
     nameGroup.append(name);
 
     if (sourceLink) {
@@ -1297,6 +1300,21 @@ export class GraphInspector {
     input.addEventListener("focus", beginEditSession);
     input.addEventListener("blur", endEditSession);
     input.addEventListener("input", () => update(Number(input.value), { editSessionId }));
+    name.addEventListener("focus", beginEditSession);
+    name.addEventListener("blur", endEditSession);
+    name.addEventListener("keydown", (event) => {
+      const direction = nudgeDirectionForKey(event.key);
+      if (!direction) return;
+      event.preventDefault();
+      beginEditSession();
+      const currentValue = Number(input.value);
+      const startValue = Number.isFinite(currentValue) ? currentValue : field.value;
+      update(nudgeNumericParamValue(field.label, startValue, direction, event), {
+        clampToRange: true,
+        recenterRange: false,
+        editSessionId,
+      });
+    });
     range.addEventListener("pointerdown", beginEditSession);
     range.addEventListener("pointerup", endEditSession);
     range.addEventListener("pointercancel", endEditSession);
@@ -1571,6 +1589,12 @@ function isNonNegativeParam(label: string): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function nudgeDirectionForKey(key: string): -1 | 1 | null {
+  if (key === "ArrowLeft" || key === "ArrowDown") return -1;
+  if (key === "ArrowRight" || key === "ArrowUp") return 1;
+  return null;
 }
 
 function stepFor(field: NumericParam): number {

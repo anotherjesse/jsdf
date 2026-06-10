@@ -352,6 +352,21 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row blur did not clear source hover");
       if (paramRow.classList.contains("source-hovered")) verifyErrors.push("param row blur kept local hover");
     }
+    const paramName = paramRow?.querySelector<HTMLElement>(".param-name");
+    if (!paramName) {
+      verifyErrors.push("selected sphere has no scrub handle");
+    } else {
+      if (paramName.getAttribute("aria-keyshortcuts") !== "ArrowLeft ArrowRight ArrowUp ArrowDown") {
+        verifyErrors.push("scrub handle did not advertise arrow key shortcuts");
+      }
+      paramName.dispatchEvent(new FocusEvent("focus"));
+      paramName.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      paramName.dispatchEvent(new FocusEvent("blur"));
+      const keyboardValue = Number(radiusInput.value);
+      if (!lastEdit || lastEdit.nodeId !== sphere.id || lastEdit.label !== "radius" || keyboardValue <= 1) {
+        verifyErrors.push(`keyboard scrub emitted ${lastEdit?.label ?? "nothing"} ${keyboardValue}`);
+      }
+    }
     const radiusSourceLink = sourceLinks.find((link) => {
       return link.nodeId === sphere.id && link.label === "radius" && link.end > link.start;
     });
