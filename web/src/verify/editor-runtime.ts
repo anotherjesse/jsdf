@@ -20,6 +20,7 @@ export interface EditorRuntimeVerification {
   selectedGraphParams: number;
   selectedGraphTitles: number;
   graphSelections: string[];
+  graphRevealEvents: string[];
   sourceScrub: {
     startValue: number | null;
     nextValue: number | null;
@@ -36,6 +37,7 @@ export async function runEditorRuntimeVerification(
   const errors: string[] = [];
   const cursorEvents: string[] = [];
   const graphSelections: string[] = [];
+  const graphRevealEvents: string[] = [];
   const sourceScrub: EditorRuntimeVerification["sourceScrub"] = {
     startValue: null,
     nextValue: null,
@@ -46,6 +48,7 @@ export async function runEditorRuntimeVerification(
 
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
+  let codeEditor: ReturnType<typeof createCodeEditor> | null = null;
   const graphInspector = new GraphInspector(graphRoot, {
     onSelect(node) {
       selectedNode = node ? `${node.kind} #${node.id}` : "";
@@ -54,11 +57,16 @@ export async function runEditorRuntimeVerification(
     onHover() {},
     onEdit() {},
     onSolo() {},
-    onRevealSource() {},
+    onRevealSource(link) {
+      graphRevealEvents.push(`${link.nodeKind}:${link.label}`);
+      graphInspector.setSelectedSourceLink(link);
+      codeEditor?.markSelectedSourceLink(link);
+      codeEditor?.revealSourceLink(link);
+    },
     onSourceHover() {},
     onVisibilityChange() {},
   });
-  const codeEditor = createCodeEditor(
+  codeEditor = createCodeEditor(
     codeRoot,
     fixtureSource,
     () => {},
@@ -90,6 +98,25 @@ export async function runEditorRuntimeVerification(
       }
       if (graphRoot.querySelectorAll(".param-row.source-selected").length !== 1) {
         errors.push("radius cursor did not mark exactly one graph param row selected");
+      }
+      const paramCodeButton = graphRoot.querySelector<HTMLButtonElement>(".param-row .param-source-link");
+      if (!paramCodeButton) {
+        errors.push("selected radius has no graph source reveal button");
+      } else {
+        paramCodeButton.click();
+        await nextFrame();
+        if (graphRevealEvents.at(-1) !== "sphere:radius") {
+          errors.push(`graph param reveal emitted ${graphRevealEvents.at(-1) || "nothing"}`);
+        }
+        if (codeRoot.querySelectorAll(".source-revealed-link").length === 0) {
+          errors.push("graph param reveal did not mark source as revealed");
+        }
+        if (codeRoot.querySelectorAll(".source-selected-link").length === 0) {
+          errors.push("graph param reveal did not preserve selected source decoration");
+        }
+        if (graphRoot.querySelectorAll(".param-row.source-selected").length !== 1) {
+          errors.push("graph param reveal did not preserve selected graph param");
+        }
       }
       verifySourceScrubPath(radiusLink, sourceScrub, graphInspector, sdf, errors);
     }
@@ -126,16 +153,17 @@ export async function runEditorRuntimeVerification(
       selectedGraphParams,
       selectedGraphTitles,
       graphSelections,
+      graphRevealEvents,
       sourceScrub,
       errors,
     };
   } finally {
-    codeEditor.dispose();
+    codeEditor?.dispose();
   }
 
   function selectFromSource(link: GraphSourceLink): void {
     const node = graphInspector.selectNodeById(link.nodeId);
-    if (node) codeEditor.markSelectedSourceLink(link);
+    if (node) codeEditor?.markSelectedSourceLink(link);
   }
 }
 

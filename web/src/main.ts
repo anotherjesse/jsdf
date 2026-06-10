@@ -543,6 +543,8 @@ function updateMeshHighlight(): void {
 function revealGraphSource(link: GraphSourceLink): void {
   setEditorView("code");
   codeEditor?.setFocusedNode(link.nodeId);
+  graphInspector?.setSelectedSourceLink(link);
+  codeEditor?.markSelectedSourceLink(link);
   window.requestAnimationFrame(() => {
     codeEditor?.revealSourceLink(link);
   });
