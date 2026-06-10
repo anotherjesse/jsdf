@@ -100,6 +100,9 @@ export interface EditorRuntimeVerification {
     methodPartialSnippet: string;
     methodPartialScope: string;
     methodFuzzyCompletion: string;
+    workflowMethodCompletion: string;
+    workflowMethodSnippet: string;
+    workflowMethodSignature: string;
     easingPartialCompletion: string;
     easingPartialSnippet: string;
     easingPartialScope: string;
@@ -135,6 +138,7 @@ export interface EditorRuntimeVerification {
     quickFixTitle: string;
     quickFixReplacement: string;
     easingQuickFixReplacement: string;
+    workflowMethodSuggestion: string;
     quickFixAppliedSource: string;
     danglingQuickFixAppliedSource: string;
     quickFixChangeEvents: number;
@@ -465,6 +469,10 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (globalNames.has("translate")) errors.push("api hints leaked translate into global completions");
   if (!methodNames.has("translate")) errors.push("api hints missing translate method completion");
   if (!methodNames.has("difference")) errors.push("api hints missing chained difference completion");
+  if (!methodNames.has("generate")) errors.push("api hints missing shape.generate method completion");
+  if (!methodNames.has("save")) errors.push("api hints missing shape.save method completion");
+  if (!methodNames.has("sample_slice")) errors.push("api hints missing shape.sample_slice method completion");
+  if (!methodNames.has("show_slice")) errors.push("api hints missing shape.show_slice method completion");
   if (methodNames.has("sphere")) errors.push("api hints leaked sphere into method completions");
   if (!easeNames.has("linear")) errors.push("api hints missing ease.linear completion");
   if (easeNames.has("sphere")) errors.push("api hints leaked sphere into ease completions");
@@ -489,6 +497,19 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   }
   const methodFuzzy = firstCompletionForSource("const f = sphere(1)\nreturn f.dff", 2, 13);
   if (methodFuzzy.first !== "difference") errors.push(`f.dff completion first offered ${methodFuzzy.first || "nothing"}`);
+  const workflowMethod = firstCompletionForSource("const f = sphere(1)\nreturn f.gener", 2, 15);
+  if (workflowMethod.first !== "generate") errors.push(`f.gener completion first offered ${workflowMethod.first || "nothing"}`);
+  if (workflowMethod.insertText !== "generate(${1:options})$0") {
+    errors.push(`f.gener snippet rendered ${workflowMethod.insertText || "nothing"}`);
+  }
+  if (!workflowMethod.signature.startsWith("shape.generate(")) {
+    errors.push(`f.gener detail rendered ${workflowMethod.signature || "nothing"}`);
+  }
+  const saveMethod = firstCompletionForSource("const f = sphere(1)\nreturn f.sav", 2, 13);
+  if (saveMethod.first !== "save") errors.push(`f.sav completion first offered ${saveMethod.first || "nothing"}`);
+  if (saveMethod.insertText !== "save(${1:filename})$0") {
+    errors.push(`f.sav snippet rendered ${saveMethod.insertText || "nothing"}`);
+  }
   if (!SOURCE_COMPLETION_TRIGGER_CHARACTERS.includes("e") || !SOURCE_COMPLETION_TRIGGER_CHARACTERS.includes(".")) {
     errors.push("api hints completion triggers do not keep member suggestions live");
   }
@@ -509,6 +530,9 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     methodPartialSnippet: methodPartial.insertText,
     methodPartialScope: methodPartial.context.scope,
     methodFuzzyCompletion: methodFuzzy.first,
+    workflowMethodCompletion: workflowMethod.first,
+    workflowMethodSnippet: workflowMethod.insertText,
+    workflowMethodSignature: workflowMethod.signature,
     easingPartialCompletion: easingPartial.first,
     easingPartialSnippet: easingPartial.insertText,
     easingPartialScope: easingPartial.context.scope,
@@ -526,7 +550,7 @@ function firstCompletionForSource(
   source: string,
   lineNumber: number,
   column: number,
-): { context: ReturnType<typeof sourceCompletionContextAt>; first: string; insertText: string } {
+): { context: ReturnType<typeof sourceCompletionContextAt>; first: string; insertText: string; signature: string } {
   const context = sourceCompletionContextAt(source, lineNumber, column);
   const first = sourceCompletionEntries(context)
     .filter((entry) => sourceCompletionMatchesToken(entry, context.token))
@@ -535,6 +559,7 @@ function firstCompletionForSource(
     context,
     first: first?.entry.name ?? "",
     insertText: first?.insertText ?? "",
+    signature: first?.signature ?? "",
   };
 }
 
@@ -639,6 +664,22 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     errors.push(`property typo diagnostic suggestion ${propertyOnlyDiagnostic.message}`);
   }
 
+  const workflowMethodSource = "return sphere(1).generte()";
+  const workflowMethodDiagnostic = sourceDiagnosticFromError(
+    new TypeError("sphere(...).generte is not a function"),
+    workflowMethodSource,
+  );
+  if (
+    workflowMethodDiagnostic.lineNumber !== 1
+    || workflowMethodDiagnostic.column !== 18
+    || workflowMethodDiagnostic.endColumn !== 25
+  ) {
+    errors.push(`workflow method typo diagnostic range ${workflowMethodDiagnostic.lineNumber}:${workflowMethodDiagnostic.column}-${workflowMethodDiagnostic.endColumn}`);
+  }
+  if (!workflowMethodDiagnostic.message.includes(".generate")) {
+    errors.push(`workflow method typo diagnostic suggestion ${workflowMethodDiagnostic.message}`);
+  }
+
   const syntaxSource = "const radius = ;\nreturn sphere(1)";
   const syntaxDiagnostic = diagnosticForSource(syntaxSource, errors, "syntax typo");
   if (syntaxDiagnostic.lineNumber !== 1) {
@@ -698,6 +739,7 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     quickFixTitle: runtimeQuickFixTitle,
     quickFixReplacement: runtimeQuickFixReplacement,
     easingQuickFixReplacement,
+    workflowMethodSuggestion: workflowMethodDiagnostic.message,
     quickFixAppliedSource: "",
     danglingQuickFixAppliedSource: "",
     quickFixChangeEvents: 0,
@@ -916,7 +958,10 @@ function verifyApiSignatureHelp(errors: string[]): number {
   const checks: Array<{ line: string; signature: string; active: number; params: number }> = [
     { line: "return sphere(1, ^)", signature: "sphere(", active: 1, params: 2 },
     { line: "return sphere(1).translate([0, ^])", signature: "shape.translate(", active: 0, params: 1 },
-    { line: "return left.union(sphere(1), ^)", signature: "union(", active: 1, params: 3 },
+    { line: "return left.union(sphere(1), ^)", signature: "shape.union(", active: 1, params: 2 },
+    { line: "return sphere(1).generate(^)", signature: "shape.generate(", active: 0, params: 1 },
+    { line: "return sphere(1).save(\"part.stl\", ^)", signature: "shape.save(", active: 1, params: 2 },
+    { line: "return save(\"part.stl\", sphere(1), ^)", signature: "save(", active: 2, params: 3 },
     { line: "return ease.in_out_sine(^)", signature: "ease.in_out_sine(", active: 0, params: 1 },
   ];
 
@@ -928,8 +973,8 @@ function verifyApiSignatureHelp(errors: string[]): number {
       errors.push(`signature help missing for ${line}`);
       continue;
     }
-    if (!help.entry.signature.includes(check.signature)) {
-      errors.push(`signature help for ${line} showed ${help.entry.signature}`);
+    if (!help.signature.includes(check.signature)) {
+      errors.push(`signature help for ${line} showed ${help.signature}`);
     }
     if (help.activeParameter !== check.active) {
       errors.push(`signature help for ${line} active param ${help.activeParameter}`);

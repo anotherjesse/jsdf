@@ -1,7 +1,9 @@
-import { apiReferenceForWord, type ApiReferenceEntry } from "./api-reference";
+import { apiReferenceForWord, apiReferenceSignatureForScope, type ApiReferenceEntry } from "./api-reference";
+import type { ApiCompletionScope } from "./api-reference-data";
 
 export interface ApiSignatureHelp {
   entry: ApiReferenceEntry;
+  signature: string;
   parameters: string[];
   activeParameter: number;
 }
@@ -15,12 +17,15 @@ export function apiSignatureHelpAt(line: string, column: number): ApiSignatureHe
   if (!target) return null;
 
   const entry = apiReferenceForWord(target.name);
-  if (!entry || !entry.signature.includes("(")) return null;
-  if (entry.completionScopes.includes("ease") && target.qualifier !== "ease") return null;
+  if (!entry) return null;
+  const scope = signatureScopeForTarget(target);
+  if (!entry.completionScopes.includes(scope)) return null;
+  const signature = apiReferenceSignatureForScope(entry, scope);
+  if (!signature.includes("(")) return null;
 
-  const parameters = signatureParameterLabels(entry.signature);
+  const parameters = signatureParameterLabels(signature);
   const activeParameter = activeParameterIndex(beforeCursor.slice(openIndex + 1), parameters.length);
-  return { entry, parameters, activeParameter };
+  return { entry, signature, parameters, activeParameter };
 }
 
 export function signatureParameterLabels(signature: string): string[] {
@@ -64,6 +69,7 @@ function currentCallOpenIndex(source: string): number | null {
 interface CallTarget {
   name: string;
   qualifier: string | null;
+  memberAccess: boolean;
 }
 
 function callTargetBeforeOpen(source: string, openIndex: number): CallTarget | null {
@@ -72,21 +78,28 @@ function callTargetBeforeOpen(source: string, openIndex: number): CallTarget | n
   let start = end;
   while (start > 0 && /[$\w]/.test(source[start - 1])) start -= 1;
   if (start >= end) return null;
+  const memberAccess = memberAccessBefore(source, start);
   return {
     name: source.slice(start, end),
-    qualifier: qualifierBefore(source, start),
+    qualifier: memberAccess.qualifier,
+    memberAccess: memberAccess.hasDot,
   };
 }
 
-function qualifierBefore(source: string, targetStart: number): string | null {
+function memberAccessBefore(source: string, targetStart: number): { hasDot: boolean; qualifier: string | null } {
   let dotIndex = targetStart;
   while (dotIndex > 0 && /\s/.test(source[dotIndex - 1])) dotIndex -= 1;
-  if (source[dotIndex - 1] !== ".") return null;
+  if (source[dotIndex - 1] !== ".") return { hasDot: false, qualifier: null };
   let end = dotIndex - 1;
   while (end > 0 && /\s/.test(source[end - 1])) end -= 1;
   let start = end;
   while (start > 0 && /[$\w]/.test(source[start - 1])) start -= 1;
-  return start < end ? source.slice(start, end) : null;
+  return { hasDot: true, qualifier: start < end ? source.slice(start, end) : null };
+}
+
+function signatureScopeForTarget(target: CallTarget): ApiCompletionScope {
+  if (target.qualifier === "ease") return "ease";
+  return target.memberAccess ? "method" : "global";
 }
 
 function activeParameterIndex(argumentSource: string, parameterCount: number): number {

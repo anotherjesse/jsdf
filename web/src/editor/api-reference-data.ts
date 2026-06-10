@@ -4,6 +4,7 @@ export type ApiCompletionScope = "global" | "method" | "ease";
 export interface ApiReferenceSeed {
   kind: ApiSymbolKind;
   signature: string;
+  methodSignature?: string;
   description: string;
   group: string;
   completionScopes?: readonly ApiCompletionScope[];
@@ -15,7 +16,8 @@ const fn = (
   description: string,
   kind: ApiSymbolKind = "function",
   completionScopes?: readonly ApiCompletionScope[],
-): ApiReferenceSeed => ({ kind, group, signature, description, completionScopes });
+  methodSignature?: string,
+): ApiReferenceSeed => ({ kind, group, signature, description, completionScopes, methodSignature });
 
 const GLOBAL_AND_METHOD = ["global", "method"] as const satisfies readonly ApiCompletionScope[];
 
@@ -55,15 +57,15 @@ export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   polygon: fn("2D Primitives", "polygon(points): SDF2", "Creates a 2D polygon from a list of points."),
   vesica: fn("2D Primitives", "vesica(radius, distance): SDF2", "Creates a vesica shape from two overlapping circles."),
 
-  union: fn("CSG", "union(first, ...rest, { k? }): SDF", "Combines SDFs, optionally using smooth blending with k.", "function", GLOBAL_AND_METHOD),
-  difference: fn("CSG", "difference(first, ...rest, { k? }): SDF", "Subtracts later SDFs from the first, optionally smoothing with k.", "function", GLOBAL_AND_METHOD),
+  union: fn("CSG", "union(first, ...rest, { k? }): SDF", "Combines SDFs, optionally using smooth blending with k.", "function", GLOBAL_AND_METHOD, "shape.union(...others, { k? }): SDF"),
+  difference: fn("CSG", "difference(first, ...rest, { k? }): SDF", "Subtracts later SDFs from the first, optionally smoothing with k.", "function", GLOBAL_AND_METHOD, "shape.difference(...others, { k? }): SDF"),
   subtract: fn("CSG", "shape.subtract(...others, { k? }): SDF", "Method alias for difference.", "method"),
-  intersection: fn("CSG", "intersection(first, ...rest, { k? }): SDF", "Keeps the overlapping region of the inputs.", "function", GLOBAL_AND_METHOD),
-  blend: fn("CSG", "blend(first, ...rest, { k? }): SDF", "Smoothly blends SDFs together.", "function", GLOBAL_AND_METHOD),
-  negate: fn("CSG", "negate(shape): SDF", "Inverts the inside and outside of an SDF.", "function", GLOBAL_AND_METHOD),
-  dilate: fn("CSG", "dilate(shape, radius): SDF", "Expands an SDF outward.", "function", GLOBAL_AND_METHOD),
-  erode: fn("CSG", "erode(shape, radius): SDF", "Shrinks an SDF inward.", "function", GLOBAL_AND_METHOD),
-  shell: fn("CSG", "shell(shape, thickness): SDF", "Turns a solid into a thin shell.", "function", GLOBAL_AND_METHOD),
+  intersection: fn("CSG", "intersection(first, ...rest, { k? }): SDF", "Keeps the overlapping region of the inputs.", "function", GLOBAL_AND_METHOD, "shape.intersection(...others, { k? }): SDF"),
+  blend: fn("CSG", "blend(first, ...rest, { k? }): SDF", "Smoothly blends SDFs together.", "function", GLOBAL_AND_METHOD, "shape.blend(...others, { k? }): SDF"),
+  negate: fn("CSG", "negate(shape): SDF", "Inverts the inside and outside of an SDF.", "function", GLOBAL_AND_METHOD, "shape.negate(): SDF"),
+  dilate: fn("CSG", "dilate(shape, radius): SDF", "Expands an SDF outward.", "function", GLOBAL_AND_METHOD, "shape.dilate(radius): SDF"),
+  erode: fn("CSG", "erode(shape, radius): SDF", "Shrinks an SDF inward.", "function", GLOBAL_AND_METHOD, "shape.erode(radius): SDF"),
+  shell: fn("CSG", "shell(shape, thickness): SDF", "Turns a solid into a thin shell.", "function", GLOBAL_AND_METHOD, "shape.shell(thickness): SDF"),
   repeat: fn("CSG", "shape.repeat(spacing, count = null, padding = 0): SDF", "Repeats a shape across a grid.", "method"),
 
   k: fn("CSG", "shape.k(value): SDF", "Sets the smoothness used by the next CSG operation.", "method"),
@@ -95,10 +97,10 @@ export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   extrudeTo: fn("2D/3D", "shape.extrudeTo(other, height, ease = ease.linear): SDF3", "Method alias for extrude_to.", "method"),
   revolve: fn("2D/3D", "shape.revolve(offset = 0): SDF3", "Revolves a 2D SDF into a 3D shape.", "method"),
 
-  generate: fn("Workflow", "generate(sdf, options = {}): Promise<MeshResult>", "Builds a triangle mesh from a 3D SDF."),
-  save: fn("Workflow", "save(filename, sdf, options = {}): Promise<Blob>", "Generates and optionally downloads an STL blob."),
-  sample_slice: fn("Workflow", "sample_slice(sdf, options = {}): SliceSample", "Samples a signed-distance slice into a numeric grid."),
-  show_slice: fn("Workflow", "show_slice(sdf, options = {}): HTMLCanvasElement", "Renders a signed-distance slice to a canvas."),
+  generate: fn("Workflow", "generate(sdf, options = {}): Promise<MeshResult>", "Builds a triangle mesh from a 3D SDF.", "function", GLOBAL_AND_METHOD, "shape.generate(options = {}): Promise<MeshResult>"),
+  save: fn("Workflow", "save(filename, sdf, options = {}): Promise<Blob>", "Generates and optionally downloads an STL blob.", "function", GLOBAL_AND_METHOD, "shape.save(filename, options = {}): Promise<Blob>"),
+  sample_slice: fn("Workflow", "sample_slice(sdf, options = {}): SliceSample", "Samples a signed-distance slice into a numeric grid.", "function", GLOBAL_AND_METHOD, "shape.sample_slice(options = {}): SliceSample"),
+  show_slice: fn("Workflow", "show_slice(sdf, options = {}): HTMLCanvasElement", "Renders a signed-distance slice to a canvas.", "function", GLOBAL_AND_METHOD, "shape.show_slice(options = {}): HTMLCanvasElement"),
 
   PI: fn("Math", "const PI", "Math.PI re-exported for SDF source snippets.", "constant"),
   ORIGIN: fn("Math", "const ORIGIN: [0, 0, 0]", "3D origin vector.", "constant"),

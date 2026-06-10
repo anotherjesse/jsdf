@@ -35,9 +35,14 @@ export function apiReferenceForWord(word: string): ApiReferenceEntry | null {
     kind,
     group: seed?.group ?? inferGroup(word, apiExports[word]),
     signature: seed?.signature ?? inferSignature(word, apiExports[word]),
+    methodSignature: seed?.methodSignature,
     description: seed?.description ?? inferDescription(word, apiExports[word]),
     completionScopes: seed?.completionScopes ?? defaultCompletionScopes(kind),
   };
+}
+
+export function apiReferenceSignatureForScope(entry: ApiReferenceEntry, scope: ApiCompletionScope): string {
+  return scope === "method" && entry.methodSignature ? entry.methodSignature : entry.signature;
 }
 
 function buildEntries(): ApiReferenceEntry[] {

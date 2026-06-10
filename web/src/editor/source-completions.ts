@@ -1,4 +1,4 @@
-import { apiCompletionEntriesForScope, type ApiReferenceEntry } from "./api-reference";
+import { apiCompletionEntriesForScope, apiReferenceSignatureForScope, type ApiReferenceEntry } from "./api-reference";
 import type { ApiCompletionScope } from "./api-reference-data";
 
 export interface SourceCompletionContext {
@@ -12,6 +12,7 @@ export interface SourceCompletionEntry {
   insertAsSnippet: boolean;
   insertText: string;
   matchRank: number;
+  signature: string;
   sortText: string;
 }
 
@@ -44,6 +45,7 @@ export function sourceCompletionEntries(context: SourceCompletionContext): Sourc
     entry,
     filterText: entry.name,
     matchRank: completionMatchRank(entry.name.toLowerCase(), token),
+    signature: apiReferenceSignatureForScope(entry, context.scope),
     ...sourceCompletionInsert(entry, context),
     sortText: sourceCompletionSortText(entry, token),
   }));
@@ -105,10 +107,11 @@ function sourceCompletionInsert(
 }
 
 function callableParamsForEntry(entry: ApiReferenceEntry, context: SourceCompletionContext): string[] | null {
-  const signatureParams = paramsFromSignature(entry.signature, entry.name);
+  const signature = apiReferenceSignatureForScope(entry, context.scope);
+  const signatureParams = paramsFromSignature(signature, entry.name);
   if (!signatureParams) return null;
   let params = signatureParams.map(parseCompletionParam).filter((param): param is CompletionParam => param != null);
-  if (context.scope === "method" && !entry.signature.includes(`.${entry.name}(`) && entry.completionScopes.includes("global")) {
+  if (context.scope === "method" && !signature.includes(`.${entry.name}(`) && entry.completionScopes.includes("global")) {
     params = params.slice(1);
   }
   return snippetParams(params);

@@ -4,9 +4,11 @@ import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import {
   apiReferenceForWord,
+  apiReferenceSignatureForScope,
   type ApiReferenceEntry,
 } from "./api-reference";
 import { apiSignatureHelpAt } from "./api-signature-help";
+import type { ApiCompletionScope } from "./api-reference-data";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { prettifySource } from "./prettify-source";
 import type { SourceDiagnostic } from "./source-diagnostics";
@@ -62,14 +64,14 @@ monaco.languages.registerCompletionItemProvider("javascript", {
     };
     const context = sourceCompletionContextAt(model.getValue(), position.lineNumber, position.column);
     return {
-      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, insertAsSnippet, insertText, matchRank, sortText }) => ({
+      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, insertAsSnippet, insertText, matchRank, signature, sortText }) => ({
         label: entry.name,
-        kind: completionKindForApiEntry(entry),
+        kind: completionKindForApiEntry(entry, context.scope),
         insertText,
         ...(insertAsSnippet ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet } : {}),
         filterText,
         range,
-        detail: entry.signature,
+        detail: signature,
         documentation: {
           value: `${entry.description}\n\n_${entry.group}_`,
         },
@@ -98,13 +100,14 @@ monaco.languages.registerHoverProvider("javascript", {
     if (!word) return null;
     const entry = apiReferenceForWord(word.word);
     if (!entry) return null;
-    if (entry.completionScopes.includes("ease") && wordQualifierBefore(model, position, word) !== "ease") {
+    const scope = wordCompletionScopeBefore(model, position, word);
+    if (!entry.completionScopes.includes(scope)) {
       return null;
     }
     return {
       range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
       contents: [
-        { value: `\`\`\`ts\n${entry.signature}\n\`\`\`` },
+        { value: `\`\`\`ts\n${apiReferenceSignatureForScope(entry, scope)}\n\`\`\`` },
         { value: `${entry.description}\n\n_${entry.group}_` },
       ],
     };
@@ -122,7 +125,7 @@ monaco.languages.registerSignatureHelpProvider("javascript", {
         activeSignature: 0,
         activeParameter: help.activeParameter,
         signatures: [{
-          label: help.entry.signature,
+          label: help.signature,
           documentation: {
             value: `${help.entry.description}\n\n_${help.entry.group}_`,
           },
@@ -1132,7 +1135,11 @@ function nextEditSessionId(prefix: string): string {
   return `${prefix}:${id}`;
 }
 
-function completionKindForApiEntry(entry: ApiReferenceEntry): monaco.languages.CompletionItemKind {
+function completionKindForApiEntry(
+  entry: ApiReferenceEntry,
+  scope: ApiCompletionScope = "global",
+): monaco.languages.CompletionItemKind {
+  if (scope === "method" && entry.completionScopes.includes("method")) return monaco.languages.CompletionItemKind.Method;
   if (entry.kind === "class") return monaco.languages.CompletionItemKind.Class;
   if (entry.kind === "constant") return monaco.languages.CompletionItemKind.Constant;
   if (entry.kind === "method") return monaco.languages.CompletionItemKind.Method;
@@ -1140,20 +1147,20 @@ function completionKindForApiEntry(entry: ApiReferenceEntry): monaco.languages.C
   return monaco.languages.CompletionItemKind.Function;
 }
 
-function wordQualifierBefore(
+function wordCompletionScopeBefore(
   model: monaco.editor.ITextModel,
   position: monaco.Position,
   word: monaco.editor.IWordAtPosition,
-): string | null {
+): ApiCompletionScope {
   const beforeWord = model.getLineContent(position.lineNumber).slice(0, word.startColumn - 1);
   let dotIndex = beforeWord.length;
   while (dotIndex > 0 && /\s/.test(beforeWord[dotIndex - 1])) dotIndex -= 1;
-  if (beforeWord[dotIndex - 1] !== ".") return null;
+  if (beforeWord[dotIndex - 1] !== ".") return "global";
   let end = dotIndex - 1;
   while (end > 0 && /\s/.test(beforeWord[end - 1])) end -= 1;
   let start = end;
   while (start > 0 && /[$\w]/.test(beforeWord[start - 1])) start -= 1;
-  return start < end ? beforeWord.slice(start, end) : null;
+  return beforeWord.slice(start, end) === "ease" ? "ease" : "method";
 }
 
 function clamp(value: number, min: number, max: number): number {
