@@ -437,13 +437,14 @@ function handleSourceLinkValueChange(
 
 function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLinkHoverOptions): void {
   if (!graphInspector) return;
+  const before = previewHoverSignature();
   if (!link) {
     hoveredNode = null;
     focusPreview = null;
     graphInspector.setHoveredSourceLink(null);
     graphInspector.setHoveredNodeById(null);
     if (soloPreview) handleSoloPreview(null);
-    else schedulePreview(0);
+    else schedulePreviewIfHoverChanged(before);
     const selected = graphInspector.getSelected();
     codeEditor?.setFocusedNode(selected?.id ?? null);
     if (selected) setEditorStatus(`${selected.kind} #${selected.id}`, "ok");
@@ -458,24 +459,25 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
 
   if (options.shiftKey && isHighlightableNode(node)) {
     focusPreview = graphInspector.buildSoloPreviewForNodeId(link.nodeId);
-    schedulePreview(0);
+    schedulePreviewIfHoverChanged(before);
     setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
     return;
   }
 
   focusPreview = null;
   if (soloPreview) handleSoloPreview(null);
-  else schedulePreview(0);
+  else schedulePreviewIfHoverChanged(before);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
 }
 
 function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
   if (!graphInspector) return;
+  const before = previewHoverSignature();
   hoveredNode = node;
   if (!node) {
     focusPreview = null;
     if (soloPreview) handleSoloPreview(null);
-    else schedulePreview(0);
+    else schedulePreviewIfHoverChanged(before);
     codeEditor?.setFocusedNode(selectedNode?.id ?? null);
     if (selectedNode) setEditorStatus(`${selectedNode.kind} #${selectedNode.id}`, "ok");
     return;
@@ -484,15 +486,27 @@ function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
   codeEditor?.setFocusedNode(node.id);
   if (options.shiftKey && isHighlightableNode(node)) {
     focusPreview = graphInspector.buildSoloPreviewForNodeId(node.id);
-    schedulePreview(0);
+    schedulePreviewIfHoverChanged(before);
     setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
     return;
   }
 
   focusPreview = null;
   if (soloPreview) handleSoloPreview(null);
-  else schedulePreview(0);
+  else schedulePreviewIfHoverChanged(before);
   setEditorStatus(`${node.kind} #${node.id}`, "ok");
+}
+
+function previewHoverSignature(): string {
+  return [
+    hoveredNode?.id ?? "",
+    focusPreview?.key ?? "",
+    soloPreview?.key ?? "",
+  ].join(":");
+}
+
+function schedulePreviewIfHoverChanged(before: string): void {
+  if (previewHoverSignature() !== before) schedulePreview(0);
 }
 
 function revealGraphSource(link: GraphSourceLink): void {
