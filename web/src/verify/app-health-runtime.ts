@@ -15,6 +15,7 @@ export interface AppHealthRuntimeVerification {
     graphActionIcons: readonly string[];
     codeEditor: boolean;
     graphInspector: boolean;
+    graphFilterShortcut: string;
     status: string;
     selectionFocusLabel: string;
     selectionFocusShortcut: string;
@@ -45,6 +46,14 @@ export interface AppHealthRuntimeVerification {
     preventedDefault: boolean;
     editablePreventedDefault: boolean;
     status: string;
+  };
+  graphFilterShortcut: {
+    shortcut: string;
+    slashPreventedDefault: boolean;
+    commandPreventedDefault: boolean;
+    editablePreventedDefault: boolean;
+    slashFocus: string;
+    commandFocus: string;
   };
   editorModeShortcutSwitch: {
     codeShortcut: string;
@@ -108,6 +117,7 @@ export async function runAppHealthRuntimeVerification(
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
   const sourceHintsShortcutSwitch = await verifySourceHintsShortcutSwitch(frame, errors);
   const prettifyShortcut = await verifyPrettifyShortcut(frame, errors);
+  const graphFilterShortcut = await verifyGraphFilterShortcut(frame, errors);
   const selectionFocusButton = await verifySelectionFocusButton(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
@@ -129,6 +139,7 @@ export async function runAppHealthRuntimeVerification(
     sourceDialogFocus,
     sourceHintsShortcutSwitch,
     prettifyShortcut,
+    graphFilterShortcut,
     editorModeShortcutSwitch,
     selectionFocusButton,
     graphCodeReveal,
@@ -155,6 +166,9 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
   verifyWorkspaceButtonShortcuts("health", health.workspaceButtonShortcuts, errors);
   if (health.prettifyShortcut !== "Alt+Shift+F") errors.push(`health prettify shortcut rendered ${health.prettifyShortcut || "nothing"}`);
+  if (health.graphFilterShortcut !== "Control+F Meta+F /") {
+    errors.push(`health graph filter shortcut rendered ${health.graphFilterShortcut || "nothing"}`);
+  }
   verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
   if (!health.selectionFocusVisible) errors.push("selection focus button was not visible in app health");
   if (!health.selectionFocusLabel.includes("#")) errors.push(`selection focus label rendered ${health.selectionFocusLabel || "nothing"}`);
@@ -177,6 +191,9 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (dom.title !== "sdf browser") errors.push(`app frame title was ${dom.title}`);
   if (!dom.codeEditor) errors.push("app frame had no code editor element");
   if (!dom.graphInspector) errors.push("app frame had no graph inspector element");
+  if (dom.graphFilterShortcut !== "Control+F Meta+F /") {
+    errors.push(`app frame DOM graph filter shortcut rendered ${dom.graphFilterShortcut || "nothing"}`);
+  }
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
   if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
   if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
@@ -291,6 +308,7 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
       .flatMap((icon) => [...icon.classList]),
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
+    graphFilterShortcut: frameDocument?.querySelector(".graph-filter-input")?.getAttribute("aria-keyshortcuts") ?? "",
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",
     selectionFocusLabel: frameDocument?.querySelector("#selectionFocusButton")?.textContent?.trim() ?? "",
     selectionFocusShortcut: frameDocument?.querySelector("#selectionFocusButton")?.getAttribute("aria-keyshortcuts") ?? "",
@@ -533,6 +551,84 @@ async function verifyPrettifyShortcut(
     preventedDefault,
     editablePreventedDefault,
     status: statusText,
+  };
+}
+
+async function verifyGraphFilterShortcut(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["graphFilterShortcut"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    shortcut: "",
+    slashPreventedDefault: false,
+    commandPreventedDefault: false,
+    editablePreventedDefault: false,
+    slashFocus: "",
+    commandFocus: "",
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for graph filter shortcut verification");
+    return empty;
+  }
+
+  const graphMode = frameDocument.querySelector<HTMLButtonElement>("#graphModeButton");
+  const filterInput = frameDocument.querySelector<HTMLInputElement>(".graph-filter-input");
+  const documentName = frameDocument.querySelector<HTMLInputElement>("#documentNameInput");
+  if (!graphMode || !filterInput || !documentName) {
+    errors.push("app frame missing graph filter shortcut controls");
+    return empty;
+  }
+
+  graphMode.click();
+  await settleFrame(frameWindow);
+
+  const shortcut = filterInput.getAttribute("aria-keyshortcuts") ?? "";
+  const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  const slashPreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "/",
+    code: "Slash",
+    bubbles: true,
+    cancelable: true,
+  }));
+  await settleFrame(frameWindow);
+  const slashFocus = frameDocument.activeElement === filterInput ? "graph-filter-input" : activeElementToken(frameDocument);
+
+  filterInput.blur();
+  const commandPreventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "f",
+    code: "KeyF",
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+  await settleFrame(frameWindow);
+  const commandFocus = frameDocument.activeElement === filterInput ? "graph-filter-input" : activeElementToken(frameDocument);
+
+  documentName.focus();
+  const editablePreventedDefault = !documentName.dispatchEvent(new KeyboardEventCtor("keydown", {
+    key: "f",
+    code: "KeyF",
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  }));
+
+  if (shortcut !== "Control+F Meta+F /") errors.push(`graph filter advertised shortcut as ${shortcut || "nothing"}`);
+  if (!slashPreventedDefault) errors.push("graph filter slash shortcut did not prevent the browser default");
+  if (!commandPreventedDefault) errors.push("graph filter command shortcut did not prevent the browser default");
+  if (editablePreventedDefault) errors.push("graph filter shortcut intercepted an editable text field");
+  if (slashFocus !== "graph-filter-input") errors.push(`graph filter slash shortcut focused ${slashFocus || "nothing"}`);
+  if (commandFocus !== "graph-filter-input") errors.push(`graph filter command shortcut focused ${commandFocus || "nothing"}`);
+
+  return {
+    shortcut,
+    slashPreventedDefault,
+    commandPreventedDefault,
+    editablePreventedDefault,
+    slashFocus,
+    commandFocus,
   };
 }
 

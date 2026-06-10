@@ -77,8 +77,10 @@ export class GraphInspector {
     root.replaceChildren();
     this.toolbar.className = "graph-toolbar";
     this.filterInput.type = "search";
+    this.filterInput.className = "graph-filter-input";
     this.filterInput.placeholder = "Filter";
     this.filterInput.setAttribute("aria-label", "Filter graph nodes");
+    this.filterInput.setAttribute("aria-keyshortcuts", "Control+F Meta+F /");
     this.previousMatchButton.type = "button";
     this.previousMatchButton.className = "graph-match-nav";
     this.previousMatchButton.textContent = "Prev";
@@ -254,6 +256,11 @@ export class GraphInspector {
     this.revealSelectedAfterRender = true;
     this.focusSelectedAfterRender = Boolean(options.focus);
     this.render();
+  }
+
+  focusFilter(options: { select?: boolean } = {}): void {
+    this.filterInput.focus({ preventScroll: true });
+    if (options.select) this.filterInput.select();
   }
 
   buildSoloPreviewForNodeId(id: number): SoloPreview | null {

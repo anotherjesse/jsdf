@@ -96,6 +96,7 @@ type PreviewProfile = SavedSourcePreview;
 const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
 const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
+const GRAPH_FILTER_SHORTCUTS = "Control+F Meta+F /";
 const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
 const SOURCE_PRETTIFY_SHORTCUT = "Alt+Shift+F";
 const SELECTED_TARGET_SHORTCUTS = "Control+Alt+Enter Meta+Alt+Enter";
@@ -807,6 +808,12 @@ function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
     return;
   }
 
+  if (editorView === "graph" && isGraphFilterShortcut(event) && !isEditableEventTarget(event.target)) {
+    event.preventDefault();
+    if (!event.repeat) graphInspector?.focusFilter({ select: true });
+    return;
+  }
+
   if (isSourceHintsShortcut(event)) {
     event.preventDefault();
     if (!event.repeat) toggleGraphHints();
@@ -845,6 +852,13 @@ function isLoadShortcut(event: KeyboardEvent): boolean {
 
 function isSaveShortcut(event: KeyboardEvent): boolean {
   return isCommandShortcut(event, "s");
+}
+
+function isGraphFilterShortcut(event: KeyboardEvent): boolean {
+  if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key === "/") {
+    return true;
+  }
+  return isCommandShortcut(event, "f");
 }
 
 function editorModeShortcut(event: KeyboardEvent): EditorView | null {
@@ -1467,6 +1481,7 @@ function appHealthDiagnostics() {
     workspaceButtons: workspaceButtonLabels(),
     workspaceButtonShortcuts: workspaceButtonShortcuts(),
     prettifyShortcut: SOURCE_PRETTIFY_SHORTCUT,
+    graphFilterShortcut: GRAPH_FILTER_SHORTCUTS,
     editorModeShortcuts: editorModeButtonShortcuts(),
     graphActionButtons: graphActionButtonLabels(),
     graphActionShortcuts: graphActionButtonShortcuts(),
