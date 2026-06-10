@@ -33,8 +33,11 @@ export interface ApiRuntimeVerification {
     saveBytes: number;
     methodSaveBytes: number;
     sliceDistinct: number;
+    methodSampleWidth: number;
+    methodSampleHeight: number;
     methodSliceDistinct: number;
     sliceAxes: string;
+    methodSampleAxes: string;
   };
   examples: {
     total: number;
@@ -73,7 +76,7 @@ const expected3Methods = [
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
   "translate", "scale", "rotate", "rotate_to", "orient", "circular_array", "elongate", "twist", "bend",
   "bend_linear", "bend_radial", "transition_linear", "transition_radial", "wrap_around", "slice",
-  "generate", "save", "show_slice",
+  "generate", "save", "sample_slice", "show_slice",
 ];
 
 const expectedNodeKinds = [
@@ -358,6 +361,13 @@ async function verifyWorkflow(errors: string[]): Promise<ApiRuntimeVerification[
   }
   if (methodSliceDistinct < 2) errors.push(`SDF3.show_slice rendered too few distinct colors: ${methodSliceDistinct}`);
 
+  const methodSample = sdf.sample_slice({ z: 0, w: 34, h: 30, bounds });
+  if (methodSample.width !== 34 || methodSample.height !== 30) {
+    errors.push(`SDF3.sample_slice dimensions mismatch: ${methodSample.width}x${methodSample.height}`);
+  }
+  if (methodSample.axes !== "YX") errors.push(`SDF3.sample_slice axes mismatch: ${methodSample.axes}`);
+  verifyFiniteSlice(methodSample.values, errors);
+
   const mesh = await api.generate(sdf, {
     bounds,
     samples: 18 ** 3,
@@ -395,8 +405,11 @@ async function verifyWorkflow(errors: string[]): Promise<ApiRuntimeVerification[
     saveBytes: saveBlob.size,
     methodSaveBytes: methodSaveBlob.size,
     sliceDistinct,
+    methodSampleWidth: methodSample.width,
+    methodSampleHeight: methodSample.height,
     methodSliceDistinct,
     sliceAxes: slice.axes,
+    methodSampleAxes: methodSample.axes,
   };
 }
 

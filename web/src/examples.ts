@@ -261,5 +261,5 @@ export const unsupportedPythonApi = intentionallyUnsupported;
 export const supportedSummary = {
   moduleExports: 47,
   sdf2Methods: 17,
-  sdf3Methods: 27,
+  sdf3Methods: 28,
 };

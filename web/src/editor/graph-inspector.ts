@@ -258,7 +258,7 @@ export class GraphInspector {
   revealSelected(options: { focus?: boolean } = {}): void {
     if (!this.selected) return;
     this.revealSelectedAfterRender = true;
-    this.focusSelectedAfterRender = Boolean(options.focus);
+    this.focusSelectedAfterRender = this.focusSelectedAfterRender || Boolean(options.focus);
     this.render();
   }
 
@@ -740,15 +740,19 @@ export class GraphInspector {
     this.revealSelectedAfterRender = false;
     const focus = this.focusSelectedAfterRender;
     this.focusSelectedAfterRender = false;
-    const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
-    const focusTarget = () => target?.focus({ preventScroll: true });
+    const selectedId = this.selected.id;
+    const selectedTarget = () => this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${selectedId}"]`);
+    const focusTarget = () => selectedTarget()?.focus({ preventScroll: true });
     if (focus) focusTarget();
     window.requestAnimationFrame(() => {
+      const target = selectedTarget();
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
       if (!focus) return;
       focusTarget();
+      window.requestAnimationFrame(focusTarget);
       window.setTimeout(focusTarget, 0);
       window.setTimeout(focusTarget, 40);
+      window.setTimeout(focusTarget, 100);
     });
   }
 
