@@ -3,6 +3,7 @@ import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
+import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
 import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
 import { GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
@@ -131,6 +132,7 @@ let cleanPreviewSnapshot = "";
 let hasUnsavedChanges = false;
 let draftPersistenceEnabled = false;
 const graphHistory = new GraphEditHistory();
+const appHealthMonitor = installAppHealthMonitor();
 
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
@@ -143,6 +145,7 @@ boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
 cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
 updateSaveState();
 renderLoadDialog();
+exposeAppHealthDiagnostics(appHealthDiagnostics);
 
 stepsInput.addEventListener("input", () => {
   stepsOutput.value = stepsInput.value;
@@ -1238,6 +1241,36 @@ function setEditorStatus(message: string, state: EditorStatusState): void {
   if (state === "idle") editorStatus.removeAttribute("data-state");
   else editorStatus.dataset.state = state;
   editorStatus.title = message;
+}
+
+function appHealthDiagnostics() {
+  return {
+    ready: Boolean(codeEditor && graphInspector && activeSdf && rayRenderer && meshRenderer),
+    editorReady: Boolean(codeEditor),
+    graphReady: Boolean(graphInspector),
+    activeSdfReady: Boolean(activeSdf),
+    dirty: hasUnsavedChanges,
+    status: editorStatus.textContent ?? "",
+    viewMode,
+    editorView,
+    previewLayout,
+    meshAlgorithm,
+    sourceLinks: currentSourceLinks.length,
+    selectedNode: selectedNode ? `${selectedNode.kind} #${selectedNode.id}` : null,
+    selectedSourceLink: selectedSourceLink
+      ? `${selectedSourceLink.nodeKind} #${selectedSourceLink.nodeId} ${selectedSourceLink.label}`
+      : null,
+    hiddenNodes: hiddenNodeIds.size,
+    meshTriangles: mesh ? mesh.triangles.length : null,
+    meshBuildPending: Boolean(meshBuildPromise),
+    hasPrettifyButton: Boolean(prettifySourceButton),
+    hasLoadButton: Boolean(loadSourceButton),
+    hasSaveButton: Boolean(saveSourceButton),
+    workspaceButtons: Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
+      .map((button) => button.textContent?.trim() ?? ""),
+    recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
+    lastRecursiveDecorationMessage: appHealthMonitor.lastRecursiveDecorationMessage,
+  };
 }
 
 function currentBounds(): Bounds3 {
