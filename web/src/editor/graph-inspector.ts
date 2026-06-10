@@ -3,6 +3,7 @@ import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
+import { isCountParamLabel, isNonNegativeParamLabel, scrubNumericParamValue } from "./scrub-values";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
 export type ParamPath = Array<string | number>;
@@ -995,6 +996,8 @@ export class GraphInspector {
     const name = document.createElement("span");
     name.className = "param-name";
     name.textContent = field.label;
+    name.title = "Drag horizontally to scrub";
+    name.setAttribute("aria-label", `${field.label} value`);
     nameGroup.append(name);
 
     if (sourceLink) {
@@ -1074,7 +1077,7 @@ export class GraphInspector {
     attachScrubber(
       name,
       input,
-      field.value,
+      field,
       (value) => update(value, { clampToRange: true, recenterRange: false, editSessionId }),
       () => {
         range.value = formatValue(Number(input.value));
@@ -1284,15 +1287,11 @@ function rangeBoundsFor(field: NumericParam, value: number): NumericRange {
 }
 
 function isCountParam(label: string): boolean {
-  return label === "count" || label.endsWith(".count");
+  return isCountParamLabel(label);
 }
 
 function isNonNegativeParam(label: string): boolean {
-  if (label.startsWith("entries[") && label.endsWith(".k")) return true;
-  return /(^|\.)(radius|r|r0|r1|thickness|h|padding|scaledistance)$/.test(label)
-    || label.startsWith("size")
-    || label.startsWith("factor")
-    || label.startsWith("spacing");
+  return isNonNegativeParamLabel(label);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1310,13 +1309,13 @@ function stepFor(field: NumericParam): number {
 function attachScrubber(
   label: HTMLElement,
   input: HTMLInputElement,
-  initialValue: number,
+  field: NumericParam,
   update: (value: number) => void,
   finish: () => void,
   begin: () => void = () => {},
 ): void {
   let startX = 0;
-  let startValue = initialValue;
+  let startValue = field.value;
   let dragging = false;
 
   label.addEventListener("pointerdown", (event) => {
@@ -1325,7 +1324,7 @@ function attachScrubber(
     begin();
     startX = event.clientX;
     const value = Number(input.value);
-    startValue = Number.isFinite(value) ? value : initialValue;
+    startValue = Number.isFinite(value) ? value : field.value;
     label.setPointerCapture(event.pointerId);
     label.classList.add("scrubbing");
   });
@@ -1333,8 +1332,7 @@ function attachScrubber(
   label.addEventListener("pointermove", (event) => {
     if (!dragging) return;
     const delta = event.clientX - startX;
-    const step = event.shiftKey ? 0.01 : event.altKey ? 0.001 : 0.05;
-    update(startValue + delta * step);
+    update(scrubNumericParamValue(field.label, startValue, delta, event));
   });
 
   label.addEventListener("pointerup", (event) => {

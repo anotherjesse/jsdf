@@ -3,6 +3,7 @@ import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphEditHistory } from "../editor/graph-history";
 import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
+import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";
 import type { SavedSourceDocument } from "../editor/workspace-storage";
 import { examples } from "../examples";
@@ -22,6 +23,11 @@ export interface GraphRuntimeVerification {
   soloLabels: string[];
   sourcePatch: string;
   vectorSourcePatches: string[];
+  scrubValues: {
+    count: number;
+    smallRadius: number;
+    fineRadius: number;
+  };
   history: {
     sameSessionCount: number;
     separateSessionCount: number;
@@ -88,6 +94,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   }
 
   const history = verifyHistoryCoalescing(errors);
+  const scrubValues = verifyScrubValues(errors);
   const sourceDialog = verifySourceDialog(errors);
 
   return {
@@ -105,6 +112,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     soloLabels,
     sourcePatch: verifySourcePatch(lastEdit, sdf, errors),
     vectorSourcePatches: verifyVectorSourcePatches(errors),
+    scrubValues,
     history,
     sourceDialog,
     errors,
@@ -440,6 +448,22 @@ function verifyDirectAxisExpansion(errors: string[]): string | null {
 function vectorParam(node: Node | null, key: string): number[] | null {
   const value = node?.params[key];
   return Array.isArray(value) && value.every((item) => typeof item === "number") ? value : null;
+}
+
+function verifyScrubValues(errors: string[]): GraphRuntimeVerification["scrubValues"] {
+  const count = scrubNumericParamValue("count", 8, 0.49, { altKey: false, shiftKey: false });
+  const smallRadius = scrubNumericParamValue("radius", 0.2, 20, { altKey: false, shiftKey: false });
+  const fineRadius = scrubNumericParamValue("radius", 0.2, 20, { altKey: true, shiftKey: false });
+
+  if (count !== 8) errors.push(`count scrub should stay integral near threshold: ${count}`);
+  if (!closeTo(smallRadius, 0.3)) errors.push(`small radius scrub value ${smallRadius} !== 0.3`);
+  if (!closeTo(fineRadius, 0.21)) errors.push(`fine radius scrub value ${fineRadius} !== 0.21`);
+
+  return { count, smallRadius, fineRadius };
+}
+
+function closeTo(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-9;
 }
 
 function graphEdit(
