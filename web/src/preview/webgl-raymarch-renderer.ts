@@ -16,6 +16,9 @@ export class WebGLRaymarchRenderer {
   private center = [0, 0, 0];
   private radius = 1;
   private steps = 180;
+  private programBuilds = 0;
+  private highlightNodeId = -1;
+  private highlightMode: HighlightMode = "mark";
   private active = true;
   private layout: PreviewLayout = "single";
 
@@ -48,12 +51,15 @@ export class WebGLRaymarchRenderer {
     highlightMode: HighlightMode = "mark",
   ): void {
     const sceneSource = compileGLSLScene(sdf).source;
-    const fragment = fragmentShader(sceneSource, highlightNode, highlightMode);
+    const fragment = fragmentShader(sceneSource, sdf);
     if (fragment !== this.currentSource) {
       this.currentSource = fragment;
       this.program = createProgram(this.gl, vertexShader, fragment);
+      this.programBuilds += 1;
     }
     this.steps = steps;
+    this.highlightNodeId = highlightNode?.id ?? -1;
+    this.highlightMode = highlightNode ? highlightMode : "mark";
     this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
     this.canvas.dataset.previewLayout = this.layout;
@@ -79,6 +85,8 @@ export class WebGLRaymarchRenderer {
     gl.uniform1f(gl.getUniformLocation(this.program, "u_radius"), this.radius);
     gl.uniform1f(gl.getUniformLocation(this.program, "u_viewScale"), this.layout === "quad" ? 0.82 : 0.62);
     gl.uniform1i(gl.getUniformLocation(this.program, "u_steps"), this.steps);
+    gl.uniform1i(gl.getUniformLocation(this.program, "u_highlightNode"), this.highlightNodeId);
+    gl.uniform1i(gl.getUniformLocation(this.program, "u_focusHighlight"), this.highlightMode === "focus" && this.highlightNodeId >= 0 ? 1 : 0);
     for (const panel of panels) {
       this.drawPanel(panel);
     }
@@ -157,6 +165,7 @@ export class WebGLRaymarchRenderer {
     this.canvas.dataset.previewMax = String(max);
     this.canvas.dataset.previewDistinct = String(distinct.size);
     this.canvas.dataset.previewSteps = String(this.steps);
+    this.canvas.dataset.programBuilds = String(this.programBuilds);
   }
 }
 
@@ -199,12 +208,9 @@ void main() {
 }
 `;
 
-function fragmentShader(sceneSource: string, highlightNode: Node | null, highlightMode: HighlightMode): string {
+function fragmentShader(sceneSource: string, sdf: SDF3): string {
   return `#version 300 es
 ${sceneSource}
-${selectedSceneFunction(highlightNode)}
-
-const bool SDF_FOCUS_HIGHLIGHT = ${highlightMode === "focus" && highlightNode ? "true" : "false"};
 
 uniform vec2 u_resolution;
 uniform vec2 u_viewOrigin;
@@ -213,6 +219,10 @@ uniform vec3 u_target;
 uniform float u_radius;
 uniform float u_viewScale;
 uniform int u_steps;
+uniform int u_highlightNode;
+uniform int u_focusHighlight;
+
+${selectedSceneFunction(sdf.node)}
 
 out vec4 outColor;
 
@@ -294,7 +304,7 @@ void main() {
     + vec3(0.95, 0.63, 0.16) * soft * 0.16
     + vec3(0.55, 0.72, 0.85) * rim * 0.32;
   float selectedBand = 1.0 - smoothstep(eps * 3.0, eps * 14.0, abs(selectedScene(p)));
-  if (SDF_FOCUS_HIGHLIGHT) {
+  if (u_focusHighlight == 1) {
     vec3 faded = mix(bg, color, 0.18);
     color = mix(faded, color, selectedBand);
     color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.34);
@@ -307,9 +317,33 @@ void main() {
 `;
 }
 
-function selectedSceneFunction(node: Node | null): string {
-  if (!node) return "float selectedScene(vec3 p) { return 1000000000.0; }";
-  const name = fnName(node);
-  if (node.dim === 2) return `float selectedScene(vec3 p) { return ${name}(p.xy); }`;
-  return `float selectedScene(vec3 p) { return ${name}(p); }`;
+function selectedSceneFunction(root: Node): string {
+  const lines = [
+    "float selectedScene(vec3 p) {",
+    "  if (u_highlightNode < 0) { return 1000000000.0; }",
+  ];
+
+  for (const node of collectNodes(root)) {
+    const call = node.dim === 2 ? `${fnName(node)}(p.xy)` : `${fnName(node)}(p)`;
+    lines.push(`  if (u_highlightNode == ${node.id}) { return ${call}; }`);
+  }
+
+  lines.push("  return 1000000000.0;");
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function collectNodes(root: Node): Node[] {
+  const out: Node[] = [];
+  const seen = new Set<number>();
+
+  const visit = (node: Node) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    out.push(node);
+    for (const child of node.children) visit(child.node);
+  };
+
+  visit(root);
+  return out;
 }
