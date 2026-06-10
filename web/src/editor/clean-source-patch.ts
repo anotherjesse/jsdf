@@ -12,6 +12,7 @@ export interface GraphSourceEdit {
 export interface GraphSourceLink extends GraphSourceEdit {
   start: number;
   end: number;
+  scrubbable?: boolean;
 }
 
 interface CallPatch {
@@ -232,19 +233,36 @@ export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourc
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const patch = CALL_PATCHES[edit.nodeKind]?.[edit.label];
   if (!patch) return null;
-  const ordinal = ordinalForEdit(sdf.node, edit);
+  const nodes = patchableNodes(sdf.node, edit.nodeKind, edit.label);
+  const ordinal = nodes.findIndex((node) => node.id === edit.nodeId);
   if (ordinal < 0) return null;
-  return patchNthCallArgument(source, patch, ordinal, value);
+  return patchNthCallArgument(source, patch, ordinal, value, nodes[ordinal], edit.label);
 }
 
 export function findGraphSourceLinks(source: string, sdf: SDF3): GraphSourceLink[] {
   const links: GraphSourceLink[] = [];
+  const scalarVectorLinks = new Set<string>();
   for (const [nodeKind, labels] of Object.entries(CALL_PATCHES)) {
     for (const [label, patch] of Object.entries(labels)) {
       const nodes = patchableNodes(sdf.node, nodeKind, label);
       nodes.forEach((node, ordinal) => {
         const range = findNthCallArgumentRange(source, patch, ordinal);
         if (!range) return;
+        if (range.scalarVector) {
+          const key = `${node.id}:${range.start}:${range.end}`;
+          if (scalarVectorLinks.has(key)) return;
+          scalarVectorLinks.add(key);
+          links.push({
+            nodeId: node.id,
+            nodeKind,
+            path: vectorBasePath(label),
+            label: vectorBaseLabel(label),
+            start: range.start,
+            end: range.end,
+            scrubbable: false,
+          });
+          return;
+        }
         links.push({
           nodeId: node.id,
           nodeKind,
@@ -278,11 +296,6 @@ function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, val
   const ordinal = orientOrdinalForEdit(sdf.node, edit);
   if (ordinal < 0) return null;
   return patchNthOrientArgument(source, ordinal, axis);
-}
-
-function ordinalForEdit(root: Node, edit: GraphSourceEdit): number {
-  const nodes = patchableNodes(root, edit.nodeKind, edit.label);
-  return nodes.findIndex((node) => node.id === edit.nodeId);
 }
 
 function patchableNodes(root: Node, nodeKind: string, label: string): Node[] {
@@ -341,9 +354,36 @@ function labelToPath(label: string): ParamPath {
   return path;
 }
 
-function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number): string | null {
+function vectorBaseLabel(label: string): string {
+  return label.replace(/\[\d+\]$/, "");
+}
+
+function vectorBasePath(label: string): ParamPath {
+  const path = labelToPath(label);
+  return typeof path.at(-1) === "number" ? path.slice(0, -1) : path;
+}
+
+function vectorValueForLabel(node: Node, label: string): number[] | null {
+  const path = vectorBasePath(label);
+  let value: unknown = node.params;
+  for (const part of path) {
+    value = Array.isArray(value)
+      ? value[part as number]
+      : (value as Record<string, unknown> | undefined)?.[part as string];
+  }
+  if (!Array.isArray(value)) return null;
+  const vector = value.map(Number);
+  return vector.every(Number.isFinite) ? vector : null;
+}
+
+function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number, value: number, node: Node, label: string): string | null {
   const range = findNthCallArgumentRange(source, patch, ordinal);
   if (!range) return null;
+  if (range.scalarVector) {
+    const vector = vectorValueForLabel(node, label);
+    if (!vector) return null;
+    return replaceRange(source, range.start, range.end, `[${vector.map(formatNumber).join(", ")}]`);
+  }
   return replaceRange(source, range.start, range.end, formatNumberLike(source.slice(range.start, range.end), value));
 }
 
@@ -377,6 +417,7 @@ function findNthOrientArgumentRange(source: string, ordinal: number): SourceRang
 interface SourceRange {
   start: number;
   end: number;
+  scalarVector?: boolean;
 }
 
 interface CallArg {
@@ -460,7 +501,7 @@ function splitArgs(source: string, start: number, end: number): CallArg[] {
 }
 
 function findVectorElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
-  return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element);
+  return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element) ?? findScalarVectorRange(source, arg);
 }
 
 function findArrayElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
@@ -483,6 +524,11 @@ function findAxisScaledElementRange(arg: CallArg, element: number): SourceRange 
   const start = arg.start + match[1].length;
   const end = start + match[3].length;
   return { start, end };
+}
+
+function findScalarVectorRange(source: string, arg: CallArg): SourceRange | null {
+  if (!isNumericLiteral(arg.text)) return null;
+  return { ...trimRange(source, arg.start, arg.end), scalarVector: true };
 }
 
 function findAxisExpressionRange(arg: CallArg): SourceRange | null {

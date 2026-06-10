@@ -151,7 +151,7 @@ export function createCodeEditor(
     event.event.stopPropagation();
     onSourceLinkSelect(link);
 
-    const startValue = readSourceLinkNumber(editor.getValue(), link);
+    const startValue = isScrubbableSourceLink(link) ? readSourceLinkNumber(editor.getValue(), link) : null;
     if (startValue == null) return;
     activeScrub = {
       link,
@@ -210,7 +210,7 @@ export function createCodeEditor(
         .map((link) => {
           const start = model.getPositionAt(link.start);
           const end = model.getPositionAt(link.end);
-          const isNumber = readSourceLinkNumber(editor.getValue(), link) != null;
+          const isNumber = isScrubbableSourceLink(link) && readSourceLinkNumber(editor.getValue(), link) != null;
           return {
             range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
             options: {
@@ -254,6 +254,10 @@ interface ActiveSourceScrub {
   startValue: number;
   lastValue: number;
   dragging: boolean;
+}
+
+function isScrubbableSourceLink(link: GraphSourceLink): boolean {
+  return link.scrubbable !== false;
 }
 
 let completionNames: string[] | null = null;
