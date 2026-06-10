@@ -20,6 +20,8 @@ export interface PreviewRuntimeVerification {
     focusNode: string;
     markMode: string;
     focusMode: string;
+    markStyle: string;
+    focusStyle: string;
     markProgramBuilds: number;
     focusProgramBuilds: number;
   };
@@ -35,6 +37,8 @@ export interface HighlightDiagnostics {
   focusNode: string;
   markMode: string;
   focusMode: string;
+  markStyle: string;
+  focusStyle: string;
 }
 
 export interface CanvasDiagnostics {
@@ -47,7 +51,9 @@ export interface CanvasDiagnostics {
   distinct: number;
   programBuilds: number;
   highlightNode: string;
+  highlightKind: string;
   highlightMode: string;
+  highlightStyle: string;
 }
 
 const bounds: [number[], number[]] = [[-1.45, -1.45, -1.45], [1.45, 1.45, 1.45]];
@@ -95,6 +101,9 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
     errors.push(`mesh mark highlight node mismatch: ${mesh.highlightNode} !== ${meshMarkNode.id}`);
   }
   if (meshMarkNode && mesh.highlightMode !== "mark") errors.push(`mesh mark highlight mode mismatch: ${mesh.highlightMode}`);
+  if (meshMarkNode && mesh.highlightStyle !== "outline") {
+    errors.push(`mesh mark highlight style mismatch: ${mesh.highlightStyle}`);
+  }
 
   meshRenderer.setHighlight(sdf, meshFocusNode, "focus");
   const meshFocus = diagnostics(canvas);
@@ -102,6 +111,9 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
     errors.push(`mesh focus highlight node mismatch: ${meshFocus.highlightNode} !== ${meshFocusNode.id}`);
   }
   if (meshFocusNode && meshFocus.highlightMode !== "focus") errors.push(`mesh focus highlight mode mismatch: ${meshFocus.highlightMode}`);
+  if (meshFocusNode && meshFocus.highlightStyle !== "focus-fade") {
+    errors.push(`mesh focus highlight style mismatch: ${meshFocus.highlightStyle}`);
+  }
   if (meshFocus.programBuilds !== mesh.programBuilds) {
     errors.push(`mesh focus highlight rebuilt shader program: ${meshFocus.programBuilds} !== ${mesh.programBuilds}`);
   }
@@ -121,6 +133,8 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
       focusNode: meshFocus.highlightNode,
       markMode: mesh.highlightMode,
       focusMode: meshFocus.highlightMode,
+      markStyle: mesh.highlightStyle,
+      focusStyle: meshFocus.highlightStyle,
       markProgramBuilds: mesh.programBuilds,
       focusProgramBuilds: meshFocus.programBuilds,
     },
@@ -147,6 +161,8 @@ function verifyHighlightUniforms(
       focusNode: "",
       markMode: "",
       focusMode: "",
+      markStyle: "",
+      focusStyle: "",
     };
   }
 
@@ -167,10 +183,12 @@ function verifyHighlightUniforms(
     errors.push(`mark highlight node mismatch: ${mark.highlightNode} !== ${markNode.id}`);
   }
   if (mark.highlightMode !== "mark") errors.push(`mark highlight mode mismatch: ${mark.highlightMode}`);
+  if (mark.highlightStyle !== "outline") errors.push(`mark highlight style mismatch: ${mark.highlightStyle}`);
   if (focus.highlightNode !== String(focusNode.id)) {
     errors.push(`focus highlight node mismatch: ${focus.highlightNode} !== ${focusNode.id}`);
   }
   if (focus.highlightMode !== "focus") errors.push(`focus highlight mode mismatch: ${focus.highlightMode}`);
+  if (focus.highlightStyle !== "focus-fade") errors.push(`focus highlight style mismatch: ${focus.highlightStyle}`);
 
   return {
     initialProgramBuilds,
@@ -180,6 +198,8 @@ function verifyHighlightUniforms(
     focusNode: focus.highlightNode,
     markMode: mark.highlightMode,
     focusMode: focus.highlightMode,
+    markStyle: mark.highlightStyle,
+    focusStyle: focus.highlightStyle,
   };
 }
 
@@ -194,7 +214,9 @@ function diagnostics(canvas: HTMLCanvasElement): CanvasDiagnostics {
     distinct: Number(canvas.dataset.previewDistinct ?? 0),
     programBuilds: Number(canvas.dataset.programBuilds ?? 0),
     highlightNode: canvas.dataset.highlightNode ?? "",
+    highlightKind: canvas.dataset.highlightKind ?? "",
     highlightMode: canvas.dataset.highlightMode ?? "",
+    highlightStyle: canvas.dataset.highlightStyle ?? "",
   };
 }
 

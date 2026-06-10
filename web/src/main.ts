@@ -538,6 +538,11 @@ function updateMeshHighlight(): void {
   if (!sdf) return;
   const highlight = highlightForRender(null);
   meshRenderer?.setHighlight(sdf, highlight.node, highlight.mode);
+  if (viewMode === "mesh") overlay.textContent = focusPreview ? previewOverlayText("Focus", focusPreview) : "";
+}
+
+function previewOverlayText(prefix: "Focus" | "Solo", preview: SoloPreview): string {
+  return `${prefix}: ${preview.label}${preview.preservedWrappers ? ` (${preview.preservedWrappers} context)` : ""}`;
 }
 
 function revealGraphSource(link: GraphSourceLink): void {
@@ -1016,7 +1021,9 @@ async function renderCurrent(): Promise<void> {
     rayRenderer.render(sdf, currentBounds(), steps, highlight.node, highlight.mode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
     if (preview) {
-      overlay.textContent = `Solo: ${preview.label}${preview.preservedWrappers ? ` (${preview.preservedWrappers} context)` : ""}`;
+      overlay.textContent = previewOverlayText("Solo", preview);
+    } else if (focusPreview) {
+      overlay.textContent = previewOverlayText("Focus", focusPreview);
     } else if (viewMode === "shader") {
       overlay.textContent = "";
     }

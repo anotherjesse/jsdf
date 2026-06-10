@@ -16,6 +16,7 @@ export class WebGLMeshRenderer {
   private currentSource = "";
   private programBuilds = 0;
   private highlightNodeId = -1;
+  private highlightNodeKind = "";
   private highlightMode: HighlightMode = "mark";
   private vertexCount = 0;
   private bounds: Bounds3 | null = null;
@@ -75,9 +76,12 @@ export class WebGLMeshRenderer {
   ): void {
     this.ensureProgram(sdf);
     this.highlightNodeId = highlightNode?.id ?? -1;
+    this.highlightNodeKind = highlightNode?.kind ?? "";
     this.highlightMode = highlightNode ? highlightMode : "mark";
     this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
+    this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
+    this.canvas.dataset.highlightStyle = highlightStyle(highlightNode, highlightMode);
     if (options.redraw !== false && this.active) this.redraw();
   }
 
@@ -201,9 +205,20 @@ export class WebGLMeshRenderer {
     this.canvas.dataset.previewDistinct = String(distinct.size);
     this.canvas.dataset.programBuilds = String(this.programBuilds);
     this.canvas.dataset.highlightNode = this.highlightNodeId >= 0 ? String(this.highlightNodeId) : "";
+    this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = this.highlightNodeId >= 0 ? this.highlightMode : "";
+    this.canvas.dataset.highlightStyle = highlightStyleFromState(this.highlightNodeId, this.highlightMode);
     delete this.canvas.dataset.previewSteps;
   }
+}
+
+function highlightStyle(node: Node | null, mode: HighlightMode): string {
+  return node ? highlightStyleFromState(node.id, mode) : "";
+}
+
+function highlightStyleFromState(nodeId: number, mode: HighlightMode): string {
+  if (nodeId < 0) return "";
+  return mode === "focus" ? "focus-fade" : "outline";
 }
 
 function normal(triangle: Triangle): number[] {

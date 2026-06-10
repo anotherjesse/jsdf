@@ -18,6 +18,7 @@ export class WebGLRaymarchRenderer {
   private steps = 180;
   private programBuilds = 0;
   private highlightNodeId = -1;
+  private highlightNodeKind = "";
   private highlightMode: HighlightMode = "mark";
   private active = true;
   private layout: PreviewLayout = "single";
@@ -59,9 +60,12 @@ export class WebGLRaymarchRenderer {
     }
     this.steps = steps;
     this.highlightNodeId = highlightNode?.id ?? -1;
+    this.highlightNodeKind = highlightNode?.kind ?? "";
     this.highlightMode = highlightNode ? highlightMode : "mark";
     this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
+    this.canvas.dataset.highlightKind = this.highlightNodeKind;
     this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
+    this.canvas.dataset.highlightStyle = highlightStyle(highlightNode, highlightMode);
     this.canvas.dataset.previewLayout = this.layout;
     this.setBounds(bounds);
     if (this.active) this.redraw();
@@ -166,7 +170,18 @@ export class WebGLRaymarchRenderer {
     this.canvas.dataset.previewDistinct = String(distinct.size);
     this.canvas.dataset.previewSteps = String(this.steps);
     this.canvas.dataset.programBuilds = String(this.programBuilds);
+    this.canvas.dataset.highlightKind = this.highlightNodeKind;
+    this.canvas.dataset.highlightStyle = highlightStyleFromState(this.highlightNodeId, this.highlightMode);
   }
+}
+
+function highlightStyle(node: Node | null, mode: HighlightMode): string {
+  return node ? highlightStyleFromState(node.id, mode) : "";
+}
+
+function highlightStyleFromState(nodeId: number, mode: HighlightMode): string {
+  if (nodeId < 0) return "";
+  return mode === "focus" ? "focus-fade" : "outline";
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string): WebGLProgram {
