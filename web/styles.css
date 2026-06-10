@@ -500,6 +500,12 @@ button:disabled {
   border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line));
 }
 
+.change-entry[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
 .change-entry-source {
   width: 24px;
   min-height: 28px;

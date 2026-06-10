@@ -999,6 +999,7 @@ function setSelectedSourceLink(
   graphInspector?.setSelectedSourceLink(link);
   if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
   updateSelectionFocusButton();
+  renderGraphChangeJournal();
 }
 
 function revealSelectedTarget(): void {
@@ -1084,6 +1085,17 @@ function paramPathStartsWith(path: readonly unknown[], prefix: readonly unknown[
   return prefix.length <= path.length && prefix.every((part, index) => path[index] === part);
 }
 
+function sourceLinksEqual(a: GraphSourceLink | null, b: GraphSourceLink | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.nodeId === b.nodeId
+    && a.nodeKind === b.nodeKind
+    && a.label === b.label
+    && a.start === b.start
+    && a.end === b.end
+    && paramPathsEqual(a.path, b.path);
+}
+
 function clearGraphHistory(): void {
   graphHistory.clear();
   updateGraphHistoryControls();
@@ -1128,6 +1140,7 @@ function renderGraphChangeJournal(): void {
   renderGraphChangeJournalView(graphChangeJournal, {
     entries,
     sourceLinkForEntry: (entry) => sourceLinkForGraphEdit(currentSourceLinks, entry),
+    selectedEntry: (entry) => sourceLinksEqual(sourceLinkForGraphEdit(currentSourceLinks, entry), selectedSourceLink),
     onSelect: selectGraphHistoryEntry,
     onHover: hoverGraphHistoryEntry,
     onClearHover: clearGraphHistoryEntryHover,
@@ -1181,14 +1194,16 @@ function clearGraphHistoryEntryHover(): void {
 function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSource?: boolean } = {}): void {
   const node = graphInspector?.selectNodeById(entry.nodeId);
   if (!node) return;
-  const sourceLink = options.revealSource ? sourceLinkForGraphEdit(currentSourceLinks, entry) : null;
-  if (sourceLink) {
+  const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
+  if (sourceLink && options.revealSource) {
     revealGraphSource(sourceLink);
     schedulePreview(0);
     return;
   }
   setEditorView("graph");
+  if (sourceLink) setSelectedSourceLink(sourceLink);
   setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
+  afterBrowserFrame(() => graphInspector?.revealSelected({ focus: true }));
   schedulePreview(0);
 }
 

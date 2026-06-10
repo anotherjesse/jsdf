@@ -87,6 +87,10 @@ export interface AppHealthRuntimeVerification {
     undoAfterEdit: string;
     redoAfterEdit: string;
     resetAfterEdit: string;
+    journalRows: number;
+    journalPressedAfterEdit: string;
+    journalSelectionLabel: string;
+    journalPressedAfterClick: string;
     undoAfterUndo: string;
     redoAfterUndo: string;
     resetAfterUndo: string;
@@ -761,6 +765,10 @@ async function verifyGraphHistoryActionLabels(
     undoAfterEdit: "",
     redoAfterEdit: "",
     resetAfterEdit: "",
+    journalRows: 0,
+    journalPressedAfterEdit: "",
+    journalSelectionLabel: "",
+    journalPressedAfterClick: "",
     undoAfterUndo: "",
     redoAfterUndo: "",
     resetAfterUndo: "",
@@ -798,6 +806,14 @@ async function verifyGraphHistoryActionLabels(
   dispatchInput(frameWindow, editable.input);
   await settleFrame(frameWindow);
   const afterEdit = readGraphActionLabels(frameDocument);
+  const journalRows = frameDocument.querySelectorAll("#graphChangeJournal .change-entry-row").length;
+  const journalEntry = frameDocument.querySelector<HTMLButtonElement>("#graphChangeJournal .change-entry");
+  const journalPressedAfterEdit = journalEntry?.getAttribute("aria-pressed") ?? "";
+  journalEntry?.click();
+  await settleFrame(frameWindow);
+  const journalSelectionLabel = readAppHealth(frame)?.selectedSourceLink ?? "";
+  const journalPressedAfterClick = frameDocument.querySelector<HTMLButtonElement>("#graphChangeJournal .change-entry")
+    ?.getAttribute("aria-pressed") ?? "";
 
   undoButton.click();
   await settleFrame(frameWindow);
@@ -812,6 +828,16 @@ async function verifyGraphHistoryActionLabels(
   if (afterEdit.redo !== "Redo graph edit") errors.push(`graph redo label after edit was ${afterEdit.redo || "nothing"}`);
   if (afterEdit.reset !== "Reset 1 graph edit") {
     errors.push(`graph reset label after edit was ${afterEdit.reset || "nothing"}`);
+  }
+  if (journalRows < 1) errors.push("graph change journal did not show the edit");
+  if (journalPressedAfterEdit !== "true") {
+    errors.push(`graph change journal selected state after edit was ${journalPressedAfterEdit || "nothing"}`);
+  }
+  if (!journalSelectionLabel || journalSelectionLabel.endsWith(" call")) {
+    errors.push(`graph change journal selected ${journalSelectionLabel || "nothing"} instead of the edited parameter`);
+  }
+  if (journalPressedAfterClick !== "true") {
+    errors.push(`graph change journal selected state after click was ${journalPressedAfterClick || "nothing"}`);
   }
   if (afterUndo.undo !== "Undo graph edit") errors.push(`graph undo label after undo was ${afterUndo.undo || "nothing"}`);
   if (!afterUndo.redo.startsWith("Redo ") || !afterUndo.redo.includes("#") || !afterUndo.redo.includes("->")) {
@@ -830,6 +856,10 @@ async function verifyGraphHistoryActionLabels(
     undoAfterEdit: afterEdit.undo,
     redoAfterEdit: afterEdit.redo,
     resetAfterEdit: afterEdit.reset,
+    journalRows,
+    journalPressedAfterEdit,
+    journalSelectionLabel,
+    journalPressedAfterClick,
     undoAfterUndo: afterUndo.undo,
     redoAfterUndo: afterUndo.redo,
     resetAfterUndo: afterUndo.reset,

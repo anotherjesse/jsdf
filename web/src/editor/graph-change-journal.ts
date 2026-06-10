@@ -4,6 +4,7 @@ import { formatGraphChangeValue, type GraphHistoryEntry } from "./graph-history"
 export interface GraphChangeJournalOptions {
   entries: readonly GraphHistoryEntry[];
   sourceLinkForEntry(entry: GraphHistoryEntry): GraphSourceLink | null;
+  selectedEntry?(entry: GraphHistoryEntry): boolean;
   onSelect(entry: GraphHistoryEntry, options: { revealSource?: boolean }): void;
   onHover(entry: GraphHistoryEntry, options: { shiftKey: boolean }): void;
   onClearHover(): void;
@@ -43,10 +44,12 @@ function renderGraphChangeEntry(entry: GraphHistoryEntry, options: GraphChangeJo
   button.type = "button";
   button.className = "change-entry";
   const sourceLink = options.sourceLinkForEntry(entry);
+  const selected = Boolean(options.selectedEntry?.(entry));
   const sourceHint = sourceLink ? "; Cmd/Ctrl-click or Cmd/Ctrl+Enter to reveal edited code" : "";
   const changeLabel = formatGraphChangeValue(entry);
   button.title = `Select ${entry.nodeKind} #${entry.nodeId}: ${changeLabel}${sourceHint}`;
   button.setAttribute("aria-label", button.title);
+  button.setAttribute("aria-pressed", String(selected));
   button.dataset.nodeId = String(entry.nodeId);
   if (sourceLink) {
     button.dataset.hasSource = "true";

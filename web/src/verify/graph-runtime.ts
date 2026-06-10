@@ -58,6 +58,7 @@ export interface GraphRuntimeVerification {
     clearCount: number;
     revealSource: boolean;
     keyboardRevealSource: boolean;
+    selectedRowPressed: string;
     rowTitle: string;
     rowShortcuts: string;
     sourceButtonLabel: string;
@@ -1403,6 +1404,7 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
       start: 0,
       end: 6,
     }),
+    selectedEntry: (entry) => entry.id === history.current().at(-1)?.id,
     onSelect(entry, options) {
       selections.push({ id: entry.id, revealSource: options.revealSource });
     },
@@ -1425,6 +1427,7 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
   const sourceButton = root.querySelector<HTMLButtonElement>(".change-entry-source");
   const rowTitle = firstEntry?.title ?? "";
   const rowShortcuts = firstEntry?.getAttribute("aria-keyshortcuts") ?? "";
+  const selectedRowPressed = firstEntry?.getAttribute("aria-pressed") ?? "";
   const sourceButtonLabel = sourceButton?.getAttribute("aria-label") ?? "";
   sourceButton?.click();
   const revealSource = selections.at(-1)?.revealSource === true;
@@ -1446,6 +1449,9 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
   if (rowShortcuts !== "Control+Enter Meta+Enter") {
     errors.push(`graph change journal shortcuts rendered ${rowShortcuts || "nothing"}`);
   }
+  if (selectedRowPressed !== "true") {
+    errors.push(`graph change journal selected row rendered ${selectedRowPressed || "nothing"}`);
+  }
   if (!sourceButtonLabel.includes("Reveal edited sphere radius in Code")) {
     errors.push(`graph change journal source label rendered ${sourceButtonLabel || "nothing"}`);
   }
@@ -1458,6 +1464,7 @@ function verifyChangeJournal(errors: string[]): GraphRuntimeVerification["change
     clearCount,
     revealSource,
     keyboardRevealSource,
+    selectedRowPressed,
     rowTitle,
     rowShortcuts,
     sourceButtonLabel,
