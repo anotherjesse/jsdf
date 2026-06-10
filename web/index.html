@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sdf browser</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <header class="brand">
+          <div>
+            <h1>sdf</h1>
+            <p>Browser WebGPU port</p>
+          </div>
+          <span id="gpuBadge" class="badge">Checking GPU</span>
+        </header>
+
+        <label class="field">
+          <span>Example</span>
+          <select id="exampleSelect"></select>
+        </label>
+
+        <div class="toolbar" aria-label="Actions">
+          <button id="meshButton" type="button" title="Build STL mesh">Build STL</button>
+          <button id="downloadButton" type="button" title="Download STL" disabled>Download</button>
+        </div>
+
+        <section class="panel">
+          <h2>Resolution</h2>
+          <label class="range">
+            <span>Preview grid</span>
+            <input id="stepsInput" type="range" min="28" max="96" value="44" step="4">
+            <output id="stepsOutput">44</output>
+          </label>
+          <label class="range">
+            <span>Mesh grid</span>
+            <input id="gridInput" type="range" min="24" max="96" value="52" step="4">
+            <output id="gridOutput">52</output>
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Stats</h2>
+          <dl class="stats">
+            <div><dt>Preview</dt><dd id="previewStat">-</dd></div>
+            <div><dt>STL mesh</dt><dd id="meshStat">-</dd></div>
+            <div><dt>Triangles</dt><dd id="triangleStat">-</dd></div>
+            <div><dt>API</dt><dd id="apiStat">-</dd></div>
+          </dl>
+        </section>
+      </aside>
+
+      <section class="viewport">
+        <canvas id="canvas" width="1280" height="900"></canvas>
+        <div id="overlay" class="overlay"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

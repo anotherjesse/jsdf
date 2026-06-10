@@ -1,3 +1,4 @@
 /sdf.egg-info
 *.stl
-
+node_modules/
+web/dist/
