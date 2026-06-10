@@ -212,6 +212,7 @@ export interface CodeEditor {
   setValue(value: string): void;
   getValue(): string;
   setError(error: CodeEditorError | null): void;
+  runtimeDiagnosticCount(): number;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setGraphHintsEnabled(enabled: boolean): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
@@ -630,8 +631,18 @@ export function createCodeEditor(
     const selection = new monaco.Range(range.startLineNumber, range.startColumn, endPosition.lineNumber, endPosition.column);
     editor.setSelection(selection);
     editor.revealRangeInCenterIfOutsideViewport(selection);
+    monaco.editor.setModelMarkers(model, SDF_RUNTIME_MARKER_OWNER, []);
     editor.focus();
     return true;
+  };
+
+  const runtimeDiagnosticCount = (): number => {
+    const model = editor.getModel();
+    if (!model) return 0;
+    return monaco.editor.getModelMarkers({
+      owner: SDF_RUNTIME_MARKER_OWNER,
+      resource: model.uri,
+    }).length;
   };
 
   const scheduleCursorSourceLinkSync = (position: monaco.Position | null | undefined) => {
@@ -782,6 +793,9 @@ export function createCodeEditor(
       monaco.editor.setModelMarkers(model, SDF_RUNTIME_MARKER_OWNER, error
         ? [markerForEditorError(error, model)]
         : []);
+    },
+    runtimeDiagnosticCount() {
+      return runtimeDiagnosticCount();
     },
     setSourceLinks(links: readonly GraphSourceLink[]) {
       updateHover(null, false, { immediateClear: true });

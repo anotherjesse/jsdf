@@ -115,6 +115,8 @@ export interface EditorRuntimeVerification {
     easingQuickFixReplacement: string;
     quickFixAppliedSource: string;
     quickFixChangeEvents: number;
+    quickFixMarkersBeforeApply: number;
+    quickFixMarkersAfterApply: number;
     syntaxErrorLine: number;
     syntaxErrorColumn: number;
   };
@@ -585,6 +587,8 @@ function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorT
     easingQuickFixReplacement,
     quickFixAppliedSource: "",
     quickFixChangeEvents: 0,
+    quickFixMarkersBeforeApply: -1,
+    quickFixMarkersAfterApply: -1,
     syntaxErrorLine: syntaxDiagnostic.lineNumber,
     syntaxErrorColumn: syntaxDiagnostic.column,
   };
@@ -601,16 +605,24 @@ function verifyCodeEditorQuickFix(
   const diagnostic = diagnosticForSource(source, errors, "editor quick fix typo");
   codeEditor.setValue(source);
   codeEditor.setError(diagnostic);
+  editorTools.quickFixMarkersBeforeApply = codeEditor.runtimeDiagnosticCount();
+  if (editorTools.quickFixMarkersBeforeApply !== 1) {
+    errors.push(`editor quick fix started with ${editorTools.quickFixMarkersBeforeApply} markers`);
+  }
   if (!codeEditor.applyPreferredQuickFix()) {
     errors.push("editor quick fix did not apply");
   }
   editorTools.quickFixAppliedSource = codeEditor.getValue();
   editorTools.quickFixChangeEvents = sourceChangeEvents.length - beforeChangeEvents;
+  editorTools.quickFixMarkersAfterApply = codeEditor.runtimeDiagnosticCount();
   if (!editorTools.quickFixAppliedSource.includes(".difference(sphere(2))")) {
     errors.push(`editor quick fix source was ${editorTools.quickFixAppliedSource}`);
   }
   if (editorTools.quickFixChangeEvents !== 1) {
     errors.push(`editor quick fix emitted ${editorTools.quickFixChangeEvents} change events`);
+  }
+  if (editorTools.quickFixMarkersAfterApply !== 0) {
+    errors.push(`editor quick fix left ${editorTools.quickFixMarkersAfterApply} markers`);
   }
 }
 
