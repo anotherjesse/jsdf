@@ -10,6 +10,7 @@ import { examples } from "../examples";
 export interface GraphRuntimeVerification {
   ok: boolean;
   nodes: number;
+  treeHeaders: number;
   eyeButtons: number;
   mapEyes: number;
   links: number;
@@ -92,6 +93,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   return {
     ok: errors.length === 0,
     nodes: root.querySelectorAll(".graph-node").length,
+    treeHeaders: root.querySelectorAll(".graph-tree-header").length,
     eyeButtons: root.querySelectorAll(".graph-visibility").length,
     mapEyes: root.querySelectorAll(".graph-map-eye").length,
     links: links.length,
@@ -117,6 +119,9 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   ): void {
     if (graphRoot.querySelectorAll(".graph-node").length < 4) {
       verifyErrors.push("graph tree rendered too few nodes");
+    }
+    if (graphRoot.querySelectorAll(".graph-tree-header").length !== 1) {
+      verifyErrors.push("graph tree visibility header did not render");
     }
     if (sourceLinks.length < 4) {
       verifyErrors.push("source links found too few graph ranges");

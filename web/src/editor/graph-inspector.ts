@@ -266,10 +266,28 @@ export class GraphInspector {
       empty.textContent = "No matching nodes";
       this.tree.append(empty);
     } else {
-      this.tree.append(this.renderNode(this.sdf.node, 0, model, [this.sdf.node]));
+      this.tree.append(this.renderTreeHeader(), this.renderNode(this.sdf.node, 0, model, [this.sdf.node]));
     }
     this.renderParams();
     this.revealSelectedNode();
+  }
+
+  private renderTreeHeader(): HTMLElement {
+    const header = document.createElement("div");
+    header.className = "graph-tree-header";
+
+    const visibility = document.createElement("div");
+    visibility.className = "graph-tree-header-eye";
+    visibility.title = "Visibility";
+    visibility.setAttribute("aria-label", "Visibility column");
+    visibility.append(renderEyeIcon("visible"));
+
+    const rule = document.createElement("div");
+    rule.className = "graph-tree-header-rule";
+    rule.setAttribute("aria-hidden", "true");
+
+    header.append(visibility, rule);
+    return header;
   }
 
   private renderNode(node: Node, depth: number, model: GraphModel, path: Node[]): HTMLElement {
