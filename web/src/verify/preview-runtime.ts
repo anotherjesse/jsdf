@@ -7,6 +7,7 @@ import { WebGLRaymarchRenderer } from "../preview/webgl-raymarch-renderer";
 export interface PreviewRuntimeVerification {
   ok: boolean;
   shader: CanvasDiagnostics;
+  highlight: HighlightDiagnostics;
   mesh: CanvasDiagnostics & {
     triangles: number;
     usedGPU: boolean;
@@ -14,6 +15,16 @@ export interface PreviewRuntimeVerification {
     meshTimeMs: number;
   };
   errors: string[];
+}
+
+export interface HighlightDiagnostics {
+  initialProgramBuilds: number;
+  markProgramBuilds: number;
+  focusProgramBuilds: number;
+  markNode: string;
+  focusNode: string;
+  markMode: string;
+  focusMode: string;
 }
 
 export interface CanvasDiagnostics {
@@ -24,6 +35,9 @@ export interface CanvasDiagnostics {
   min: number;
   max: number;
   distinct: number;
+  programBuilds: number;
+  highlightNode: string;
+  highlightMode: string;
 }
 
 const bounds: [number[], number[]] = [[-1.45, -1.45, -1.45], [1.45, 1.45, 1.45]];
@@ -40,6 +54,7 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   shaderRenderer.render(sdf, bounds, 176);
   const shader = diagnostics(canvas);
   verifyDiagnostics("shader", shader, "glsl-raymarch", errors);
+  const highlight = verifyHighlightUniforms(shaderRenderer, sdf, canvas, errors);
 
   const meshStart = performance.now();
   const meshResult = await generateMesh(sdf, {
@@ -68,8 +83,63 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   return {
     ok: errors.length === 0,
     shader,
+    highlight,
     mesh,
     errors,
+  };
+}
+
+function verifyHighlightUniforms(
+  shaderRenderer: WebGLRaymarchRenderer,
+  sdf: SDF3,
+  canvas: HTMLCanvasElement,
+  errors: string[],
+): HighlightDiagnostics {
+  const markNode = sdf.node.children[0]?.node;
+  const focusNode = sdf.node.children[1]?.node;
+  if (!markNode || !focusNode) {
+    errors.push("highlight verification fixture is missing child nodes");
+    return {
+      initialProgramBuilds: Number(canvas.dataset.programBuilds ?? 0),
+      markProgramBuilds: 0,
+      focusProgramBuilds: 0,
+      markNode: "",
+      focusNode: "",
+      markMode: "",
+      focusMode: "",
+    };
+  }
+
+  const initialProgramBuilds = Number(canvas.dataset.programBuilds ?? 0);
+  shaderRenderer.render(sdf, bounds, 176, markNode, "mark");
+  const mark = diagnostics(canvas);
+  shaderRenderer.render(sdf, bounds, 176, focusNode, "focus");
+  const focus = diagnostics(canvas);
+
+  if (initialProgramBuilds <= 0) errors.push("shader preview did not record an initial program build");
+  if (mark.programBuilds !== initialProgramBuilds) {
+    errors.push(`mark highlight rebuilt shader program: ${mark.programBuilds} !== ${initialProgramBuilds}`);
+  }
+  if (focus.programBuilds !== initialProgramBuilds) {
+    errors.push(`focus highlight rebuilt shader program: ${focus.programBuilds} !== ${initialProgramBuilds}`);
+  }
+  if (mark.highlightNode !== String(markNode.id)) {
+    errors.push(`mark highlight node mismatch: ${mark.highlightNode} !== ${markNode.id}`);
+  }
+  if (mark.highlightMode !== "mark") errors.push(`mark highlight mode mismatch: ${mark.highlightMode}`);
+  if (focus.highlightNode !== String(focusNode.id)) {
+    errors.push(`focus highlight node mismatch: ${focus.highlightNode} !== ${focusNode.id}`);
+  }
+  if (focus.highlightMode !== "focus") errors.push(`focus highlight mode mismatch: ${focus.highlightMode}`);
+
+  return {
+    initialProgramBuilds,
+    markProgramBuilds: mark.programBuilds,
+    focusProgramBuilds: focus.programBuilds,
+    markNode: mark.highlightNode,
+    focusNode: focus.highlightNode,
+    markMode: mark.highlightMode,
+    focusMode: focus.highlightMode,
   };
 }
 
@@ -82,6 +152,9 @@ function diagnostics(canvas: HTMLCanvasElement): CanvasDiagnostics {
     min: Number(canvas.dataset.previewMin ?? 0),
     max: Number(canvas.dataset.previewMax ?? 0),
     distinct: Number(canvas.dataset.previewDistinct ?? 0),
+    programBuilds: Number(canvas.dataset.programBuilds ?? 0),
+    highlightNode: canvas.dataset.highlightNode ?? "",
+    highlightMode: canvas.dataset.highlightMode ?? "",
   };
 }
 
