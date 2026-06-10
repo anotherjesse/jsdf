@@ -463,7 +463,7 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   const methodPartial = firstCompletionForSource("const f = sphere(1)\nreturn f.diffe", 2, 15);
   if (methodPartial.context.scope !== "method") errors.push(`f.diffe completion used ${methodPartial.context.scope} scope`);
   if (methodPartial.first !== "difference") errors.push(`f.diffe completion first offered ${methodPartial.first || "nothing"}`);
-  if (methodPartial.insertText !== "difference(${1:rest})$0") {
+  if (methodPartial.insertText !== "difference(${1:other})$0") {
     errors.push(`f.diffe snippet rendered ${methodPartial.insertText || "nothing"}`);
   }
   const methodFuzzy = firstCompletionForSource("const f = sphere(1)\nreturn f.dff", 2, 13);

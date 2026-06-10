@@ -169,10 +169,10 @@ function parseCompletionParam(param: string): CompletionParam | null {
 
 function snippetParams(params: readonly CompletionParam[]): string[] {
   const required = params.filter((param) => !param.optional);
-  if (required.length > 0) return required.map((param) => param.label);
+  if (required.length > 0) return required.map((param) => snippetPlaceholderLabel(param.label));
 
   const primaryOptional = params.find((param) => !param.optionsObject);
-  return primaryOptional ? [primaryOptional.label] : [];
+  return primaryOptional ? [snippetPlaceholderLabel(primaryOptional.label)] : [];
 }
 
 function isOptionalSnippetParam(param: string): boolean {
@@ -189,6 +189,11 @@ function cleanParamLabel(param: string): string {
     .replace(/\s*=\s*.+$/, "")
     .replace(/\?$/, "")
     .trim();
+}
+
+function snippetPlaceholderLabel(label: string): string {
+  if (label === "rest" || label === "others") return "other";
+  return label;
 }
 
 function escapeSnippetPlaceholder(value: string): string {
