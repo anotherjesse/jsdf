@@ -6,6 +6,8 @@ export interface AppHealthDiagnostics {
   healthCheckMode: boolean;
   dirty: boolean;
   status: string;
+  sourceCompilePending: boolean;
+  sourceValid: boolean;
   viewMode: string;
   editorView: string;
   previewLayout: string;

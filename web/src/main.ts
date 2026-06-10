@@ -363,6 +363,8 @@ function restoreSourceDraft(): boolean {
 }
 
 function saveCurrentSource(): void {
+  if (!currentSourceCompilesForSave()) return;
+
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
     const saved = saveSourceVersion(currentDocumentName(), source, activeDocumentId, currentPreviewProfile());
@@ -378,6 +380,13 @@ function saveCurrentSource(): void {
     const message = error instanceof Error ? error.message : String(error);
     setEditorStatus(`Save failed: ${message}`, "error");
   }
+}
+
+function currentSourceCompilesForSave(): boolean {
+  if (sourceCompileTimer) return flushPendingSourceCompile();
+  if (editorSourceValid) return true;
+  setEditorStatus("Fix code before saving", "error");
+  return false;
 }
 
 function prettifyCurrentSource(): void {
@@ -1309,6 +1318,8 @@ function appHealthDiagnostics() {
     healthCheckMode,
     dirty: hasUnsavedChanges,
     status: editorStatus.textContent ?? "",
+    sourceCompilePending: Boolean(sourceCompileTimer),
+    sourceValid: editorSourceValid,
     viewMode,
     editorView,
     previewLayout,

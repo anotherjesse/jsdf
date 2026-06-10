@@ -92,6 +92,8 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.activeSdfReady) errors.push("active SDF was not ready");
   if (!health.healthCheckMode) errors.push("app health iframe did not run in health-check mode");
   if (health.dirty) errors.push("health-check app unexpectedly reported dirty state");
+  if (health.sourceCompilePending) errors.push("health-check app unexpectedly had a pending source compile");
+  if (!health.sourceValid) errors.push("health-check app did not report valid source");
   if (!health.hasPrettifyButton) errors.push("prettify button missing from app health");
   if (!health.hasLoadButton) errors.push("load button missing from app health");
   if (!health.hasSaveButton) errors.push("save button missing from app health");
