@@ -809,6 +809,12 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.param-title.source-selected {
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  padding-left: 6px;
+}
+
 .param-title-text {
   display: flex;
   gap: 8px;
@@ -929,8 +935,17 @@ button:disabled {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
+.param-row.source-selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .param-row.source-hovered .param-name {
   color: color-mix(in srgb, var(--accent) 74%, var(--muted));
+}
+
+.param-row.source-selected .param-name {
+  color: var(--accent);
 }
 
 .param-row input[type="number"] {
@@ -1030,8 +1045,17 @@ button:disabled {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
+.axis-control.source-selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .axis-control.source-hovered .axis-label {
   color: color-mix(in srgb, var(--accent) 74%, var(--muted));
+}
+
+.axis-control.source-selected .axis-label {
+  color: var(--accent);
 }
 
 .axis-label {

@@ -47,6 +47,7 @@ export class GraphInspector {
   private showMap = false;
   private sourceLinks: readonly GraphSourceLink[] = [];
   private hoveredSourceLink: GraphSourceLink | null = null;
+  private selectedSourceLink: GraphSourceLink | null = null;
   private hoverSoloKey: string | null = null;
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
@@ -158,6 +159,7 @@ export class GraphInspector {
     this.sdf = sdf;
     this.selected = sdf.node;
     this.hoveredSourceLink = null;
+    this.selectedSourceLink = null;
     this.hoverSoloKey = null;
     this.lockedSoloKey = null;
     this.lockedSoloNodeId = null;
@@ -196,6 +198,15 @@ export class GraphInspector {
     if (this.hoveredSourceLink && !this.sourceLinks.some((link) => sourceLinksEqual(link, this.hoveredSourceLink))) {
       this.hoveredSourceLink = null;
     }
+    if (this.selectedSourceLink && !this.sourceLinks.some((link) => sourceLinksEqual(link, this.selectedSourceLink))) {
+      this.selectedSourceLink = null;
+    }
+    this.render();
+  }
+
+  setSelectedSourceLink(link: GraphSourceLink | null): void {
+    if (sourceLinksEqual(this.selectedSourceLink, link)) return;
+    this.selectedSourceLink = link;
     this.render();
   }
 
@@ -804,6 +815,7 @@ export class GraphInspector {
     const title = document.createElement("div");
     title.className = "param-title";
     if (this.dirtyNodeIds.has(node.id)) title.classList.add("edited");
+    if (this.sourceLinkMatchesNode(this.selectedSourceLink, node.id)) title.classList.add("source-selected");
     const titleText = document.createElement("div");
     titleText.className = "param-title-text";
     const kind = document.createElement("strong");
@@ -924,6 +936,7 @@ export class GraphInspector {
     group.className = "axis-control";
     if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
+    if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
 
     const label = document.createElement("span");
     label.className = "axis-label";
@@ -987,6 +1000,7 @@ export class GraphInspector {
     row.className = "param-row";
     if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, field.path)) row.classList.add("source-hovered");
+    if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, field.path)) row.classList.add("source-selected");
 
     const sourceLink = this.sourceLinkForParam(node.id, field.path);
     this.attachSourceHover(row, sourceLink);
@@ -1106,6 +1120,10 @@ export class GraphInspector {
   private sourceLinkMatchesParam(link: GraphSourceLink | null, nodeId: number, path: ParamPath): boolean {
     if (!link || link.nodeId !== nodeId || link.end <= link.start) return false;
     return pathsEqual(link.path, path) || (link.scrubbable === false && pathStartsWith(path, link.path));
+  }
+
+  private sourceLinkMatchesNode(link: GraphSourceLink | null, nodeId: number): boolean {
+    return Boolean(link && link.nodeId === nodeId && link.label === "call" && link.end > link.start);
   }
 
   private sourceLinkForNode(nodeId: number): GraphSourceLink | null {

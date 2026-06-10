@@ -416,9 +416,13 @@ function handleSourceLinkSelect(link: GraphSourceLink): void {
 }
 
 function handleSourceLinkCursor(link: GraphSourceLink | null): void {
-  if (!link) return;
+  if (!link) {
+    graphInspector?.setSelectedSourceLink(null);
+    return;
+  }
   const node = graphInspector?.selectNodeById(link.nodeId);
   if (!node) return;
+  graphInspector?.setSelectedSourceLink(link);
   codeEditor?.markSelectedSourceLink(link);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
   schedulePreview(0);
@@ -536,7 +540,9 @@ function handleGraphSourceHover(link: GraphSourceLink | null): void {
 
 function selectNode(node: Node | null): void {
   selectedNode = node;
-  codeEditor?.markSelectedSourceLink(node ? sourceLinkForNodeId(node.id) : null);
+  const sourceLink = node ? sourceLinkForNodeId(node.id) : null;
+  graphInspector?.setSelectedSourceLink(sourceLink);
+  codeEditor?.markSelectedSourceLink(sourceLink);
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");

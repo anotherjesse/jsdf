@@ -15,6 +15,8 @@ export interface EditorRuntimeVerification {
   cursorEvents: string[];
   selectedNode: string;
   selectedSourceDecorations: number;
+  selectedGraphParams: number;
+  selectedGraphTitles: number;
   graphSelections: string[];
   errors: string[];
 }
@@ -72,6 +74,9 @@ export async function runEditorRuntimeVerification(
       if (!selectedNode.startsWith("sphere #")) {
         errors.push(`radius cursor selected ${selectedNode || "nothing"}`);
       }
+      if (graphRoot.querySelectorAll(".param-row.source-selected").length !== 1) {
+        errors.push("radius cursor did not mark exactly one graph param row selected");
+      }
     }
 
     const boxCallLink = links.find((link) => link.nodeKind === "box" && link.label === "call");
@@ -85,9 +90,14 @@ export async function runEditorRuntimeVerification(
       if (!selectedNode.startsWith("box #")) {
         errors.push(`box cursor selected ${selectedNode || "nothing"}`);
       }
+      if (graphRoot.querySelectorAll(".param-title.source-selected").length !== 1) {
+        errors.push("box call cursor did not mark selected graph title");
+      }
     }
 
     const selectedSourceDecorations = codeRoot.querySelectorAll(".source-selected-link").length;
+    const selectedGraphParams = graphRoot.querySelectorAll(".param-row.source-selected, .axis-control.source-selected").length;
+    const selectedGraphTitles = graphRoot.querySelectorAll(".param-title.source-selected").length;
     if (selectedSourceDecorations === 0) {
       errors.push("selected source decoration did not render");
     }
@@ -98,6 +108,8 @@ export async function runEditorRuntimeVerification(
       cursorEvents,
       selectedNode,
       selectedSourceDecorations,
+      selectedGraphParams,
+      selectedGraphTitles,
       graphSelections,
       errors,
     };
