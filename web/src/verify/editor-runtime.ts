@@ -1,7 +1,7 @@
 import { apiCompletionEntriesForScope, apiReferenceForWord } from "../editor/api-reference";
 import { apiSignatureHelpAt } from "../editor/api-signature-help";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
-import { createCodeEditor } from "../editor/code-editor";
+import { createCodeEditor, sourceLinkHoverMessage } from "../editor/code-editor";
 import { loadEditorPreferences, saveEditorPreferences } from "../editor/editor-preferences";
 import { evaluateSource } from "../editor/evaluate-source";
 import { GraphInspector } from "../editor/graph-inspector";
@@ -74,6 +74,10 @@ export interface EditorRuntimeVerification {
     sphereRadius: string;
     sphereRadiusKey: string;
     translateOffset: string;
+  };
+  sourceLinkTooltips: {
+    call: string;
+    number: string;
   };
   sourceNavigation: {
     nextLink: string;
@@ -186,6 +190,7 @@ export async function runEditorRuntimeVerification(
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const sourceInlayHints = verifySourceInlayHints(fixtureSource, links, errors);
+  const sourceLinkTooltips = verifySourceLinkTooltips(links, errors);
   let codeEditor: ReturnType<typeof createCodeEditor> | null = null;
   const graphInspector = new GraphInspector(graphRoot, {
     onSelect(node) {
@@ -382,6 +387,7 @@ export async function runEditorRuntimeVerification(
       sourceScrub,
       sourceLinkHitTest,
       sourceInlayHints,
+      sourceLinkTooltips,
       sourceNavigation,
       editorPreferences,
       apiHints,
@@ -815,6 +821,25 @@ function verifySourceInlayHints(
     sphereRadiusKey: sphereRadius?.key ?? "",
     translateOffset: translateOffset?.label ?? "",
   };
+}
+
+function verifySourceLinkTooltips(
+  links: readonly GraphSourceLink[],
+  errors: string[],
+): EditorRuntimeVerification["sourceLinkTooltips"] {
+  const callLink = links.find((link) => link.nodeKind === "sphere" && link.label === "call");
+  const numberLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
+  const call = callLink ? sourceLinkHoverMessage(callLink, false) : "";
+  const number = numberLink ? sourceLinkHoverMessage(numberLink, true) : "";
+
+  if (!call.includes("Click to select this node")) errors.push(`source call tooltip rendered ${call || "nothing"}`);
+  if (!call.includes("Cmd/Ctrl-click opens it in Graph")) errors.push(`source call tooltip missed graph reveal hint: ${call || "nothing"}`);
+  if (!number.includes("Drag sideways")) errors.push(`source number tooltip missed drag hint: ${number || "nothing"}`);
+  if (!number.includes("Cmd/Ctrl-click opens this node in Graph")) {
+    errors.push(`source number tooltip missed graph reveal hint: ${number || "nothing"}`);
+  }
+
+  return { call, number };
 }
 
 function verifyEditorPreferences(errors: string[]): EditorRuntimeVerification["editorPreferences"] {

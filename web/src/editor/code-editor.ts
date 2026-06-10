@@ -1080,11 +1080,11 @@ function markerForEditorError(
   return marker;
 }
 
-function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
+export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
   const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
   return isNumber
-    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak; Shift makes keyboard nudges finer.`
-    : `Graph: ${target}. Click to inspect it in the graph.`;
+    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak. Cmd/Ctrl-click opens this node in Graph; Shift makes keyboard nudges finer.`
+    : `Graph: ${target}. Click to select this node; Cmd/Ctrl-click opens it in Graph.`;
 }
 
 function formatScrubReadoutValue(value: number): string {
