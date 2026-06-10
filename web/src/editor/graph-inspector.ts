@@ -1024,8 +1024,14 @@ export class GraphInspector {
 
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = `${crumb.kind} #${crumb.id}`;
-      button.title = `${crumb.kind} #${crumb.id}`;
+      const relation = breadcrumbRelation(path, index);
+      button.title = `${relation}: ${crumb.kind} #${crumb.id}`;
+      button.setAttribute("aria-label", button.title);
+      const relationLabel = document.createElement("small");
+      relationLabel.textContent = relation;
+      const nodeLabel = document.createElement("span");
+      nodeLabel.textContent = `${crumb.kind} #${crumb.id}`;
+      button.append(relationLabel, nodeLabel);
       this.attachSoloHover(button, path.slice(0, index + 1));
       if (crumb.id === node.id) {
         button.setAttribute("aria-current", "page");
@@ -1646,6 +1652,25 @@ function setsEqual(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 
 function visibilityShortcutTitle(title: string): string {
   return title === "Full shape stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
+}
+
+function breadcrumbRelation(path: readonly Node[], index: number): string {
+  if (index === 0) return "root";
+  const parent = path[index - 1];
+  const child = path[index];
+  const childIndex = parent.children.findIndex((entry) => entry.node.id === child.id);
+  return childRelationLabel(parent.kind, childIndex < 0 ? index - 1 : childIndex);
+}
+
+function childRelationLabel(parentKind: string, childIndex: number): string {
+  if (parentKind === "difference") return childIndex === 0 ? "base" : "subtract";
+  if (parentKind === "transitionLinear" || parentKind === "transitionRadial") {
+    return childIndex === 0 ? "from" : "to";
+  }
+  if (parentKind === "union" || parentKind === "intersection" || parentKind === "blend") {
+    return `part ${childIndex + 1}`;
+  }
+  return childIndex === 0 ? "input" : `child ${childIndex + 1}`;
 }
 
 function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {

@@ -991,22 +991,49 @@ button:disabled {
 }
 
 .param-breadcrumb button {
+  display: grid;
   flex: 0 0 auto;
+  gap: 1px;
+  justify-items: start;
   min-height: 26px;
-  max-width: 138px;
+  max-width: 152px;
   overflow: hidden;
   border-radius: 6px;
-  padding: 3px 7px;
+  padding: 4px 7px;
   color: var(--muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.param-breadcrumb button small,
+.param-breadcrumb button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.param-breadcrumb button small {
+  color: #8d98a6;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.param-breadcrumb button span {
+  line-height: 1.15;
+}
+
 .param-breadcrumb button[aria-current="page"] {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
   color: var(--accent);
   cursor: default;
+}
+
+.param-breadcrumb button[aria-current="page"] small {
+  color: color-mix(in srgb, var(--accent) 62%, #8d98a6);
 }
 
 .param-breadcrumb-separator {

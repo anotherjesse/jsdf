@@ -225,6 +225,14 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     if (!currentCrumb) {
       verifyErrors.push("selected sphere has no current breadcrumb crumb");
     } else {
+      const relationLabels = [...graphRoot.querySelectorAll<HTMLElement>(".param-breadcrumb button small")]
+        .map((label) => label.textContent ?? "");
+      if (relationLabels.join(" > ") !== "root > part 1 > input") {
+        verifyErrors.push(`breadcrumb relations rendered ${relationLabels.join(" > ") || "nothing"}`);
+      }
+      if (!currentCrumb.getAttribute("aria-label")?.startsWith("input: sphere")) {
+        verifyErrors.push(`current breadcrumb label was ${currentCrumb.getAttribute("aria-label") || "missing"}`);
+      }
       currentCrumb.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
       if (graphHoverLabels.at(-1) !== sphereHoverLabel) {
         verifyErrors.push(`breadcrumb hover focused ${graphHoverLabels.at(-1) || "nothing"}`);
