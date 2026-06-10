@@ -41,6 +41,7 @@ export class GraphInspector {
   private lockedSoloKey: string | null = null;
   private lockedSoloNodeId: number | null = null;
   private revealSelectedAfterRender = false;
+  private focusSelectedAfterRender = false;
   private readonly hiddenNodeIds = new Set<number>();
   private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
@@ -283,6 +284,7 @@ export class GraphInspector {
     meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}${directlyHidden ? " hidden" : inheritedHidden ? " parent hidden" : ""}`;
     button.append(label, meta);
     button.addEventListener("click", () => this.select(node));
+    button.addEventListener("keydown", (event) => this.handleNodeKeyDown(event, node));
     this.attachSoloHover(row, path);
     row.append(visibility, button);
     group.append(row);
@@ -428,7 +430,9 @@ export class GraphInspector {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         this.select(view.node);
+        return;
       }
+      this.handleNodeKeyDown(event, view.node);
     });
     return group;
   }
@@ -463,10 +467,11 @@ export class GraphInspector {
     return out;
   }
 
-  private select(node: Node): void {
+  private select(node: Node, options: { focus?: boolean } = {}): void {
     this.clearLockedSoloIfDifferent(node);
     this.selected = node;
     this.revealSelectedAfterRender = true;
+    this.focusSelectedAfterRender = Boolean(options.focus);
     this.render();
     this.options.onSelect(node);
   }
@@ -474,10 +479,62 @@ export class GraphInspector {
   private revealSelectedNode(): void {
     if (!this.revealSelectedAfterRender || !this.selected) return;
     this.revealSelectedAfterRender = false;
+    const focus = this.focusSelectedAfterRender;
+    this.focusSelectedAfterRender = false;
     const target = this.tree.querySelector<HTMLElement>(`[data-node-id="${this.selected.id}"]`);
     window.requestAnimationFrame(() => {
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      if (focus) target?.focus({ preventScroll: true });
     });
+  }
+
+  private handleNodeKeyDown(event: KeyboardEvent, node: Node): void {
+    const target = this.nodeForKeyboardNavigation(event.key, node);
+    if (!target) return;
+    event.preventDefault();
+    this.select(target, { focus: true });
+  }
+
+  private nodeForKeyboardNavigation(key: string, node: Node): Node | null {
+    if (!this.sdf) return null;
+    if (key === "ArrowLeft") return this.parentNode(node);
+    if (key === "ArrowRight") return this.firstVisibleChild(node);
+
+    const nodes = this.visibleTreeNodes();
+    const currentIndex = nodes.findIndex((candidate) => candidate.id === node.id);
+    if (currentIndex < 0) return null;
+
+    if (key === "ArrowUp") return nodes[Math.max(0, currentIndex - 1)] ?? null;
+    if (key === "ArrowDown") return nodes[Math.min(nodes.length - 1, currentIndex + 1)] ?? null;
+    if (key === "Home") return nodes[0] ?? null;
+    if (key === "End") return nodes.at(-1) ?? null;
+    return null;
+  }
+
+  private visibleTreeNodes(): Node[] {
+    if (!this.sdf) return [];
+    const model = buildGraphModel(this.sdf.node, this.filter);
+    const out: Node[] = [];
+
+    const visit = (node: Node) => {
+      if (!childMatchesFilter(node, model.visibleNodeIds)) return;
+      out.push(node);
+      for (const child of node.children) visit(child.node);
+    };
+
+    visit(this.sdf.node);
+    return out;
+  }
+
+  private parentNode(node: Node): Node | null {
+    const path = this.pathToNode(node.id);
+    return path.length > 1 ? path[path.length - 2] : null;
+  }
+
+  private firstVisibleChild(node: Node): Node | null {
+    if (!this.sdf) return null;
+    const model = buildGraphModel(this.sdf.node, this.filter);
+    return node.children.find((child) => childMatchesFilter(child.node, model.visibleNodeIds))?.node ?? null;
   }
 
   private attachSoloHover(target: Element, path: Node[]): void {
