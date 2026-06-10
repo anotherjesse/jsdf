@@ -1645,7 +1645,7 @@ function setsEqual(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 }
 
 function visibilityShortcutTitle(title: string): string {
-  return title === "Root node stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
+  return title === "Full shape stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
 }
 
 function renderCodeLinkButton(label: string, className: string): HTMLButtonElement {

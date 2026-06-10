@@ -250,6 +250,26 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
       nodeCodeButton.click();
       if (revealedSource !== "sphere:call") verifyErrors.push(`node code icon emitted ${revealedSource || "nothing"}`);
     }
+    const paramTitleEye = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-visibility");
+    if (!paramTitleEye) {
+      verifyErrors.push("selected node has no parameter-panel eye visibility toggle");
+    } else {
+      if (paramTitleEye.title !== "Hide this shape in preview (V; Alt-click isolates branch)") {
+        verifyErrors.push(`parameter-panel eye had unclear title ${paramTitleEye.title || "nothing"}`);
+      }
+      paramTitleEye.click();
+      if (hiddenEvents.at(-1)?.[0] !== sphere.id) {
+        verifyErrors.push("parameter-panel eye visibility toggle did not hide selected node");
+      }
+      const hiddenParamTitleEye = graphRoot.querySelector<HTMLButtonElement>(".param-title-actions .param-visibility");
+      if (hiddenParamTitleEye?.dataset.state !== "hidden") {
+        verifyErrors.push(`parameter-panel eye hidden state rendered ${hiddenParamTitleEye?.dataset.state || "nothing"}`);
+      }
+      hiddenParamTitleEye?.click();
+      if ((hiddenEvents.at(-1)?.length ?? -1) !== 0) {
+        verifyErrors.push("parameter-panel eye did not restore selected node visibility");
+      }
+    }
 
     const mapToggle = graphRoot.querySelector<HTMLButtonElement>(".graph-map-toggle");
     if (!mapToggle) {

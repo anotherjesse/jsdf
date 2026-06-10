@@ -15,7 +15,7 @@ export function graphVisibilityMeta(
   if (isRoot) {
     return {
       state: "root",
-      title: "Root node stays visible",
+      title: "Full shape stays visible",
       disabled: true,
       pressed: true,
     };
@@ -23,7 +23,7 @@ export function graphVisibilityMeta(
   if (directlyHidden) {
     return {
       state: "hidden",
-      title: "Show node in preview",
+      title: "Show this shape in preview",
       disabled: false,
       pressed: false,
     };
@@ -31,14 +31,14 @@ export function graphVisibilityMeta(
   if (inheritedHidden) {
     return {
       state: "inherited",
-      title: "Hide node; parent is hidden",
+      title: "Parent is hidden; hide this shape too",
       disabled: false,
       pressed: true,
     };
   }
   return {
     state: "visible",
-    title: "Hide node in preview",
+    title: "Hide this shape in preview",
     disabled: false,
     pressed: true,
   };

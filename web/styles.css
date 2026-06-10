@@ -664,7 +664,7 @@ button:disabled {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: color-mix(in srgb, var(--text) 74%, var(--muted));
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
   padding: 0;
 }
 
@@ -713,6 +713,16 @@ button:disabled {
   background: color-mix(in srgb, var(--panel-2) 58%, transparent);
   color: color-mix(in srgb, var(--text) 84%, var(--muted));
   padding: 0;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.graph-node-row:hover .graph-visibility:not(:disabled),
+.graph-node-row:focus-within .graph-visibility:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
 }
 
 .graph-visibility:hover:not(:disabled),
