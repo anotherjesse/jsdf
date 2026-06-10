@@ -202,12 +202,16 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     } else {
       paramRow.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "sphere:radius") verifyErrors.push(`param row hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+      if (!paramRow.classList.contains("source-hovered")) verifyErrors.push("param row hover did not mark itself");
       paramRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row leave did not clear source hover");
+      if (paramRow.classList.contains("source-hovered")) verifyErrors.push("param row leave kept local hover");
       paramRow.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "sphere:radius") verifyErrors.push("param row focus did not emit source hover");
+      if (!paramRow.classList.contains("source-hovered")) verifyErrors.push("param row focus did not mark itself");
       paramRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row blur did not clear source hover");
+      if (paramRow.classList.contains("source-hovered")) verifyErrors.push("param row blur kept local hover");
     }
     const radiusSourceLink = sourceLinks.find((link) => {
       return link.nodeId === sphere.id && link.label === "radius" && link.end > link.start;

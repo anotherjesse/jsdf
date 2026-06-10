@@ -1163,11 +1163,21 @@ export class GraphInspector {
 
   private attachSourceHover(target: HTMLElement, link: GraphSourceLink | null): void {
     if (!link) return;
-    target.addEventListener("pointerenter", () => this.options.onSourceHover(link));
-    target.addEventListener("pointerleave", () => this.options.onSourceHover(null));
-    target.addEventListener("focusin", () => this.options.onSourceHover(link));
+    target.addEventListener("pointerenter", () => {
+      target.classList.add("source-hovered");
+      this.options.onSourceHover(link);
+    });
+    target.addEventListener("pointerleave", () => {
+      target.classList.remove("source-hovered");
+      this.options.onSourceHover(null);
+    });
+    target.addEventListener("focusin", () => {
+      target.classList.add("source-hovered");
+      this.options.onSourceHover(link);
+    });
     target.addEventListener("focusout", (event) => {
       if (event.relatedTarget instanceof globalThis.Node && target.contains(event.relatedTarget)) return;
+      target.classList.remove("source-hovered");
       this.options.onSourceHover(null);
     });
   }
