@@ -1,4 +1,5 @@
 import type { Node, SDF3 } from "../core/nodes";
+import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { ParamPath, ParamValue } from "./graph-inspector";
 
 export interface GraphSourceEdit {
@@ -46,12 +47,23 @@ const CALL_PATCHES: Record<string, Record<string, CallPatch>> = {
 };
 
 export function patchGraphEditSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
+  if (edit.nodeKind === "rotate3" && edit.label === "axis") {
+    return patchOrientSource(source, sdf, edit, value);
+  }
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const patch = CALL_PATCHES[edit.nodeKind]?.[edit.label];
   if (!patch) return null;
   const ordinal = ordinalForEdit(sdf.node, edit);
   if (ordinal < 0) return null;
   return patchNthCallArgument(source, patch, ordinal, value);
+}
+
+function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
+  const axis = axisForMatrix(value);
+  if (!axis) return null;
+  const ordinal = orientOrdinalForEdit(sdf.node, edit);
+  if (ordinal < 0) return null;
+  return patchNthOrientArgument(source, ordinal, axis);
 }
 
 function ordinalForEdit(root: Node, edit: GraphSourceEdit): number {
@@ -72,6 +84,13 @@ function collectNodes(root: Node): Node[] {
   };
   visit(root);
   return out;
+}
+
+function orientOrdinalForEdit(root: Node, edit: GraphSourceEdit): number {
+  const nodes = collectNodes(root)
+    .filter((node) => node.kind === "rotate3" && axisForMatrix(node.params.matrix))
+    .sort((a, b) => a.id - b.id);
+  return nodes.findIndex((node) => node.id === edit.nodeId);
 }
 
 function hasParamLabel(node: Node, label: string): boolean {
@@ -107,6 +126,15 @@ function patchNthCallArgument(source: string, patch: CallPatch, ordinal: number,
   const arg = call.args[patch.arg];
   if (!arg || !isNumericLiteral(arg.text)) return null;
   return `${source.slice(0, arg.start)}${formatNumber(value)}${source.slice(arg.end)}`;
+}
+
+function patchNthOrientArgument(source: string, ordinal: number, axis: OrientationAxis): string | null {
+  const calls = findCalls(source, "orient");
+  const call = calls[ordinal];
+  if (!call || call.args.length === 0) return null;
+  const arg = call.args[0];
+  if (!isAxisExpression(arg.text)) return null;
+  return `${source.slice(0, arg.start)}${axis.toUpperCase()}${source.slice(arg.end)}`;
 }
 
 interface CallArg {
@@ -188,6 +216,41 @@ function splitArgs(source: string, start: number, end: number): CallArg[] {
 
 function isNumericLiteral(value: string): boolean {
   return /^\s*-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$/i.test(value);
+}
+
+type OrientationAxis = "x" | "y" | "z";
+
+function axisForMatrix(value: ParamValue): OrientationAxis | null {
+  const matrix = matrixParam(value);
+  if (!matrix) return null;
+  for (const axis of ["x", "y", "z"] as OrientationAxis[]) {
+    if (matricesClose(matrix, orientationMatrix(axis))) return axis;
+  }
+  return null;
+}
+
+function matrixParam(value: ParamValue): number[][] | null {
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const rows = value.map((row) => Array.isArray(row) ? row.map(Number) : []);
+  if (!rows.every((row) => row.length === 3 && row.every(Number.isFinite))) return null;
+  return rows;
+}
+
+function orientationMatrix(axis: OrientationAxis): number[][] {
+  const target = axis === "x" ? X : axis === "y" ? Y : Z;
+  return rotateToMatrix(UP, target);
+}
+
+function matricesClose(a: number[][], b: number[][]): boolean {
+  return a.length === b.length && a.every((row, rowIndex) => {
+    return row.length === b[rowIndex].length && row.every((item, columnIndex) => {
+      return Math.abs(item - b[rowIndex][columnIndex]) < 1e-9;
+    });
+  });
+}
+
+function isAxisExpression(value: string): boolean {
+  return /^\s*[XYZ]\s*$/.test(value);
 }
 
 function escapeRegExp(value: string): string {

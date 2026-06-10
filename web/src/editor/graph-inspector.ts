@@ -1,4 +1,5 @@
 import type { Node, SDF3 } from "../core/nodes";
+import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 
@@ -27,6 +28,7 @@ export class GraphInspector {
   private filter = "";
   private showMap = false;
   private soloKey: string | null = null;
+  private readonly customMatrixNodeIds = new Set<number>();
   private readonly toolbar = document.createElement("div");
   private readonly filterInput = document.createElement("input");
   private readonly mapButton = document.createElement("button");
@@ -329,8 +331,12 @@ export class GraphInspector {
     title.append(kind, id);
     this.params.append(title);
 
-    const fields = collectNumericParams(node.params);
-    if (fields.length === 0) {
+    const orientationControl = this.renderOrientationControl(node);
+    if (orientationControl) this.params.append(orientationControl);
+
+    const fields = collectNumericParams(node.params)
+      .filter((field) => orientationControl == null || this.shouldShowMatrixFields(node, field));
+    if (fields.length === 0 && !orientationControl) {
       const empty = document.createElement("div");
       empty.className = "param-empty";
       empty.textContent = "No numeric params";
@@ -341,6 +347,73 @@ export class GraphInspector {
     for (const field of fields) {
       this.params.append(this.renderNumberField(node, field));
     }
+  }
+
+  private renderOrientationControl(node: Node): HTMLElement | null {
+    if (node.kind !== "rotate3") return null;
+    const matrix = matrixParam(node.params.matrix);
+    if (!matrix) return null;
+
+    const activeAxis = axisForMatrix(matrix);
+    const showCustom = activeAxis === "custom" || this.customMatrixNodeIds.has(node.id);
+    const group = document.createElement("div");
+    group.className = "axis-control";
+
+    const label = document.createElement("span");
+    label.className = "axis-label";
+    label.textContent = "Orient";
+
+    const buttons = document.createElement("div");
+    buttons.className = "axis-buttons";
+    for (const axis of ORIENTATION_AXES) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = axis.toUpperCase();
+      button.setAttribute("aria-label", `Orient ${axis.toUpperCase()}`);
+      button.setAttribute("aria-pressed", String(!showCustom && activeAxis === axis));
+      button.addEventListener("click", () => this.setOrientationAxis(node, matrix, axis));
+      buttons.append(button);
+    }
+
+    const custom = document.createElement("button");
+    custom.type = "button";
+    custom.textContent = "Custom";
+    custom.setAttribute("aria-label", "Show custom orientation matrix");
+    custom.setAttribute("aria-pressed", String(showCustom));
+    custom.addEventListener("click", () => {
+      this.customMatrixNodeIds.add(node.id);
+      this.render();
+    });
+    buttons.append(custom);
+
+    group.append(label, buttons);
+    return group;
+  }
+
+  private setOrientationAxis(node: Node, previous: number[][], axis: OrientationAxis): void {
+    const nextValue = orientationMatrix(axis);
+    if (matricesClose(previous, nextValue)) {
+      this.customMatrixNodeIds.delete(node.id);
+      this.render();
+      return;
+    }
+
+    setAtPath(node.params, ["matrix"], cloneMatrix(nextValue));
+    this.customMatrixNodeIds.delete(node.id);
+    this.render();
+    this.options.onEdit({
+      node,
+      nodeId: node.id,
+      nodeKind: node.kind,
+      path: ["matrix"],
+      label: "axis",
+      previousValue: cloneMatrix(previous),
+      nextValue: cloneMatrix(nextValue),
+    });
+  }
+
+  private shouldShowMatrixFields(node: Node, field: NumericParam): boolean {
+    return node.kind !== "rotate3" || field.path[0] !== "matrix" || this.customMatrixNodeIds.has(node.id) || axisForMatrix(matrixParam(node.params.matrix)) === "custom";
   }
 
   private renderNumberField(node: Node, field: NumericParam): HTMLElement {
@@ -423,6 +496,10 @@ interface NumericRange {
   max: number;
 }
 
+type OrientationAxis = "x" | "y" | "z";
+
+const ORIENTATION_AXES: OrientationAxis[] = ["x", "y", "z"];
+
 function collectNumericParams(params: Record<string, unknown>): NumericParam[] {
   const out: NumericParam[] = [];
   walkParams(params, [], out);
@@ -470,6 +547,38 @@ function getAtPath(root: Record<string, unknown>, path: ParamPath): ParamValue {
       : (target as Record<string, unknown>)[part as string];
   }
   return target;
+}
+
+function matrixParam(value: unknown): number[][] | null {
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const rows = value.map((row) => Array.isArray(row) ? row.map(Number) : []);
+  if (!rows.every((row) => row.length === 3 && row.every(Number.isFinite))) return null;
+  return rows;
+}
+
+function axisForMatrix(matrix: number[][] | null): OrientationAxis | "custom" {
+  if (!matrix) return "custom";
+  for (const axis of ORIENTATION_AXES) {
+    if (matricesClose(matrix, orientationMatrix(axis))) return axis;
+  }
+  return "custom";
+}
+
+function orientationMatrix(axis: OrientationAxis): number[][] {
+  const target = axis === "x" ? X : axis === "y" ? Y : Z;
+  return rotateToMatrix(UP, target);
+}
+
+function matricesClose(a: number[][], b: number[][]): boolean {
+  return a.length === b.length && a.every((row, rowIndex) => {
+    return row.length === b[rowIndex].length && row.every((value, columnIndex) => {
+      return Math.abs(value - b[rowIndex][columnIndex]) < 1e-9;
+    });
+  });
+}
+
+function cloneMatrix(matrix: number[][]): number[][] {
+  return matrix.map((row) => [...row]);
 }
 
 function findNode(root: Node, id: number, visited = new Set<number>()): Node | null {
