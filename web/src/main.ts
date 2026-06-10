@@ -1,4 +1,5 @@
 import type { Node, SDF3 } from "./core/nodes";
+import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
 import type { CodeEditor, SourceLinkHoverOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
@@ -55,6 +56,7 @@ const stepsInput = document.querySelector<HTMLInputElement>("#stepsInput")!;
 const stepsOutput = document.querySelector<HTMLOutputElement>("#stepsOutput")!;
 const gridInput = document.querySelector<HTMLInputElement>("#gridInput")!;
 const gridOutput = document.querySelector<HTMLOutputElement>("#gridOutput")!;
+const boundsEditorElement = document.querySelector<HTMLElement>("#boundsEditor")!;
 const previewStat = document.querySelector<HTMLElement>("#previewStat")!;
 const meshStat = document.querySelector<HTMLElement>("#meshStat")!;
 const triangleStat = document.querySelector<HTMLElement>("#triangleStat")!;
@@ -76,6 +78,7 @@ let activeSdf: SDF3 | null = null;
 let selectedNode: Node | null = null;
 let hoveredNode: Node | null = null;
 let soloPreview: SoloPreview | null = null;
+let boundsEditor: BoundsEditor | null = null;
 let mesh: MeshResult | null = null;
 let meshBuildPromise: Promise<void> | null = null;
 let lastBlob: Blob | null = null;
@@ -90,6 +93,7 @@ let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeBounds = boundsForExample(activeExampleId);
+let boundsAreValid = true;
 let activeDocumentId: string | null = null;
 let activeSourceVersionId: string | null = null;
 let activeSourceName = currentExample(activeExampleId).name;
@@ -103,6 +107,10 @@ apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b,
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
 documentNameInput.value = activeSourceName;
+boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
+  onChange: handleBoundsChange,
+  onInvalid: handleBoundsInvalid,
+});
 cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
 updateSaveState();
 renderLoadDialog();
@@ -197,6 +205,8 @@ function loadExample(id: string): void {
   window.clearTimeout(sourceCompileTimer);
   activeExampleId = id;
   activeBounds = boundsForExample(id);
+  boundsAreValid = true;
+  boundsEditor?.setBounds(activeBounds);
   activeDocumentId = null;
   activeSourceVersionId = null;
   activeSourceName = currentExample(id).name;
@@ -834,7 +844,7 @@ function updateSaveState(): void {
     || currentDocumentName() !== cleanNameSnapshot
     || previewSnapshot(currentPreviewProfile()) !== cleanPreviewSnapshot;
   hasUnsavedChanges = nextDirty;
-  saveSourceButton.disabled = !nextDirty;
+  saveSourceButton.disabled = !nextDirty || !boundsAreValid;
   dirtyIndicator.hidden = !nextDirty;
 }
 
@@ -845,9 +855,12 @@ function fitBoundsToCurrentSdf(): void {
   }
 
   fitBoundsButton.disabled = true;
+  boundsEditor?.setDisabled(true);
   overlay.textContent = "Fitting bounds...";
   try {
     activeBounds = paddedBounds(estimateBounds(activeSdf));
+    boundsAreValid = true;
+    boundsEditor?.setBounds(activeBounds);
     updateSaveState();
     setEditorStatus("Fit bounds", "ok");
     invalidateMeshForActiveSdf();
@@ -856,15 +869,33 @@ function fitBoundsToCurrentSdf(): void {
     setEditorStatus(error instanceof Error ? error.message : String(error), "error");
   } finally {
     fitBoundsButton.disabled = false;
+    boundsEditor?.setDisabled(false);
   }
 }
 
 function applyPreviewProfile(profile: PreviewProfile): void {
   activeBounds = cloneBounds(profile.bounds);
+  boundsAreValid = true;
+  boundsEditor?.setBounds(activeBounds);
   setRangeControl(stepsInput, stepsOutput, profile.raySteps);
   setRangeControl(gridInput, gridOutput, profile.meshGrid);
   setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
   updateSaveState();
+}
+
+function handleBoundsChange(bounds: Bounds3): void {
+  activeBounds = cloneBounds(bounds);
+  boundsAreValid = true;
+  updateSaveState();
+  setEditorStatus("Bounds updated", "ok");
+  invalidateMeshForActiveSdf();
+  schedulePreview(0);
+}
+
+function handleBoundsInvalid(message: string): void {
+  boundsAreValid = false;
+  updateSaveState();
+  setEditorStatus(message, "error");
 }
 
 function currentPreviewProfile(): PreviewProfile {

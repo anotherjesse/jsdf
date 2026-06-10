@@ -711,6 +711,54 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.bounds-editor {
+  display: grid;
+  gap: 5px;
+}
+
+.bounds-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.bounds-row input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11151a;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 5px 7px;
+}
+
+.bounds-row input:focus {
+  border-color: var(--accent);
+  outline: 0;
+}
+
+.bounds-editor[data-invalid="true"] input {
+  border-color: color-mix(in srgb, var(--danger) 72%, var(--line));
+}
+
+.bounds-header span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.bounds-axis {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 760;
+}
+
 .viewport {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
