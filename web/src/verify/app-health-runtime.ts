@@ -16,6 +16,8 @@ export interface AppHealthRuntimeVerification {
     codeEditor: boolean;
     graphInspector: boolean;
     status: string;
+    selectionFocusLabel: string;
+    selectionFocusVisible: boolean;
   };
   graphHoverStatus: {
     before: string;
@@ -46,6 +48,17 @@ export interface AppHealthRuntimeVerification {
     afterGraphView: string;
     codeVisible: boolean;
     graphVisible: boolean;
+  };
+  selectionFocusButton: {
+    labelBefore: string;
+    labelAfterGraph: string;
+    labelAfterCode: string;
+    graphView: string;
+    graphVisible: boolean;
+    graphFocusedSelectedNode: boolean;
+    codeView: string;
+    codeVisible: boolean;
+    revealedMarks: number;
   };
   graphCodeReveal: {
     selectedBefore: string;
@@ -85,6 +98,7 @@ export async function runAppHealthRuntimeVerification(
   const graphHoverStatus = await verifyGraphHoverKeepsStatus(frame, errors);
   const sourceDialogFocus = await verifySourceDialogFocus(frame, errors);
   const sourceHintsShortcutSwitch = await verifySourceHintsShortcutSwitch(frame, errors);
+  const selectionFocusButton = await verifySelectionFocusButton(frame, errors);
   const graphCodeReveal = await verifyGraphCodeReveal(frame, errors);
   const codeGraphReveal = await verifyCodeGraphReveal(frame, errors);
   const editorModeShortcutSwitch = await verifyEditorModeShortcutSwitch(frame, errors);
@@ -105,6 +119,7 @@ export async function runAppHealthRuntimeVerification(
     sourceDialogFocus,
     sourceHintsShortcutSwitch,
     editorModeShortcutSwitch,
+    selectionFocusButton,
     graphCodeReveal,
     codeGraphReveal,
     errors,
@@ -129,6 +144,8 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
   verifyWorkspaceButtonShortcuts("health", health.workspaceButtonShortcuts, errors);
   verifyEditorModeShortcuts("health", health.editorModeShortcuts, errors);
+  if (!health.selectionFocusVisible) errors.push("selection focus button was not visible in app health");
+  if (!health.selectionFocusLabel.includes("#")) errors.push(`selection focus label rendered ${health.selectionFocusLabel || "nothing"}`);
   if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
   if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
   if (!health.graphActionButtons.includes("Reset graph edits")) errors.push("graph action health missing Reset button");
@@ -150,6 +167,8 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
   verifyWorkspaceButtonShortcuts("DOM", dom.workspaceButtonShortcuts, errors);
   verifyEditorModeShortcuts("DOM", dom.editorModeShortcuts, errors);
+  if (!dom.selectionFocusVisible) errors.push("app frame DOM selection focus button was hidden");
+  if (!dom.selectionFocusLabel.includes("#")) errors.push(`app frame DOM selection focus label rendered ${dom.selectionFocusLabel || "nothing"}`);
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
   if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
@@ -255,6 +274,8 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     status: frameDocument?.querySelector("#editorStatus")?.textContent ?? "",
+    selectionFocusLabel: frameDocument?.querySelector("#selectionFocusButton")?.textContent?.trim() ?? "",
+    selectionFocusVisible: Boolean(frameDocument?.querySelector<HTMLButtonElement>("#selectionFocusButton:not([hidden])")),
   };
 }
 
@@ -431,6 +452,88 @@ async function verifySourceHintsShortcutSwitch(
     preventedDefault,
     restoredDefault,
     status: statusText,
+  };
+}
+
+async function verifySelectionFocusButton(
+  frame: HTMLIFrameElement,
+  errors: string[],
+): Promise<AppHealthRuntimeVerification["selectionFocusButton"]> {
+  const frameDocument = safeFrameDocument(frame);
+  const frameWindow = safeFrameWindow(frame);
+  const empty = {
+    labelBefore: "",
+    labelAfterGraph: "",
+    labelAfterCode: "",
+    graphView: "",
+    graphVisible: false,
+    graphFocusedSelectedNode: false,
+    codeView: "",
+    codeVisible: false,
+    revealedMarks: 0,
+  };
+  if (!frameDocument || !frameWindow) {
+    errors.push("app frame was unavailable for selection focus verification");
+    return empty;
+  }
+
+  const button = frameDocument.querySelector<HTMLButtonElement>("#selectionFocusButton");
+  const codeMode = frameDocument.querySelector<HTMLButtonElement>("#codeModeButton");
+  const graphPanel = frameDocument.querySelector<HTMLElement>("#graphPanel");
+  const codePanel = frameDocument.querySelector<HTMLElement>("#codePanel");
+  if (!button || !codeMode || !graphPanel || !codePanel) {
+    errors.push("app frame missing selection focus controls");
+    return empty;
+  }
+
+  codeMode.click();
+  await settleFrame(frameWindow);
+  const labelBefore = button.textContent?.trim() ?? "";
+  if (button.hidden) errors.push("selection focus button was hidden before navigation");
+  if (!labelBefore.includes("#")) errors.push(`selection focus button label rendered ${labelBefore || "nothing"}`);
+
+  button.click();
+  await settleFrame(frameWindow);
+  const graphHealth = readAppHealth(frame);
+  const graphView = graphHealth?.editorView ?? "";
+  const graphVisible = !graphPanel.classList.contains("hidden");
+  const labelAfterGraph = button.textContent?.trim() ?? "";
+  const active = frameDocument.activeElement;
+  const graphFocusedSelectedNode = Boolean(
+    active
+      && "classList" in active
+      && active.classList.contains("graph-node")
+      && active.getAttribute("aria-pressed") === "true",
+  );
+
+  button.click();
+  await settleFrame(frameWindow);
+  const codeHealth = readAppHealth(frame);
+  const codeView = codeHealth?.editorView ?? "";
+  const codeVisible = !codePanel.classList.contains("hidden");
+  const labelAfterCode = button.textContent?.trim() ?? "";
+  const revealedMarks = frameDocument.querySelectorAll("#codeEditor .source-revealed-link").length;
+
+  if (graphView !== "graph") errors.push(`selection focus button switched to ${graphView || "unknown"} instead of graph`);
+  if (!graphVisible) errors.push("selection focus button left graph panel hidden");
+  if (!graphFocusedSelectedNode) errors.push("selection focus button did not focus the selected graph node");
+  if (codeView !== "code") errors.push(`selection focus button returned to ${codeView || "unknown"} instead of code`);
+  if (!codeVisible) errors.push("selection focus button left code panel hidden");
+  if (revealedMarks < 1) errors.push("selection focus button did not reveal the selected source range");
+  if (!labelAfterGraph.includes("#") || !labelAfterCode.includes("#")) {
+    errors.push(`selection focus label became ${labelAfterGraph || "nothing"} / ${labelAfterCode || "nothing"}`);
+  }
+
+  return {
+    labelBefore,
+    labelAfterGraph,
+    labelAfterCode,
+    graphView,
+    graphVisible,
+    graphFocusedSelectedNode,
+    codeView,
+    codeVisible,
+    revealedMarks,
   };
 }
 
@@ -646,6 +749,12 @@ function dispatchPointer(target: HTMLElement, type: string): void {
 
 function nextFrame(frameWindow: Window): Promise<void> {
   return new Promise((resolve) => frameWindow.requestAnimationFrame(() => resolve()));
+}
+
+async function settleFrame(frameWindow: Window): Promise<void> {
+  await nextFrame(frameWindow);
+  await new Promise((resolve) => frameWindow.setTimeout(resolve, 80));
+  await nextFrame(frameWindow);
 }
 
 function safeFrameWindow(frame: HTMLIFrameElement): AppHealthWindow | null {

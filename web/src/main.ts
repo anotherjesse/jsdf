@@ -67,6 +67,7 @@ const tetraMeshButton = document.querySelector<HTMLButtonElement>("#tetraMeshBut
 const fitBoundsButton = document.querySelector<HTMLButtonElement>("#fitBoundsButton")!;
 const codeModeButton = document.querySelector<HTMLButtonElement>("#codeModeButton")!;
 const graphModeButton = document.querySelector<HTMLButtonElement>("#graphModeButton")!;
+const selectionFocusButton = document.querySelector<HTMLButtonElement>("#selectionFocusButton")!;
 const codePanel = document.querySelector<HTMLElement>("#codePanel")!;
 const graphPanel = document.querySelector<HTMLElement>("#graphPanel")!;
 const codeEditorElement = document.querySelector<HTMLElement>("#codeEditor")!;
@@ -206,6 +207,7 @@ sourceDialog.addEventListener("close", () => {
 });
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
+selectionFocusButton.addEventListener("click", revealSelectedTarget);
 undoGraphButton.addEventListener("click", undoGraphEdit);
 redoGraphButton.addEventListener("click", redoGraphEdit);
 resetGraphButton.addEventListener("click", resetGraphEdits);
@@ -954,6 +956,54 @@ function setSelectedSourceLink(
   selectedSourceLink = link;
   graphInspector?.setSelectedSourceLink(link);
   if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
+  updateSelectionFocusButton();
+}
+
+function revealSelectedTarget(): void {
+  const link = selectedSourceLink ?? (selectedNode ? sourceLinkForNodeId(selectedNode.id) : null);
+  if (editorView === "graph") {
+    if (link) revealGraphSource(link);
+    else setEditorView("code");
+    return;
+  }
+  if (link) {
+    handleSourceLinkSelect(link, { revealGraph: true });
+    return;
+  }
+  if (selectedNode) {
+    setEditorView("graph");
+    window.setTimeout(() => graphInspector?.revealSelected({ focus: true }), 0);
+  }
+}
+
+function updateSelectionFocusButton(): void {
+  const label = selectedSourceLink
+    ? selectedSourceLinkLabel(selectedSourceLink)
+    : selectedNode
+      ? selectedNodeLabel(selectedNode)
+      : "";
+
+  if (!label) {
+    selectionFocusButton.hidden = true;
+    selectionFocusButton.textContent = "";
+    selectionFocusButton.removeAttribute("title");
+    selectionFocusButton.removeAttribute("aria-label");
+    return;
+  }
+
+  const destination = editorView === "graph" ? "code" : "graph";
+  selectionFocusButton.hidden = false;
+  selectionFocusButton.textContent = label;
+  selectionFocusButton.title = `Reveal ${label} in ${destination}`;
+  selectionFocusButton.setAttribute("aria-label", `Reveal ${label} in ${destination}`);
+}
+
+function selectedSourceLinkLabel(link: GraphSourceLink): string {
+  return `${link.nodeKind} #${link.nodeId} ${link.label}`;
+}
+
+function selectedNodeLabel(node: Node): string {
+  return `${node.kind} #${node.id}`;
 }
 
 function sourceFocusNodeId(): number | null {
@@ -1141,6 +1191,7 @@ function setEditorView(mode: EditorView): void {
   graphModeButton.setAttribute("aria-pressed", String(mode === "graph"));
   codePanel.classList.toggle("hidden", mode !== "code");
   graphPanel.classList.toggle("hidden", mode !== "graph");
+  updateSelectionFocusButton();
   if (editorView === "code") {
     window.requestAnimationFrame(() => {
       codeEditor?.layout();
@@ -1374,8 +1425,10 @@ function appHealthDiagnostics() {
     sourceLinks: currentSourceLinks.length,
     selectedNode: selectedNode ? `${selectedNode.kind} #${selectedNode.id}` : null,
     selectedSourceLink: selectedSourceLink
-      ? `${selectedSourceLink.nodeKind} #${selectedSourceLink.nodeId} ${selectedSourceLink.label}`
+      ? selectedSourceLinkLabel(selectedSourceLink)
       : null,
+    selectionFocusLabel: selectionFocusButton.textContent?.trim() ?? "",
+    selectionFocusVisible: !selectionFocusButton.hidden,
     hiddenNodes: hiddenNodeIds.size,
     meshTriangles: mesh ? mesh.triangles.length : null,
     meshBuildPending: Boolean(meshBuildPromise),

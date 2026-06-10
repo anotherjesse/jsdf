@@ -247,6 +247,20 @@ button:disabled {
   color: var(--danger);
 }
 
+.selection-focus {
+  max-width: min(100%, 280px);
+  min-height: 24px;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 680;
+  padding: 2px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) repeat(4, auto);
