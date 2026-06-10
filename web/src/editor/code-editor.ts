@@ -4,6 +4,7 @@ import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import * as api from "../api";
 import type { GraphSourceLink } from "./clean-source-patch";
+import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 
 interface MonacoEnvironment {
@@ -15,6 +16,7 @@ interface MonacoEnvironment {
 };
 
 const SOURCE_HOVER_CLEAR_GRACE_MS = 140;
+const SOURCE_HOVER_STICKY_COLUMNS = 2;
 
 monaco.languages.registerCompletionItemProvider("javascript", {
   triggerCharacters: ["."],
@@ -170,12 +172,20 @@ export function createCodeEditor(
     commitHover(link, shiftKey);
   };
 
-  const linkAtPosition = (position: monaco.Position | null | undefined): GraphSourceLink | null => {
+  const linkAtPosition = (
+    position: monaco.Position | null | undefined,
+    options: { sticky?: boolean } = {},
+  ): GraphSourceLink | null => {
     const model = editor.getModel();
     if (!model || !position) return null;
     const offset = model.getOffsetAt(position);
-    const containing = sourceLinks.filter((candidate) => offset >= candidate.start && offset <= candidate.end);
-    return containing.sort((a, b) => (a.end - a.start) - (b.end - b.start) || b.start - a.start)[0] ?? null;
+    if (!options.sticky) return sourceLinkAtOffset(sourceLinks, offset);
+    return stickySourceLinkAtOffset(sourceLinks, offset, (sourceOffset) => {
+      return model.getPositionAt(sourceOffset).lineNumber;
+    }, {
+      stickyColumns: SOURCE_HOVER_STICKY_COLUMNS,
+      preferredNodeId: hoveredLink?.nodeId ?? null,
+    });
   };
 
   const rangeForSourceLink = (link: GraphSourceLink): monaco.Range | null => {
@@ -290,7 +300,7 @@ export function createCodeEditor(
   const hoverSubscription = editor.onMouseMove((event) => {
     if (activeScrub) return;
     pointerInside = true;
-    pointerLink = linkAtPosition(event.target.position);
+    pointerLink = linkAtPosition(event.target.position, { sticky: true });
     updateHover(pointerLink, event.event.browserEvent.shiftKey || shiftDown);
   });
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {

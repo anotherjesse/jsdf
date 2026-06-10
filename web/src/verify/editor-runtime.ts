@@ -8,6 +8,7 @@ import {
   sourceLinkForGraphNodeIdentity,
   sourceLinkForGraphSourceLinkIdentity,
 } from "../editor/graph-source-identity";
+import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "../editor/source-link-hit-test";
 import { readSourceLinkNumber, scrubSourceLinkValue } from "../editor/source-link-scrub";
 import type { SDF3 } from "../core/nodes";
 
@@ -36,6 +37,12 @@ export interface EditorRuntimeVerification {
     patchedSource: string;
     editedSourceDecorations: number;
     selectedGraphParamsAfterPatch: number;
+  };
+  sourceLinkHitTest: {
+    exactGap: string;
+    stickyGap: string;
+    preferredGap: string;
+    farGap: string;
   };
   selectionRestore: {
     previousNode: string;
@@ -69,6 +76,7 @@ export async function runEditorRuntimeVerification(
     editedSourceDecorations: 0,
     selectedGraphParamsAfterPatch: 0,
   };
+  const sourceLinkHitTest = verifySourceLinkHitTest(errors);
   const selectionRestore = verifySelectionRestore(errors);
   let selectedNode = "";
 
@@ -235,6 +243,7 @@ export async function runEditorRuntimeVerification(
       graphSourceHoverEvents,
       graphSourceHoverDecorations,
       sourceScrub,
+      sourceLinkHitTest,
       selectionRestore,
       errors,
     };
@@ -246,6 +255,39 @@ export async function runEditorRuntimeVerification(
     const node = graphInspector.selectNodeById(link.nodeId);
     if (node) codeEditor?.markSelectedSourceLink(link);
   }
+}
+
+function verifySourceLinkHitTest(errors: string[]): EditorRuntimeVerification["sourceLinkHitTest"] {
+  const { sdf } = evaluateSource(fixtureSource);
+  const links = findGraphSourceLinks(fixtureSource, sdf);
+  const radiusLink = links.find((link) => link.nodeKind === "sphere" && link.label === "radius");
+  const translateLink = links.find((link) => link.nodeKind === "translate3" && link.label === "offset[0]");
+  const lineForOffset = (offset: number) => fixtureSource.slice(0, Math.max(0, offset)).split("\n").length;
+  const gapOffset = (radiusLink?.end ?? 0) + 1;
+  const farOffset = fixtureSource.indexOf("return left");
+  const exactGapLink = radiusLink ? sourceLinkAtOffset(links, gapOffset) : null;
+  const stickyGapLink = radiusLink ? stickySourceLinkAtOffset(links, gapOffset, lineForOffset) : null;
+  const preferredGapLink = radiusLink
+    ? stickySourceLinkAtOffset(links, gapOffset, lineForOffset, { preferredNodeId: translateLink?.nodeId ?? -1 })
+    : null;
+  const farGapLink = farOffset >= 0 ? stickySourceLinkAtOffset(links, farOffset, lineForOffset) : null;
+
+  if (!radiusLink) errors.push("source hit-test fixture has no radius link");
+  if (exactGapLink) errors.push(`source hit-test exact gap unexpectedly found ${formatLink(exactGapLink)}`);
+  if (radiusLink && stickyGapLink?.nodeId !== radiusLink.nodeId) {
+    errors.push(`source hit-test sticky gap found ${formatLink(stickyGapLink) || "nothing"}`);
+  }
+  if (radiusLink && preferredGapLink?.nodeId !== radiusLink.nodeId) {
+    errors.push(`source hit-test preferred gap jumped to ${formatLink(preferredGapLink) || "nothing"}`);
+  }
+  if (farGapLink) errors.push(`source hit-test far gap unexpectedly found ${formatLink(farGapLink)}`);
+
+  return {
+    exactGap: formatLink(exactGapLink),
+    stickyGap: formatLink(stickyGapLink),
+    preferredGap: formatLink(preferredGapLink),
+    farGap: formatLink(farGapLink),
+  };
 }
 
 function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["selectionRestore"] {
@@ -321,6 +363,10 @@ function verifySelectionRestore(errors: string[]): EditorRuntimeVerification["se
     selectedParamRows,
     selectedNode,
   };
+}
+
+function formatLink(link: GraphSourceLink | null): string {
+  return link ? `${link.nodeKind}:${link.label}` : "";
 }
 
 function verifySourceScrubPath(
