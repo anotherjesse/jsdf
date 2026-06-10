@@ -52,10 +52,11 @@ monaco.languages.registerCompletionItemProvider("javascript", {
     };
     const context = sourceCompletionContextAt(model.getValue(), position.lineNumber, position.column);
     return {
-      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, sortText }) => ({
+      suggestions: sourceCompletionEntries(context).map(({ entry, filterText, insertAsSnippet, insertText, sortText }) => ({
         label: entry.name,
         kind: completionKindForApiEntry(entry),
-        insertText: entry.name,
+        insertText,
+        ...(insertAsSnippet ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet } : {}),
         filterText,
         range,
         detail: entry.signature,

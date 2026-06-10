@@ -76,9 +76,12 @@ export interface EditorRuntimeVerification {
     easeCompletions: number;
     methodDifference: boolean;
     methodPartialCompletion: string;
+    methodPartialSnippet: string;
     methodPartialScope: string;
     easingPartialCompletion: string;
+    easingPartialSnippet: string;
     easingPartialScope: string;
+    sphereSnippet: string;
     signatureChecks: number;
     sphere: string;
     translate: string;
@@ -376,12 +379,23 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
   if (!sphere?.signature.includes("sphere(")) errors.push("api hints missing sphere signature");
   if (translate?.kind !== "method") errors.push(`api hints classified translate as ${translate?.kind ?? "missing"}`);
   if (!linear?.signature.includes("ease.linear")) errors.push("api hints missing ease.linear signature");
+  const spherePartial = firstCompletionForSource("return sph", 1, 11);
+  if (spherePartial.first !== "sphere") errors.push(`sph completion first offered ${spherePartial.first || "nothing"}`);
+  if (spherePartial.insertText !== "sphere(${1:radius}, ${2:center})$0") {
+    errors.push(`sphere snippet rendered ${spherePartial.insertText || "nothing"}`);
+  }
   const methodPartial = firstCompletionForSource("const f = sphere(1)\nreturn f.diffe", 2, 15);
   if (methodPartial.context.scope !== "method") errors.push(`f.diffe completion used ${methodPartial.context.scope} scope`);
   if (methodPartial.first !== "difference") errors.push(`f.diffe completion first offered ${methodPartial.first || "nothing"}`);
+  if (methodPartial.insertText !== "difference(${1:rest}, ${2:{ k? \\}})$0") {
+    errors.push(`f.diffe snippet rendered ${methodPartial.insertText || "nothing"}`);
+  }
   const easingPartial = firstCompletionForSource("return sphere(ease.lin)", 1, 23);
   if (easingPartial.context.scope !== "ease") errors.push(`ease.lin completion used ${easingPartial.context.scope} scope`);
   if (easingPartial.first !== "linear") errors.push(`ease.lin completion first offered ${easingPartial.first || "nothing"}`);
+  if (easingPartial.insertText !== "linear(${1:t})$0") {
+    errors.push(`ease.lin snippet rendered ${easingPartial.insertText || "nothing"}`);
+  }
   const signatureChecks = verifyApiSignatureHelp(errors);
 
   return {
@@ -390,9 +404,12 @@ function verifyApiHints(errors: string[]): EditorRuntimeVerification["apiHints"]
     easeCompletions: easeCompletions.length,
     methodDifference: methodNames.has("difference"),
     methodPartialCompletion: methodPartial.first,
+    methodPartialSnippet: methodPartial.insertText,
     methodPartialScope: methodPartial.context.scope,
     easingPartialCompletion: easingPartial.first,
+    easingPartialSnippet: easingPartial.insertText,
     easingPartialScope: easingPartial.context.scope,
+    sphereSnippet: spherePartial.insertText,
     signatureChecks,
     sphere: sphere?.signature ?? "",
     translate: translate?.signature ?? "",
@@ -404,12 +421,16 @@ function firstCompletionForSource(
   source: string,
   lineNumber: number,
   column: number,
-): { context: ReturnType<typeof sourceCompletionContextAt>; first: string } {
+): { context: ReturnType<typeof sourceCompletionContextAt>; first: string; insertText: string } {
   const context = sourceCompletionContextAt(source, lineNumber, column);
   const first = sourceCompletionEntries(context)
     .filter(({ entry }) => entry.name.toLowerCase().startsWith(context.token.toLowerCase()))
-    .sort((left, right) => left.sortText.localeCompare(right.sortText))[0]?.entry.name ?? "";
-  return { context, first };
+    .sort((left, right) => left.sortText.localeCompare(right.sortText))[0];
+  return {
+    context,
+    first: first?.entry.name ?? "",
+    insertText: first?.insertText ?? "",
+  };
 }
 
 function verifyEditorTools(errors: string[]): EditorRuntimeVerification["editorTools"] {

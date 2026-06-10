@@ -9,6 +9,8 @@ export interface SourceCompletionContext {
 export interface SourceCompletionEntry {
   entry: ApiReferenceEntry;
   filterText: string;
+  insertAsSnippet: boolean;
+  insertText: string;
   sortText: string;
 }
 
@@ -30,6 +32,7 @@ export function sourceCompletionEntries(context: SourceCompletionContext): Sourc
   return apiCompletionEntriesForScope(context.scope).map((entry) => ({
     entry,
     filterText: entry.name,
+    ...sourceCompletionInsert(entry, context),
     sortText: sourceCompletionSortText(entry, token),
   }));
 }
@@ -50,6 +53,103 @@ function completionMatchRank(name: string, lowerToken: string): number {
   if (name.startsWith(lowerToken)) return 1;
   if (isSubsequence(lowerToken, name)) return 3;
   return 4;
+}
+
+function sourceCompletionInsert(
+  entry: ApiReferenceEntry,
+  context: SourceCompletionContext,
+): Pick<SourceCompletionEntry, "insertAsSnippet" | "insertText"> {
+  if (entry.kind !== "function" && entry.kind !== "method") {
+    return {
+      insertAsSnippet: false,
+      insertText: entry.name,
+    };
+  }
+
+  const params = callableParamsForEntry(entry, context);
+  if (!params) {
+    return {
+      insertAsSnippet: false,
+      insertText: entry.name,
+    };
+  }
+
+  if (params.length === 0) {
+    return {
+      insertAsSnippet: false,
+      insertText: `${entry.name}()`,
+    };
+  }
+
+  const placeholders = params.map((param, index) => `\${${index + 1}:${escapeSnippetPlaceholder(param)}}`);
+  return {
+    insertAsSnippet: true,
+    insertText: `${entry.name}(${placeholders.join(", ")})$0`,
+  };
+}
+
+function callableParamsForEntry(entry: ApiReferenceEntry, context: SourceCompletionContext): string[] | null {
+  const signatureParams = paramsFromSignature(entry.signature, entry.name);
+  if (!signatureParams) return null;
+  const params = signatureParams.map(cleanParamLabel).filter((param) => param.length > 0);
+  if (context.scope === "method" && !entry.signature.includes(`.${entry.name}(`) && entry.completionScopes.includes("global")) {
+    return params.slice(1);
+  }
+  return params;
+}
+
+function paramsFromSignature(signature: string, name: string): string[] | null {
+  const callIndex = signature.indexOf(`${name}(`);
+  if (callIndex < 0) return null;
+  const open = signature.indexOf("(", callIndex + name.length);
+  if (open < 0) return null;
+  const close = matchingCloseParen(signature, open);
+  if (close < 0) return null;
+  return splitParams(signature.slice(open + 1, close));
+}
+
+function matchingCloseParen(value: string, open: number): number {
+  let depth = 0;
+  for (let index = open; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(") depth += 1;
+    if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function splitParams(value: string): string[] {
+  const params: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(" || char === "[" || char === "{") depth += 1;
+    if (char === ")" || char === "]" || char === "}") depth -= 1;
+    if (char === "," && depth === 0) {
+      params.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  const tail = value.slice(start);
+  if (tail.trim()) params.push(tail);
+  return params;
+}
+
+function cleanParamLabel(param: string): string {
+  return param
+    .trim()
+    .replace(/^\.\.\./, "")
+    .replace(/\s*=\s*.+$/, "")
+    .replace(/\?$/, "")
+    .trim();
+}
+
+function escapeSnippetPlaceholder(value: string): string {
+  return value.replace(/[\\$}]/g, "\\$&");
 }
 
 function isSubsequence(needle: string, haystack: string): boolean {
