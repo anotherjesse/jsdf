@@ -357,7 +357,6 @@ export class GraphInspector {
     const target = path.at(-1) ?? null;
     this.setHoveredNodeById(target?.id ?? null);
     this.options.onHover(target, { shiftKey: event instanceof PointerEvent && event.shiftKey });
-    this.updateSolo(path, event);
   }
 
   private updateSolo(path: Node[], event: Event): void {

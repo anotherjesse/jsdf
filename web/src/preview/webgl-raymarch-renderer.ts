@@ -4,6 +4,8 @@ import { compileGLSLScene } from "../glsl/compiler";
 import { fnName } from "../glsl/format";
 import type { OrbitCamera } from "./orbit-camera";
 
+export type HighlightMode = "mark" | "focus";
+
 export class WebGLRaymarchRenderer {
   private readonly gl: WebGL2RenderingContext;
   private readonly vao: WebGLVertexArrayObject;
@@ -30,15 +32,22 @@ export class WebGLRaymarchRenderer {
     if (active) this.redraw();
   }
 
-  render(sdf: SDF3, bounds: Bounds3, steps: number, highlightNode: Node | null = null): void {
+  render(
+    sdf: SDF3,
+    bounds: Bounds3,
+    steps: number,
+    highlightNode: Node | null = null,
+    highlightMode: HighlightMode = "mark",
+  ): void {
     const sceneSource = compileGLSLScene(sdf).source;
-    const fragment = fragmentShader(sceneSource, highlightNode);
+    const fragment = fragmentShader(sceneSource, highlightNode, highlightMode);
     if (fragment !== this.currentSource) {
       this.currentSource = fragment;
       this.program = createProgram(this.gl, vertexShader, fragment);
     }
     this.steps = steps;
     this.canvas.dataset.highlightNode = highlightNode ? String(highlightNode.id) : "";
+    this.canvas.dataset.highlightMode = highlightNode ? highlightMode : "";
     this.setBounds(bounds);
     if (this.active) this.redraw();
   }
@@ -166,10 +175,12 @@ void main() {
 }
 `;
 
-function fragmentShader(sceneSource: string, highlightNode: Node | null): string {
+function fragmentShader(sceneSource: string, highlightNode: Node | null, highlightMode: HighlightMode): string {
   return `#version 300 es
 ${sceneSource}
 ${selectedSceneFunction(highlightNode)}
+
+const bool SDF_FOCUS_HIGHLIGHT = ${highlightMode === "focus" && highlightNode ? "true" : "false"};
 
 uniform vec2 u_resolution;
 uniform vec3 u_eye;
@@ -256,7 +267,13 @@ void main() {
     + vec3(0.95, 0.63, 0.16) * soft * 0.16
     + vec3(0.55, 0.72, 0.85) * rim * 0.32;
   float selectedBand = 1.0 - smoothstep(eps * 3.0, eps * 14.0, abs(selectedScene(p)));
-  color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.62);
+  if (SDF_FOCUS_HIGHLIGHT) {
+    vec3 faded = mix(bg, color, 0.18);
+    color = mix(faded, color, selectedBand);
+    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.34);
+  } else {
+    color = mix(color, vec3(1.0, 0.76, 0.18), selectedBand * 0.42);
+  }
 
   outColor = vec4(pow(color, vec3(0.4545)), 1.0);
 }

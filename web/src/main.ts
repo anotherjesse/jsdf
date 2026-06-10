@@ -77,6 +77,7 @@ let graphInspector: GraphInspector | null = null;
 let activeSdf: SDF3 | null = null;
 let selectedNode: Node | null = null;
 let hoveredNode: Node | null = null;
+let focusPreview: SoloPreview | null = null;
 let soloPreview: SoloPreview | null = null;
 let boundsEditor: BoundsEditor | null = null;
 let mesh: MeshResult | null = null;
@@ -215,6 +216,7 @@ function loadExample(id: string): void {
   documentNameInput.value = activeSourceName;
   selectedNode = null;
   hoveredNode = null;
+  focusPreview = null;
   codeEditor?.setValue(source);
   markSourceClean(source, activeSourceName);
   renderLoadDialog();
@@ -241,6 +243,7 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
   documentNameInput.value = document.name;
   selectedNode = null;
   hoveredNode = null;
+  focusPreview = null;
   codeEditor?.setValue(source);
   markSourceClean(source, document.name);
   renderLoadDialog();
@@ -317,6 +320,7 @@ function compileEditorSource(
   try {
     const { sdf } = evaluateSource(source);
     soloPreview = null;
+    focusPreview = null;
     activeSdf = sdf;
     graphInspector?.setSdf(sdf);
     codeEditor?.setError(null);
@@ -365,6 +369,7 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   if (!graphInspector) return;
   if (!link) {
     hoveredNode = null;
+    focusPreview = null;
     graphInspector.setHoveredNodeById(null);
     if (soloPreview) handleSoloPreview(null);
     else schedulePreview(0);
@@ -380,11 +385,13 @@ function handleSourceLinkHover(link: GraphSourceLink | null, options: SourceLink
   codeEditor?.setFocusedNode(node.id);
 
   if (options.shiftKey) {
-    handleSoloPreview(graphInspector.buildSoloPreviewForNodeId(link.nodeId));
-    setEditorStatus(`Solo ${node.kind} #${node.id}`, "ok");
+    focusPreview = graphInspector.buildSoloPreviewForNodeId(link.nodeId);
+    schedulePreview(0);
+    setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
     return;
   }
 
+  focusPreview = null;
   if (soloPreview) handleSoloPreview(null);
   else schedulePreview(0);
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
@@ -394,6 +401,7 @@ function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
   if (!graphInspector) return;
   hoveredNode = node;
   if (!node) {
+    focusPreview = null;
     if (soloPreview) handleSoloPreview(null);
     else schedulePreview(0);
     codeEditor?.setFocusedNode(selectedNode?.id ?? null);
@@ -403,11 +411,13 @@ function handleGraphHover(node: Node | null, options: GraphHoverOptions): void {
 
   codeEditor?.setFocusedNode(node.id);
   if (options.shiftKey) {
-    handleSoloPreview(graphInspector.buildSoloPreviewForNodeId(node.id));
-    setEditorStatus(`Solo ${node.kind} #${node.id}`, "ok");
+    focusPreview = graphInspector.buildSoloPreviewForNodeId(node.id);
+    schedulePreview(0);
+    setEditorStatus(`Focus ${node.kind} #${node.id}`, "ok");
     return;
   }
 
+  focusPreview = null;
   if (soloPreview) handleSoloPreview(null);
   else schedulePreview(0);
   setEditorStatus(`${node.kind} #${node.id}`, "ok");
@@ -433,12 +443,14 @@ function selectNode(node: Node | null): void {
 
 function handleGraphEdit(edit: GraphParamEdit): void {
   if (!activeSdf) return;
+  focusPreview = null;
   soloPreview = null;
   recordGraphEdit(edit);
   applyGraphMutationStatus(`Edited ${edit.nodeKind} ${edit.label}`, edit, edit.nextValue);
 }
 
 function handleSoloPreview(preview: SoloPreview | null): void {
+  focusPreview = null;
   soloPreview = preview;
   if (preview) {
     meshRenderer?.setActive(false);
@@ -527,9 +539,14 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): void {
 function refreshSourceLinks(source = codeEditor?.getValue(), sdf = activeSdf): void {
   if (!codeEditor || !source || !sdf) return;
   const links = findGraphSourceLinks(source, sdf);
-  codeEditor.setSourceLinks(links);
+  codeEditor.setSourceLinks(links.filter((link) => link.nodeId !== sdf.node.id));
   graphInspector?.setSourceLinks(links);
-  codeEditor.setFocusedNode(hoveredNode?.id ?? selectedNode?.id ?? null);
+  codeEditor.setFocusedNode(sourceFocusNodeId());
+}
+
+function sourceFocusNodeId(): number | null {
+  const node = hoveredNode ?? selectedNode;
+  return node && !isActiveRootNode(node) ? node.id : null;
 }
 
 function clearGraphHistory(): void {
@@ -699,7 +716,8 @@ async function renderCurrent(): Promise<void> {
   const start = performance.now();
   try {
     if (job !== renderJob) return;
-    rayRenderer.render(sdf, currentBounds(), steps, preview?.node ?? hoveredNode ?? selectedNode);
+    const highlight = highlightForRender(preview);
+    rayRenderer.render(sdf, currentBounds(), steps, highlight.node, highlight.mode);
     previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
     if (preview) {
       overlay.textContent = `Solo: ${preview.label}${preview.preservedWrappers ? ` (${preview.preservedWrappers} context)` : ""}`;
@@ -712,6 +730,20 @@ async function renderCurrent(): Promise<void> {
   } finally {
     if (job === renderJob) stepsInput.disabled = false;
   }
+}
+
+function highlightForRender(preview: SoloPreview | null): { node: Node | null; mode: "mark" | "focus" } {
+  if (preview?.node) return { node: isActiveRootNode(preview.node) ? null : preview.node, mode: "mark" };
+  if (focusPreview?.sdf.node && !isActiveRootNode(focusPreview.node)) {
+    return { node: focusPreview.sdf.node, mode: "focus" };
+  }
+  if (hoveredNode && !isActiveRootNode(hoveredNode)) return { node: hoveredNode, mode: "mark" };
+  if (selectedNode && !isActiveRootNode(selectedNode)) return { node: selectedNode, mode: "mark" };
+  return { node: null, mode: "mark" };
+}
+
+function isActiveRootNode(node: Node): boolean {
+  return activeSdf?.node.id === node.id;
 }
 
 async function showMesh(): Promise<void> {

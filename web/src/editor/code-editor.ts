@@ -82,6 +82,10 @@ export function createCodeEditor(
   let activeScrub: ActiveSourceScrub | null = null;
   let hoveredKey: string | null = null;
   let hoveredLink: GraphSourceLink | null = null;
+  let hoverClearTimer = 0;
+  let pointerLink: GraphSourceLink | null = null;
+  let shiftDown = false;
+  let pointerInside = false;
 
   const endScrub = () => {
     if (!activeScrub) return;
@@ -104,12 +108,30 @@ export function createCodeEditor(
     onSourceLinkValueChange(activeScrub.link, nextValue);
   };
 
-  const updateHover = (link: GraphSourceLink | null, shiftKey: boolean) => {
+  const commitHover = (link: GraphSourceLink | null, shiftKey: boolean) => {
     const key = link ? `${link.nodeId}:${link.label}:${link.start}:${link.end}:${shiftKey}` : null;
     if (key === hoveredKey) return;
     hoveredKey = key;
     hoveredLink = link;
     onSourceLinkHover(link, { shiftKey });
+  };
+
+  const updateHover = (
+    link: GraphSourceLink | null,
+    shiftKey: boolean,
+    options: { immediateClear?: boolean } = {},
+  ) => {
+    window.clearTimeout(hoverClearTimer);
+    if (!link && !options.immediateClear) {
+      if (hoveredLink) commitHover(hoveredLink, shiftKey || shiftDown);
+      return;
+    }
+    commitHover(link, shiftKey);
+  };
+
+  const scheduleHoverClear = () => {
+    window.clearTimeout(hoverClearTimer);
+    hoverClearTimer = window.setTimeout(() => commitHover(null, false), 2500);
   };
 
   const linkAtPosition = (position: monaco.Position | null | undefined): GraphSourceLink | null => {
@@ -175,14 +197,33 @@ export function createCodeEditor(
   });
   const hoverSubscription = editor.onMouseMove((event) => {
     if (activeScrub) return;
-    updateHover(linkAtPosition(event.target.position), event.event.browserEvent.shiftKey);
+    pointerInside = true;
+    pointerLink = linkAtPosition(event.target.position);
+    updateHover(pointerLink, event.event.browserEvent.shiftKey || shiftDown);
   });
-  const leaveSubscription = editor.onMouseLeave(() => updateHover(null, false));
+  const leaveSubscription = editor.onMouseLeave((event) => {
+    pointerInside = false;
+    pointerLink = null;
+    const shiftKey = event.event.browserEvent.shiftKey || shiftDown;
+    if (shiftKey) {
+      updateHover(null, true);
+      return;
+    }
+    scheduleHoverClear();
+  });
   const keyDownListener = (event: KeyboardEvent) => {
-    if (event.key === "Shift" && hoveredLink) updateHover(hoveredLink, true);
+    if (event.key !== "Shift") return;
+    shiftDown = true;
+    if (hoveredLink) updateHover(hoveredLink, true);
   };
   const keyUpListener = (event: KeyboardEvent) => {
-    if (event.key === "Shift" && hoveredLink) updateHover(hoveredLink, false);
+    if (event.key !== "Shift") return;
+    shiftDown = false;
+    if (pointerInside) {
+      updateHover(pointerLink, false);
+    } else {
+      scheduleHoverClear();
+    }
   };
   window.addEventListener("keydown", keyDownListener);
   window.addEventListener("keyup", keyUpListener);
@@ -211,7 +252,8 @@ export function createCodeEditor(
         : []);
     },
     setSourceLinks(links: readonly GraphSourceLink[]) {
-      updateHover(null, false);
+      updateHover(null, false, { immediateClear: true });
+      pointerLink = null;
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
@@ -256,7 +298,8 @@ export function createCodeEditor(
     },
     dispose() {
       endScrub();
-      updateHover(null, false);
+      window.clearTimeout(hoverClearTimer);
+      updateHover(null, false, { immediateClear: true });
       window.removeEventListener("keydown", keyDownListener);
       window.removeEventListener("keyup", keyUpListener);
       subscription.dispose();
