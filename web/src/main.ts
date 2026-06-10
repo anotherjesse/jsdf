@@ -139,6 +139,7 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
 
+configureGraphHistoryButtons();
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
@@ -736,6 +737,13 @@ function redoGraphEdit(): void {
   applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
 }
 
+function configureGraphHistoryButtons(): void {
+  undoGraphButton.title = "Undo graph edit in Graph view (Cmd/Ctrl+Z)";
+  undoGraphButton.setAttribute("aria-keyshortcuts", "Control+Z Meta+Z");
+  redoGraphButton.title = "Redo graph edit in Graph view (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)";
+  redoGraphButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y");
+}
+
 function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
   if (isLoadShortcut(event)) {
     event.preventDefault();
@@ -1288,6 +1296,7 @@ function appHealthDiagnostics() {
     hasSaveButton: Boolean(saveSourceButton),
     workspaceButtons: workspaceButtonLabels(),
     graphActionButtons: graphActionButtonLabels(),
+    graphActionShortcuts: graphActionButtonShortcuts(),
     recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
     lastRecursiveDecorationMessage: appHealthMonitor.lastRecursiveDecorationMessage,
   };
@@ -1301,6 +1310,11 @@ function workspaceButtonLabels(): string[] {
 function graphActionButtonLabels(): string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-actions button"))
     .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
+}
+
+function graphActionButtonShortcuts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-actions button"))
+    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
 }
 
 function currentBounds(): Bounds3 {

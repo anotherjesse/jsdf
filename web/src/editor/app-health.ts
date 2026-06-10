@@ -21,6 +21,7 @@ export interface AppHealthDiagnostics {
   hasSaveButton: boolean;
   workspaceButtons: readonly string[];
   graphActionButtons: readonly string[];
+  graphActionShortcuts: readonly string[];
   recursiveDecorationWarnings: number;
   lastRecursiveDecorationMessage: string | null;
 }

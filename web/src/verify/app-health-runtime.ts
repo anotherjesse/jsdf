@@ -9,6 +9,7 @@ export interface AppHealthRuntimeVerification {
     canvasMode: string;
     workspaceButtons: readonly string[];
     graphActionButtons: readonly string[];
+    graphActionShortcuts: readonly string[];
     graphActionIcons: readonly string[];
     codeEditor: boolean;
     graphInspector: boolean;
@@ -82,6 +83,7 @@ function verifyHealth(health: AppHealthDiagnostics, errors: string[]): void {
   if (!health.graphActionButtons.includes("Undo graph edit")) errors.push("graph action health missing Undo button");
   if (!health.graphActionButtons.includes("Redo graph edit")) errors.push("graph action health missing Redo button");
   if (!health.graphActionButtons.includes("Reset graph edits")) errors.push("graph action health missing Reset button");
+  verifyGraphActionShortcuts("health", health.graphActionShortcuts, errors);
   if (health.sourceLinks <= 0) errors.push("app health reported no source links");
   if (health.viewMode !== "shader") errors.push(`initial view mode was ${health.viewMode}`);
   if (health.editorView !== "code") errors.push(`initial editor view was ${health.editorView}`);
@@ -100,8 +102,18 @@ function verifyDom(dom: AppHealthRuntimeVerification["dom"], errors: string[]): 
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
   if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
+  verifyGraphActionShortcuts("DOM", dom.graphActionShortcuts, errors);
   for (const icon of ["undo-icon", "redo-icon", "reset-icon"]) {
     if (!dom.graphActionIcons.includes(icon)) errors.push(`app frame DOM missing ${icon}`);
+  }
+}
+
+function verifyGraphActionShortcuts(label: string, shortcuts: readonly string[], errors: string[]): void {
+  if (!shortcuts.includes("Control+Z Meta+Z")) {
+    errors.push(`${label} graph shortcuts missing undo binding`);
+  }
+  if (!shortcuts.includes("Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y")) {
+    errors.push(`${label} graph shortcuts missing redo binding`);
   }
 }
 
@@ -156,6 +168,8 @@ function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthRuntimeVerificati
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
     graphActionButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    graphActionShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-actions button") ?? [])
+      .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     graphActionIcons: Array.from(frameDocument?.querySelectorAll<HTMLElement>(".editor-actions button > span[aria-hidden='true']") ?? [])
       .flatMap((icon) => [...icon.classList]),
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
