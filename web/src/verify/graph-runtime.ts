@@ -796,6 +796,7 @@ function verifyVectorSourcePatches(errors: string[]): string[] {
   const patches = [
     verifyConstScalarPatch(errors),
     verifyConstVectorElementPatch(errors),
+    verifyConstVectorArgumentPatch(errors),
     verifyMulAxisScalarPatch(errors),
     verifyMulOffAxisMaterialization(errors),
     verifyDirectAxisExpansion(errors),
@@ -849,6 +850,36 @@ function verifyConstVectorElementPatch(errors: string[]): string | null {
   }
   if (!patched.includes("const dx = -0.25")) {
     errors.push("const vector patch did not preserve const reference style");
+  }
+  return patched;
+}
+
+function verifyConstVectorArgumentPatch(errors: string[]): string | null {
+  const source = "const offset = [-0.45, 0, 0]\nreturn sphere(1).translate(offset)";
+  const { sdf } = evaluateSource(source);
+  const translate = findNodeByKind(sdf.node, "translate");
+  if (!translate) {
+    errors.push("const vector argument fixture did not produce translate");
+    return null;
+  }
+  const links = findGraphSourceLinks(source, sdf);
+  const offsetLink = links.find((link) => link.nodeId === translate.id && link.label === "offset[0]");
+  if (!offsetLink || source.slice(offsetLink.start, offsetLink.end) !== "-0.45") {
+    errors.push("const vector argument link did not point at const array value");
+  }
+
+  const patched = patchGraphEditSource(source, sdf, graphEdit(translate, ["offset", 0], "offset[0]", -0.45, -0.2), -0.2);
+  if (!patched) {
+    errors.push("const vector argument patch did not patch source");
+    return null;
+  }
+  if (!patched.includes("const offset = [-0.2, 0, 0]")) {
+    errors.push("const vector argument patch did not preserve vector const style");
+  }
+  const patchedLinks = findGraphSourceLinks(patched, sdf);
+  const patchedOffset = patchedLinks.find((link) => link.nodeId === translate.id && link.label === "offset[0]");
+  if (!patchedOffset || patched.slice(patchedOffset.start, patchedOffset.end) !== "-0.2") {
+    errors.push("const vector argument patch did not rediscover const array value");
   }
   return patched;
 }

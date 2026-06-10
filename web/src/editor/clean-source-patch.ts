@@ -633,7 +633,10 @@ function findKMethodCalls(source: string): CallMatch[] {
 }
 
 function findVectorElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
-  return findArrayElementRange(source, arg, element) ?? findAxisScaledElementRange(arg, element) ?? findScalarVectorRange(source, arg);
+  return findArrayElementRange(source, arg, element)
+    ?? findConstArrayElementRange(source, arg, element)
+    ?? findAxisScaledElementRange(arg, element)
+    ?? findScalarVectorRange(source, arg);
 }
 
 function findVectorArgumentRange(source: string, arg: CallArg): SourceRange | null {
@@ -699,6 +702,12 @@ function findArrayElementRange(source: string, arg: CallArg, element: number): S
     : numericConstArgRange(source, target);
 }
 
+function findConstArrayElementRange(source: string, arg: CallArg, element: number): SourceRange | null {
+  const identifier = arg.text.trim();
+  if (!/^[A-Za-z_$][\w$]*$/.test(identifier)) return null;
+  return findNumericConstArrayElementRange(source, identifier, element, arg.start);
+}
+
 function findArrayArgumentRange(source: string, arg: CallArg): SourceRange | null {
   const open = firstNonWhitespace(source, arg.start, arg.end);
   if (open < 0 || source[open] !== "[") return null;
@@ -755,6 +764,28 @@ function findNumericConstValueRange(source: string, identifier: string, beforeOf
     if (match.index >= beforeOffset) break;
     const start = match.index + match[0].length - match[1].length;
     found = { start, end: start + match[1].length };
+  }
+  return found;
+}
+
+function findNumericConstArrayElementRange(
+  source: string,
+  identifier: string,
+  element: number,
+  beforeOffset: number,
+): SourceRange | null {
+  const pattern = new RegExp(`\\bconst\\s+${escapeRegExp(identifier)}\\s*=\\s*\\[`, "g");
+  let found: SourceRange | null = null;
+  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+    if (match.index >= beforeOffset) break;
+    const open = source.indexOf("[", match.index);
+    if (open < 0) continue;
+    const close = findMatchingParen(source, open);
+    if (close < 0 || close >= beforeOffset) continue;
+    const elements = splitArgs(source, open + 1, close);
+    const target = elements[element];
+    if (!target || !isNumericLiteral(target.text)) continue;
+    found = trimRange(source, target.start, target.end);
   }
   return found;
 }
