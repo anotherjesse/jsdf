@@ -43,6 +43,7 @@ export interface CodeEditor {
   setError(message: string | null): void;
   setSourceLinks(links: readonly GraphSourceLink[]): void;
   setFocusedNode(nodeId: number | null, options?: { reveal?: boolean }): void;
+  markHoveredSourceLink(link: GraphSourceLink | null): void;
   markEditedSourceLink(link: GraphSourceLink | null, options?: { reveal?: boolean }): void;
   revealSourceLink(link: GraphSourceLink): void;
   layout(): void;
@@ -79,6 +80,7 @@ export function createCodeEditor(
   let sourceLinkDecorations: string[] = [];
   let focusedNodeDecorations: string[] = [];
   let revealedSourceDecorations: string[] = [];
+  let hoveredSourceDecorations: string[] = [];
   let editedSourceDecorations: string[] = [];
   let focusedNodeId: number | null = null;
   let activeScrub: ActiveSourceScrub | null = null;
@@ -262,6 +264,7 @@ export function createCodeEditor(
       const model = editor.getModel();
       if (!model) return;
       revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
+      hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
       editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
       sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
         .filter((link) => link.end > link.start)
@@ -284,6 +287,19 @@ export function createCodeEditor(
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
       focusedNodeId = nodeId;
       applyFocusedNodeDecorations(Boolean(options.reveal));
+    },
+    markHoveredSourceLink(link: GraphSourceLink | null) {
+      const range = link ? rangeForSourceLink(link) : null;
+      if (!range) {
+        hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
+        return;
+      }
+      hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, [{
+        range,
+        options: {
+          inlineClassName: "source-hovered-link",
+        },
+      }]);
     },
     markEditedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
       const range = link ? rangeForSourceLink(link) : null;

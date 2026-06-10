@@ -13,6 +13,7 @@ export interface GraphRuntimeVerification {
   selectedNode: string;
   editedRows: number;
   hiddenEvents: number[][];
+  sourceHoverLabels: string[];
   revealedSource: string;
   soloLabels: string[];
   sourcePatch: string;
@@ -36,6 +37,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   const { sdf } = evaluateSource(fixtureSource);
   const links = findGraphSourceLinks(fixtureSource, sdf);
   const hiddenEvents: number[][] = [];
+  const sourceHoverLabels: string[] = [];
   const soloLabels: string[] = [];
   let selectedNode = "";
   let revealedSource = "";
@@ -54,6 +56,9 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     },
     onRevealSource(link) {
       revealedSource = `${link.nodeKind}:${link.label}`;
+    },
+    onSourceHover(link) {
+      sourceHoverLabels.push(link ? `${link.nodeKind}:${link.label}` : "");
     },
     onVisibilityChange(ids) {
       hiddenEvents.push([...ids]);
@@ -81,6 +86,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     selectedNode,
     editedRows: root.querySelectorAll(".param-row.edited, .axis-control.edited").length,
     hiddenEvents,
+    sourceHoverLabels,
     revealedSource,
     soloLabels,
     sourcePatch: verifySourcePatch(lastEdit, sdf, errors),
@@ -142,6 +148,19 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
     } else {
       paramCodeButton.click();
       if (revealedSource !== "sphere:radius") verifyErrors.push(`param code icon emitted ${revealedSource || "nothing"}`);
+    }
+    const paramRow = graphRoot.querySelector<HTMLElement>(".param-row");
+    if (!paramRow) {
+      verifyErrors.push("selected sphere has no parameter row");
+    } else {
+      paramRow.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:radius") verifyErrors.push(`param row hover emitted ${sourceHoverLabels.at(-1) || "nothing"}`);
+      paramRow.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row leave did not clear source hover");
+      paramRow.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "sphere:radius") verifyErrors.push("param row focus did not emit source hover");
+      paramRow.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      if (sourceHoverLabels.at(-1) !== "") verifyErrors.push("param row blur did not clear source hover");
     }
     radiusInput.dispatchEvent(new FocusEvent("focus"));
     radiusInput.value = "1.2";

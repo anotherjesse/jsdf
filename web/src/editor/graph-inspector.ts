@@ -30,6 +30,7 @@ export interface GraphInspectorOptions {
   onEdit(edit: GraphParamEdit): void;
   onSolo(preview: SoloPreview | null): void;
   onRevealSource(link: GraphSourceLink): void;
+  onSourceHover(link: GraphSourceLink | null): void;
   onVisibilityChange(hiddenNodeIds: readonly number[]): void;
 }
 
@@ -956,6 +957,7 @@ export class GraphInspector {
     if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
 
     const sourceLink = this.sourceLinkForParam(node.id, field.path);
+    this.attachSourceHover(row, sourceLink);
     const nameGroup = document.createElement("span");
     nameGroup.className = "param-name-group";
 
@@ -1073,6 +1075,17 @@ export class GraphInspector {
     }) ?? this.sourceLinks.find((link) => {
       return link.nodeId === nodeId && link.end > link.start;
     }) ?? null;
+  }
+
+  private attachSourceHover(target: HTMLElement, link: GraphSourceLink | null): void {
+    if (!link) return;
+    target.addEventListener("pointerenter", () => this.options.onSourceHover(link));
+    target.addEventListener("pointerleave", () => this.options.onSourceHover(null));
+    target.addEventListener("focusin", () => this.options.onSourceHover(link));
+    target.addEventListener("focusout", (event) => {
+      if (event.relatedTarget instanceof globalThis.Node && target.contains(event.relatedTarget)) return;
+      this.options.onSourceHover(null);
+    });
   }
 }
 

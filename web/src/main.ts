@@ -199,6 +199,7 @@ async function boot(): Promise<void> {
       onEdit: handleGraphEdit,
       onSolo: handleSoloPreview,
       onRevealSource: revealGraphSource,
+      onSourceHover: handleGraphSourceHover,
       onVisibilityChange: handleGraphVisibilityChange,
     });
     setViewMode("shader");
@@ -499,6 +500,11 @@ function revealGraphSource(link: GraphSourceLink): void {
     codeEditor?.revealSourceLink(link);
   });
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
+}
+
+function handleGraphSourceHover(link: GraphSourceLink | null): void {
+  codeEditor?.markHoveredSourceLink(link);
+  if (link) setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
 }
 
 function selectNode(node: Node | null): void {
