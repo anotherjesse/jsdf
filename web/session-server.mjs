@@ -552,7 +552,109 @@ curl -sS -X POST "$BASE/undo" \\
 
 The session id is the local capability for this workspace. There is no separate secret in this first version.
 
-## API Reference
+## SDF Source API
+
+Editor source is JavaScript executed with the SDF API globals already in scope, plus \`Math\`. Do not import anything. The code must produce an \`SDF3\`: either use an explicit top-level \`return\`, or leave a final expression that evaluates to an \`SDF3\`.
+
+\`\`\`js
+const trunk = capped_cylinder([0, 0, -0.9], [0, 0, -0.35], 0.12);
+const boughs = union(
+  capped_cone([0, 0, -0.55], [0, 0, 0.05], 0.7, 0.12),
+  capped_cone([0, 0, -0.1], [0, 0, 0.55], 0.5, 0.08),
+  capped_cone([0, 0, 0.3], [0, 0, 0.9], 0.32, 0.03),
+  { k: 0.04 },
+);
+return union(trunk, boughs);
+\`\`\`
+
+Use arrays for vectors, for example \`[x, y, z]\`. Scalar sizes expand to all axes where the function accepts either a number or vector. Angles are radians; use \`radians(degrees)\` when that is clearer. Prefer the JavaScript API below, not the older Python operator style.
+
+### 3D Primitives
+
+- \`sphere(radius = 1, center = ORIGIN): SDF3\`
+- \`plane(normal = UP, point = ORIGIN): SDF3\`
+- \`slab({ x0, x1, y0, y1, z0, z1, k }): SDF3\`
+- \`box(size = 1, center = ORIGIN): SDF3\`, where \`size\` may also be \`{ a, b }\` corners
+- \`rounded_box(size, radius): SDF3\`
+- \`wireframe_box(size, thickness): SDF3\`
+- \`torus(majorRadius, tubeRadius): SDF3\`
+- \`capsule(a, b, radius): SDF3\`
+- \`cylinder(radius): SDF3\`, an infinite cylinder along Z
+- \`capped_cylinder(a, b, radius): SDF3\`
+- \`rounded_cylinder(ra, rb, h): SDF3\`
+- \`capped_cone(a, b, radiusA, radiusB): SDF3\`
+- \`rounded_cone(r1, r2, h): SDF3\`
+- \`ellipsoid(size): SDF3\`
+- \`pyramid(h): SDF3\`
+- \`tetrahedron(r): SDF3\`
+- \`octahedron(r): SDF3\`
+- \`dodecahedron(r): SDF3\`
+- \`icosahedron(r): SDF3\`
+
+### 2D Primitives
+
+2D shapes are useful when extruded or revolved into \`SDF3\`.
+
+- \`circle(radius = 1, center = ORIGIN2): SDF2\`
+- \`line(normal = UP2, point = ORIGIN2): SDF2\`
+- \`slab2({ x0, x1, y0, y1, k }): SDF2\`
+- \`rectangle(size = 1, center = ORIGIN2): SDF2\`, where \`size\` may also be \`{ a, b }\` corners
+- \`rounded_rectangle(size, radius, center = ORIGIN2): SDF2\`
+- \`equilateral_triangle(): SDF2\`
+- \`hexagon(radius): SDF2\`
+- \`rounded_x(width, radius): SDF2\`
+- \`polygon(points): SDF2\`
+- \`vesica(radius, distance): SDF2\`
+
+### CSG And Shape Operations
+
+Most operations are available as globals and as methods. For example, \`union(a, b, { k: 0.1 })\` and \`a.union(b, { k: 0.1 })\` are equivalent. \`k\` enables smooth blending for that operation; \`shape.k(value)\` marks the shape with a smoothness value used by the next CSG operation.
+
+- \`union(first, ...rest, { k? }): SDF\`
+- \`difference(first, ...rest, { k? }): SDF\`; method aliases: \`shape.difference(...)\`, \`shape.subtract(...)\`
+- \`intersection(first, ...rest, { k? }): SDF\`
+- \`blend(first, ...rest, { k? }): SDF\`
+- \`negate(shape): SDF\`, or \`shape.negate()\`
+- \`dilate(shape, radius): SDF\`, or \`shape.dilate(radius)\`
+- \`erode(shape, radius): SDF\`, or \`shape.erode(radius)\`
+- \`shell(shape, thickness): SDF\`, or \`shape.shell(thickness)\`
+- \`shape.repeat(spacing, count = null, padding = 0): SDF\`
+
+### Transforms
+
+- \`shape.translate(offset): SDF\`
+- \`shape.scale(factor): SDF\`
+- \`shape.rotate(angle, axis = Z): SDF\`; for \`SDF2\`, omit the axis
+- \`shape.rotate_to(fromAxis, toAxis): SDF3\`, alias \`shape.rotateTo(...)\`
+- \`shape.orient(axis): SDF3\`, rotates the shape from \`UP\` to the target axis
+- \`shape.circular_array(count, offset = 0): SDF\`, alias \`shape.circularArray(...)\`
+- \`shape.elongate(size): SDF\`
+- \`shape.twist(k): SDF3\`
+- \`shape.bend(k): SDF3\`
+- \`shape.bend_linear(p0, p1, vector, ease = ease.linear): SDF3\`, alias \`shape.bendLinear(...)\`
+- \`shape.bend_radial(r0, r1, dz, ease = ease.linear): SDF3\`, alias \`shape.bendRadial(...)\`
+- \`transition_linear(a, b, p0 = -Z, p1 = Z, ease = ease.linear): SDF3\`, method alias \`shape.transitionLinear(...)\`
+- \`transition_radial(a, b, r0 = 0, r1 = 1, ease = ease.linear): SDF3\`, method alias \`shape.transitionRadial(...)\`
+- \`shape.wrap_around(x0, x1, radius = auto, ease = ease.linear): SDF3\`, alias \`shape.wrapAround(...)\`
+
+### 2D To 3D
+
+- \`shape.slice(): SDF2\`
+- \`shape.extrude(height): SDF3\`
+- \`extrude_to(a, b, height, ease = ease.linear): SDF3\`, method alias \`shape.extrudeTo(...)\`
+- \`shape.revolve(offset = 0): SDF3\`
+
+### Constants And Math Helpers
+
+- Constants: \`PI\`, \`ORIGIN\`, \`ORIGIN2\`, \`X\`, \`Y\`, \`Z\`, \`UP\`, \`X2\`, \`Y2\`, \`UP2\`
+- Helpers: \`radians\`, \`degrees\`, \`add\`, \`sub\`, \`mul\`, \`div\`, \`normalize\`, \`cross\`, \`dot\`, \`length\`, \`mix\`, \`clamp\`, \`modulo\`
+- Easing namespace: \`ease.linear\`, plus named easing functions for bends, transitions, extrusions, and wraps
+
+### Workflow Globals
+
+\`generate\`, \`save\`, \`sample_slice\`, and \`show_slice\` are available for manual workflows, but browser session edits should return an \`SDF3\` for the renderer.
+
+## Browser Session API Reference
 
 ### GET /status
 
