@@ -38,8 +38,9 @@ httpServer.on("request", async (req, res) => {
 });
 
 const port = Number(process.env.PORT || "5173");
-httpServer.listen(port, "127.0.0.1", () => {
-  console.log(`sdf browser session server listening at http://127.0.0.1:${port}/`);
+const host = process.env.HOST || "127.0.0.1";
+httpServer.listen(port, host, () => {
+  console.log(`sdf browser session server listening at http://${host}:${port}/`);
 });
 
 async function handleRequest(req, res) {
