@@ -1,4 +1,5 @@
 /sdf.egg-info
+/.sessions/
 *.stl
 node_modules/
 web/dist/

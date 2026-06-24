@@ -133,6 +133,12 @@
           <div><dt>API</dt><dd id="apiStat">-</dd></div>
         </dl>
         <div class="footer-status">
+          <div id="sessionStrip" class="session-strip" hidden>
+            <span class="session-id">Session <code id="sessionIdLabel"></code></span>
+            <button id="copyAgentPromptButton" type="button">Copy agent prompt</button>
+            <button id="sessionSnapshotButton" type="button">Snapshot</button>
+            <span id="sessionStatus" class="session-status"></span>
+          </div>
           <div id="overlay" class="status-message"></div>
           <a class="footer-link" href="./checks.html" target="_blank" rel="noreferrer">Checks</a>
         </div>
