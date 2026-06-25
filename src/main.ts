@@ -13,6 +13,7 @@ import {
   SOURCE_PRETTIFY_SHORTCUT,
 } from "./editor/app-shortcuts";
 import { queryAppElements } from "./editor/app-elements";
+import { bootApp } from "./editor/app-boot";
 import { createBrowserSessionBridge } from "./editor/browser-session-bridge";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import {
@@ -24,7 +25,7 @@ import {
   type GraphInteractionController,
 } from "./editor/graph-interaction-controller";
 import { createGraphHistoryController } from "./editor/graph-history-controls";
-import { GraphInspector } from "./editor/graph-inspector";
+import type { GraphInspector } from "./editor/graph-inspector";
 import { createSourceCompileController } from "./editor/source-compile-controller";
 import {
   createSourceEditorController,
@@ -39,7 +40,6 @@ import { createSourceWorkspaceActions } from "./editor/source-workspace-actions"
 import { createSourceWorkspaceSession, type SourceWorkspaceSession } from "./editor/source-workspace-session";
 import { supportedSummary, unsupportedOriginalApi } from "./api/completeness";
 import { currentExample, examples } from "./examples";
-import { hasWebGPU } from "./gpu/webgpu";
 import { createPreviewViewportController } from "./preview/preview-viewport-controller";
 
 const elements = queryAppElements();
@@ -242,54 +242,30 @@ installAppKeyboardShortcuts(window, {
 });
 window.addEventListener("beforeunload", handleBeforeUnload);
 
-void boot();
-
-async function boot(): Promise<void> {
-  if (!hasWebGPU()) {
-    elements.gpuBadge.textContent = "WebGL preview";
-    elements.gpuBadge.classList.add("warn");
-  } else {
-    elements.gpuBadge.textContent = "WebGL + WebGPU";
-    elements.gpuBadge.classList.add("ok");
-  }
-
-  try {
-    previewViewport.initialize();
-    graphInspector = new GraphInspector(elements.graphInspectorRoot, {
-      onSelect: (node) => graphInteractionController?.selectNode(node),
-      onHover: (node, options) => graphInteractionController?.handleGraphHover(node, options),
-      onEdit: (edit) => graphInteractionController?.handleGraphEdit(edit),
-      onSolo: (preview) => graphInteractionController?.handleSoloPreview(preview),
-      onRevealSource: (link) => graphInteractionController?.revealGraphSource(link),
-      onSourceHover: (link) => graphInteractionController?.handleGraphSourceHover(link),
-      onVisibilityChange: (hiddenIds) => graphInteractionController?.handleGraphVisibilityChange(hiddenIds),
-    });
-    sourceCompileController.compile({ status: "Ready", statusState: "idle", invalidateMesh: false });
-    await previewViewport.renderCurrent();
-    const { createCodeEditor } = await import("./editor/code-editor");
-    codeEditor = createCodeEditor(
-      elements.codeEditorRoot,
-      sourceForExample(activeExampleId),
-      sourceEditorController.scheduleCompile,
-      (link, options) => graphInteractionController?.handleSourceLinkSelect(link, options),
-      (link, value, options) => graphInteractionController?.handleSourceLinkValueChange(link, value, options),
-      (link, options) => graphInteractionController?.handleSourceLinkHover(link, options),
-      (link) => graphInteractionController?.handleSourceLinkCursor(link),
-      sourceEditorController.prettifyCurrentSource,
-    );
-    sourceEditorController.applyGraphHintsToEditor();
-    if (healthCheckMode || !sourceWorkspaceActions.restoreDraft()) {
-      sourceCompileController.refreshCurrentGraph();
-    }
-    sourceWorkspaceSession.setDraftPersistenceEnabled(!healthCheckMode);
-    appState.updateSaveState();
-    browserSessionController.connect();
-  } catch (error) {
-    elements.gpuBadge.textContent = "Preview error";
-    elements.gpuBadge.classList.add("warn");
-    elements.overlay.textContent = error instanceof Error ? error.message : String(error);
-  }
-}
+void bootApp({
+  elements: {
+    gpuBadge: elements.gpuBadge,
+    overlay: elements.overlay,
+    graphInspectorRoot: elements.graphInspectorRoot,
+    codeEditorRoot: elements.codeEditorRoot,
+  },
+  healthCheckMode,
+  initialSource: () => sourceForExample(activeExampleId),
+  previewViewport,
+  sourceCompile: sourceCompileController,
+  sourceEditor: sourceEditorController,
+  sourceWorkspace: sourceWorkspaceSession,
+  sourceWorkspaceActions,
+  browserSession: browserSessionController,
+  graphInteraction: () => graphInteractionController,
+  updateSaveState: appState.updateSaveState,
+  setGraphInspector: (inspector) => {
+    graphInspector = inspector;
+  },
+  setCodeEditor: (editor) => {
+    codeEditor = editor;
+  },
+});
 
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
   if (!appState.hasUnsavedChanges()) return;

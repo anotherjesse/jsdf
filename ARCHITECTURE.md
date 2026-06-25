@@ -61,6 +61,7 @@ The app is intentionally client-heavy: after the page loads, source evaluation, 
 Common editor interaction policy lives outside the coordinator where possible:
 
 - `src/editor/app-elements.ts` owns required DOM selector lookup and groups elements by the controller that consumes them.
+- `src/editor/app-boot.ts` owns browser app startup: GPU capability labeling, preview and editor initialization, graph inspector construction, draft restoration, and session connection.
 - `src/editor/app-frame.ts` owns browser-frame deferral helpers shared by app wiring, source dialog focus restoration, and session screenshot capture.
 - `src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
