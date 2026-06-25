@@ -73,7 +73,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
 - `src/editor/graph-map-renderer.ts` owns the graph inspector's SVG overview map rendering, map node classes, visibility affordances, and map keyboard/click event adaptation.
-- `src/editor/graph-param-panel.ts` owns selected-node parameter panel DOM rendering, breadcrumb/source-link affordances, orientation and matrix controls, numeric scrubbing, and panel-local custom matrix state.
+- `src/editor/graph-param-panel.ts` owns selected-node parameter panel DOM rendering, orientation and matrix edit wiring, and panel-local custom matrix state; `src/editor/graph-param-panel-controls.ts` owns panel-local DOM helpers, breadcrumb/source-link affordances, edit-session ids, and numeric scrub handle wiring.
 - `src/editor/graph-param-model.ts` owns numeric param discovery, orientation matrix helpers, matrix cell paths, slider bounds, step sizing, and numeric formatting used by the graph inspector.
 - `src/editor/graph-tree-renderer.ts` owns the graph inspector's recursive tree/header DOM rendering, tree node classes, row-level visibility buttons, and tree click/key event adaptation.
 - `src/editor/graph-visibility.ts` owns graph visibility state metadata, visibility icons, node lookup/path helpers, hidden-subtree calculations, and isolate-visible set construction.
@@ -97,7 +97,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/graph-edit-model.ts` provides the shared edit/path model so source patching, graph history, and graph inspector UI do not import each other for data shapes.
 - `editor/graph-map-renderer.ts` renders the inspector's SVG overview map from a graph model while the inspector keeps authoritative selection, hover, and visibility state.
 - `editor/graph-param-model.ts` provides pure numeric-param and orientation-matrix helpers so the graph inspector can stay focused on rendering controls and handling DOM interaction.
-- `editor/graph-param-panel.ts` renders selected-node parameters and emits graph edits/source-hover callbacks while the inspector owns graph selection, visibility, and solo state.
+- `editor/graph-param-panel.ts` renders selected-node parameters and emits graph edits/source-hover callbacks while the inspector owns graph selection, visibility, and solo state; `editor/graph-param-panel-controls.ts` keeps shared panel control rendering and scrub-handle helpers out of the stateful panel class.
 - `editor/graph-tree-renderer.ts` renders the inspector's recursive node tree from the same graph model while the inspector owns authoritative state and action callbacks.
 - `editor/graph-visibility.ts` provides pure graph lookup and visibility-set helpers plus visibility control metadata/icons.
 - `editor/graph-inspector.ts` shows the graph and owns node selection, visibility changes, and solo/focus preview state.
