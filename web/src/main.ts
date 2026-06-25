@@ -10,14 +10,11 @@ import {
   type AppHealthDiagnosticsState,
 } from "./editor/app-health";
 import {
-  configureEditorModeShortcutButtons,
   configureGraphHistoryShortcutButtons,
   GRAPH_FILTER_SHORTCUTS,
   installAppKeyboardShortcuts,
-  SELECTED_TARGET_SHORTCUTS,
   SOURCE_HINTS_SHORTCUT,
   SOURCE_PRETTIFY_SHORTCUT,
-  type AppShortcutEditorView,
 } from "./editor/app-shortcuts";
 import {
   sessionIdFromLocation,
@@ -25,6 +22,10 @@ import {
 } from "./editor/browser-session";
 import { createBrowserSessionController } from "./editor/browser-session-controller";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
+import {
+  createEditorViewController,
+  type EditorViewSelectedTarget,
+} from "./editor/editor-view-controller";
 import { sourceForExample } from "./editor/example-source";
 import { createGraphHistoryController, type GraphHistoryEntry } from "./editor/graph-history-controls";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
@@ -115,7 +116,6 @@ const sessionSnapshotButton = document.querySelector<HTMLButtonElement>("#sessio
 const sessionStatus = document.querySelector<HTMLElement>("#sessionStatus")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
-type EditorView = AppShortcutEditorView;
 type EditorStatusState = "idle" | "ok" | "pending" | "error";
 
 let codeEditor: CodeEditor | null = null;
@@ -131,7 +131,6 @@ let selectedSourceLink: GraphSourceLink | null = null;
 let pendingHiddenNodeKeys: readonly string[] = [];
 let boundsEditor: BoundsEditor | null = null;
 let sourceCompileTimer = 0;
-let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeBounds = boundsForExample(activeExampleId);
 let boundsAreValid = true;
@@ -142,6 +141,22 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
+const editorViewController = createEditorViewController({
+  elements: {
+    codeModeButton,
+    graphModeButton,
+    selectionFocusButton,
+    codePanel,
+    graphPanel,
+  },
+  codeEditor: () => codeEditor,
+  graphInspector: () => graphInspector,
+  readSelectedTarget: readSelectedEditorTarget,
+  flushPendingSourceCompile,
+  afterBrowserFrame,
+  revealGraphSource,
+  revealSourceLinkInGraph: (link) => handleSourceLinkSelect(link, { revealGraph: true }),
+});
 const previewViewport = createPreviewViewportController({
   elements: {
     canvas,
@@ -261,7 +276,6 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
 });
 
 browserSessionController.configure();
-configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
 configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
 boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
@@ -286,17 +300,14 @@ sourceDialog.addEventListener("close", () => {
   sourceWorkspaceActions.restoreDialogFocus();
   afterBrowserFrame(sourceWorkspaceActions.restoreDialogFocus);
 });
-codeModeButton.addEventListener("click", () => setEditorView("code"));
-graphModeButton.addEventListener("click", () => setEditorView("graph"));
-selectionFocusButton.addEventListener("click", revealSelectedTarget);
 window.addEventListener("resize", () => {
   previewViewport.handleResize();
 });
 installAppKeyboardShortcuts(window, {
-  editorView: () => editorView,
-  selectionFocusVisible: () => !selectionFocusButton.hidden,
-  revealSelectedTarget,
-  setEditorView,
+  editorView: () => editorViewController.view,
+  selectionFocusVisible: editorViewController.selectionFocusVisible,
+  revealSelectedTarget: editorViewController.revealSelectedTarget,
+  setEditorView: editorViewController.setView,
   focusGraphFilter: () => graphInspector?.focusFilter({ select: true }),
   toggleSourceHints: toggleGraphHints,
   prettifySource: prettifyCurrentSource,
@@ -534,7 +545,7 @@ function selectRestoredSourceLink(link: GraphSourceLink): boolean {
 function handleSourceLinkSelect(link: GraphSourceLink, options: SourceLinkSelectOptions = {}): void {
   handleSourceLinkCursor(link);
   if (!options.revealGraph) return;
-  setEditorView("graph");
+  editorViewController.setView("graph");
   window.setTimeout(() => graphInspector?.revealSelected({ focus: true }), 0);
 }
 
@@ -651,7 +662,7 @@ function previewOverlayText(prefix: "Focus" | "Solo", preview: SoloPreview): str
 }
 
 function revealGraphSource(link: GraphSourceLink): void {
-  setEditorView("code");
+  editorViewController.setView("code");
   codeEditor?.setFocusedNode(link.nodeId);
   setSelectedSourceLink(link);
   afterBrowserFrame(() => {
@@ -668,7 +679,7 @@ function selectNode(node: Node | null): void {
   selectedNode = node;
   const sourceLink = node ? sourceLinkForNodeId(currentSourceLinks, node.id) : null;
   setSelectedSourceLink(sourceLink);
-  codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
+  codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorViewController.view === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
     previewViewport.scheduleActivePreview(0);
@@ -729,7 +740,7 @@ function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
   if (editedLink) {
     setSelectedSourceLink(editedLink);
   }
-  codeEditor.markEditedSourceLink(editedLink, { reveal: editorView === "code" });
+  codeEditor.markEditedSourceLink(editedLink, { reveal: editorViewController.view === "code" });
   return true;
 }
 
@@ -752,49 +763,18 @@ function setSelectedSourceLink(
   selectedSourceLink = link;
   graphInspector?.setSelectedSourceLink(link);
   if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
-  updateSelectionFocusButton();
+  editorViewController.updateSelectionFocusButton();
   graphHistoryController.refresh();
 }
 
-function revealSelectedTarget(): void {
+function readSelectedEditorTarget(): EditorViewSelectedTarget {
   const link = selectedSourceLink ?? (selectedNode ? sourceLinkForNodeId(currentSourceLinks, selectedNode.id) : null);
-  if (editorView === "graph") {
-    if (link) revealGraphSource(link);
-    else setEditorView("code");
-    return;
-  }
-  if (link) {
-    handleSourceLinkSelect(link, { revealGraph: true });
-    return;
-  }
-  if (selectedNode) {
-    setEditorView("graph");
-    window.setTimeout(() => graphInspector?.revealSelected({ focus: true }), 0);
-  }
-}
-
-function updateSelectionFocusButton(): void {
   const label = selectedSourceLink
     ? sourceLinkLabel(selectedSourceLink)
     : selectedNode
       ? graphNodeLabel(selectedNode)
       : "";
-
-  if (!label) {
-    selectionFocusButton.hidden = true;
-    selectionFocusButton.textContent = "";
-    selectionFocusButton.removeAttribute("title");
-    selectionFocusButton.removeAttribute("aria-label");
-    selectionFocusButton.removeAttribute("aria-keyshortcuts");
-    return;
-  }
-
-  const destination = editorView === "graph" ? "code" : "graph";
-  selectionFocusButton.hidden = false;
-  selectionFocusButton.textContent = label;
-  selectionFocusButton.title = `Reveal ${label} in ${destination} (Cmd/Ctrl+Alt+Enter)`;
-  selectionFocusButton.setAttribute("aria-label", `Reveal ${label} in ${destination}`);
-  selectionFocusButton.setAttribute("aria-keyshortcuts", SELECTED_TARGET_SHORTCUTS);
+  return { label, sourceLink: link, graphNode: selectedNode };
 }
 
 function sourceFocusNodeId(): number | null {
@@ -855,38 +835,11 @@ function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSour
     previewViewport.schedulePreview(0);
     return;
   }
-  setEditorView("graph");
+  editorViewController.setView("graph");
   if (sourceLink) setSelectedSourceLink(sourceLink);
   setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
   afterBrowserFrame(() => graphInspector?.revealSelected({ focus: true }));
   previewViewport.schedulePreview(0);
-}
-
-function setEditorView(mode: EditorView): void {
-  const previousMode = editorView;
-  if (mode === "graph" && previousMode === "code" && !flushPendingSourceCompile()) {
-    return;
-  }
-
-  editorView = mode;
-  codeModeButton.setAttribute("aria-pressed", String(mode === "code"));
-  graphModeButton.setAttribute("aria-pressed", String(mode === "graph"));
-  codePanel.classList.toggle("hidden", mode !== "code");
-  graphPanel.classList.toggle("hidden", mode !== "graph");
-  updateSelectionFocusButton();
-  if (editorView === "code") {
-    afterBrowserFrame(() => {
-      codeEditor?.layout();
-      if (previousMode === "graph" && selectedSourceLink) {
-        codeEditor?.revealSourceLink(selectedSourceLink);
-      }
-    });
-  } else if (previousMode === "code") {
-    codeEditor?.blur();
-    afterBrowserFrame(() => {
-      graphInspector?.revealSelected({ focus: true });
-    });
-  }
 }
 
 function highlightForRender(preview: SoloPreview | null): RenderHighlight {
@@ -956,7 +909,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     sourceCompilePending: Boolean(sourceCompileTimer),
     sourceValid: editorSourceValid,
     viewMode: previewViewport.viewMode,
-    editorView,
+    editorView: editorViewController.view,
     previewLayout: previewViewport.previewLayout,
     meshAlgorithm: previewViewport.meshAlgorithm,
     sourceLinks: currentSourceLinks.length,
