@@ -3,6 +3,7 @@ import {
   type BrowserSessionCommandResult,
   type BrowserSessionConnection,
 } from "./browser-session";
+import { createSessionSnapshot, listSessionSnapshots } from "./session-snapshot-client";
 
 type BrowserSessionStatusState = "idle" | "ok" | "pending" | "error";
 
@@ -22,12 +23,15 @@ export interface BrowserSessionControllerOptions {
   setCode(code: string, comment: string): Promise<BrowserSessionCommandResult>;
   captureScreenshot(comment: string): Promise<BrowserSessionCommandResult>;
   captureSnapshotState(): Promise<BrowserSessionCommandResult>;
+  onSnapshotsChanged?(): void | Promise<void>;
 }
 
 export interface BrowserSessionController {
   configure(): void;
   connect(): void;
   dispose(): void;
+  refreshSnapshotCount(): Promise<void>;
+  currentClientId(): string | null;
 }
 
 export function createBrowserSessionController(options: BrowserSessionControllerOptions): BrowserSessionController {
@@ -44,10 +48,7 @@ export function createBrowserSessionController(options: BrowserSessionController
   const refreshSnapshotCount = async () => {
     if (!sessionId) return;
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/snapshots`, { cache: "no-store" });
-      if (!response.ok) return;
-      const body = await response.json() as { snapshots?: unknown[] };
-      const count = body.snapshots?.length ?? 0;
+      const count = (await listSessionSnapshots(sessionId)).length;
       if (count > 0 && elements.status.textContent && !elements.status.textContent.includes("snapshot")) {
         elements.status.title = `${count} snapshot${count === 1 ? "" : "s"}`;
       }
@@ -81,24 +82,24 @@ export function createBrowserSessionController(options: BrowserSessionController
     elements.snapshotButton.disabled = true;
     try {
       const state = await options.captureSnapshotState();
-      const response = await fetch(`/api/sessions/${sessionId}/snapshots`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...state,
-          kind: "manual",
-          comment: comment.trim(),
-        }),
+      const saved = await createSessionSnapshot(sessionId, {
+        ...state,
+        kind: "manual",
+        comment: comment.trim(),
       });
-      if (!response.ok) throw new Error(await response.text());
-      const saved = await response.json() as { snapshot?: { id?: string } };
       setStatus(saved.snapshot?.id ? `Snapshot ${saved.snapshot.id}` : "Snapshot saved", "ok");
       await refreshSnapshotCount();
+      await options.onSnapshotsChanged?.();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), "error");
     } finally {
       elements.snapshotButton.disabled = false;
     }
+  };
+
+  const refreshSnapshotsChanged = async () => {
+    await refreshSnapshotCount();
+    await options.onSnapshotsChanged?.();
   };
 
   return {
@@ -129,14 +130,18 @@ export function createBrowserSessionController(options: BrowserSessionController
         onCommand: (type) => setStatus(sessionCommandLabel(type), "pending"),
         onResult: (type) => {
           setStatus(`${sessionCommandLabel(type)} done`, "ok");
-          void refreshSnapshotCount();
         },
+        onSnapshot: () => void refreshSnapshotsChanged(),
         onError: (message) => setStatus(message, "error"),
       });
     },
     dispose() {
       connection?.dispose();
       connection = null;
+    },
+    refreshSnapshotCount,
+    currentClientId() {
+      return connection?.clientId ?? null;
     },
   };
 }

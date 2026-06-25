@@ -61,6 +61,20 @@ export interface AppElements {
     snapshotButton: HTMLButtonElement;
     status: HTMLElement;
   };
+  snapshotHistory: {
+    button: HTMLButtonElement;
+    dialog: HTMLDialogElement;
+    closeButton: HTMLButtonElement;
+    slider: HTMLInputElement;
+    sliderOutput: HTMLOutputElement;
+    list: HTMLElement;
+    preview: HTMLElement;
+    meta: HTMLElement;
+    comment: HTMLElement;
+    codeLink: HTMLAnchorElement;
+    restoreButton: HTMLButtonElement;
+    status: HTMLElement;
+  };
   projectSwitcher: {
     button: HTMLButtonElement;
     nameLabel: HTMLElement;
@@ -136,7 +150,19 @@ export function queryAppElements(root: ParentNode = document): AppElements {
   const projectNameLabel = query<HTMLElement>(root, "#projectNameLabel");
   const copyAgentPromptButton = query<HTMLButtonElement>(root, "#copyAgentPromptButton");
   const sessionSnapshotButton = query<HTMLButtonElement>(root, "#sessionSnapshotButton");
+  const projectSnapshotsButton = query<HTMLButtonElement>(root, "#projectSnapshotsButton");
   const sessionStatus = query<HTMLElement>(root, "#sessionStatus");
+  const snapshotHistoryDialog = query<HTMLDialogElement>(root, "#snapshotHistoryDialog");
+  const closeSnapshotHistoryDialogButton = query<HTMLButtonElement>(root, "#closeSnapshotHistoryDialogButton");
+  const snapshotHistorySlider = query<HTMLInputElement>(root, "#snapshotHistorySlider");
+  const snapshotHistorySliderOutput = query<HTMLOutputElement>(root, "#snapshotHistorySliderOutput");
+  const snapshotHistoryList = query<HTMLElement>(root, "#snapshotHistoryList");
+  const snapshotHistoryPreview = query<HTMLElement>(root, "#snapshotHistoryPreview");
+  const snapshotHistoryMeta = query<HTMLElement>(root, "#snapshotHistoryMeta");
+  const snapshotHistoryComment = query<HTMLElement>(root, "#snapshotHistoryComment");
+  const snapshotHistoryCodeLink = query<HTMLAnchorElement>(root, "#snapshotHistoryCodeLink");
+  const restoreSnapshotButton = query<HTMLButtonElement>(root, "#restoreSnapshotButton");
+  const snapshotHistoryStatus = query<HTMLElement>(root, "#snapshotHistoryStatus");
   const projectDialog = query<HTMLDialogElement>(root, "#projectDialog");
   const projectDialogList = query<HTMLElement>(root, "#projectDialogList");
   const closeProjectDialogButton = query<HTMLButtonElement>(root, "#closeProjectDialogButton");
@@ -207,6 +233,20 @@ export function queryAppElements(root: ParentNode = document): AppElements {
       copyAgentPromptButton,
       snapshotButton: sessionSnapshotButton,
       status: sessionStatus,
+    },
+    snapshotHistory: {
+      button: projectSnapshotsButton,
+      dialog: snapshotHistoryDialog,
+      closeButton: closeSnapshotHistoryDialogButton,
+      slider: snapshotHistorySlider,
+      sliderOutput: snapshotHistorySliderOutput,
+      list: snapshotHistoryList,
+      preview: snapshotHistoryPreview,
+      meta: snapshotHistoryMeta,
+      comment: snapshotHistoryComment,
+      codeLink: snapshotHistoryCodeLink,
+      restoreButton: restoreSnapshotButton,
+      status: snapshotHistoryStatus,
     },
     projectSwitcher: {
       button: projectSwitcherButton,

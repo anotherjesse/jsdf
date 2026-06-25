@@ -199,10 +199,12 @@ Server-side responsibilities in `session-server.mjs`:
 
 The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code.
 
-Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, `src/editor/browser-session-bridge.ts`, and `main.ts`:
+Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, `src/editor/browser-session-bridge.ts`, snapshot helpers, and `main.ts`:
 
 - `browser-session.ts` derives the session id from the current `/s/<session-id>` route, connects to the server with `EventSource`, executes `get-status`, `get-code`, `set-code`, and `capture-screenshot`, and posts command results back to the server.
-- `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot POSTs.
+- `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot capture.
+- `session-snapshot-client.ts` owns browser-side calls to the session snapshot list/create/restore endpoints.
+- `session-snapshot-history.ts` owns the Project Snapshots dialog, timeline scrubber, selected snapshot preview, and restore-as-latest action.
 - `project-initial-state.ts` loads a project's latest saved source snapshot before the editor is constructed, so `/s/<session-id>` boots into that project's state before the browser session connects.
 - `project-switcher.ts` owns the user-facing project picker, current project label, project search, new project creation, and navigation between `/s/<session-id>` workspaces through `/api/projects`.
 - `browser-session-bridge.ts` adapts those generic session commands to the live browser app by reading health/source state, applying agent code updates, rendering shader screenshots, and returning snapshot payloads.

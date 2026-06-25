@@ -141,6 +141,7 @@
             <span class="session-id">Session <code id="sessionIdLabel"></code></span>
             <button id="copyAgentPromptButton" type="button">Copy agent prompt</button>
             <button id="sessionSnapshotButton" type="button">Snapshot</button>
+            <button id="projectSnapshotsButton" type="button">Snapshots</button>
             <span id="sessionStatus" class="session-status"></span>
           </div>
           <div id="overlay" class="status-message"></div>
@@ -161,6 +162,41 @@
           </button>
         </header>
         <div id="sourceDialogList" class="source-list"></div>
+      </div>
+    </dialog>
+
+    <dialog id="snapshotHistoryDialog" class="source-dialog snapshot-history-dialog" aria-labelledby="snapshotHistoryDialogTitle">
+      <div class="source-dialog-card snapshot-history-card">
+        <header class="source-dialog-header">
+          <div>
+            <h2 id="snapshotHistoryDialogTitle">Project Snapshots</h2>
+            <p id="snapshotHistoryStatus" class="snapshot-history-status"></p>
+          </div>
+          <button id="closeSnapshotHistoryDialogButton" class="icon-button dialog-close" type="button" title="Close" aria-label="Close">
+            <span class="close-icon" aria-hidden="true"></span>
+          </button>
+        </header>
+        <div class="snapshot-history-body">
+          <section class="snapshot-history-panel" aria-label="Snapshot timeline">
+            <div class="snapshot-history-scrubber">
+              <label class="sr-only" for="snapshotHistorySlider">Snapshot timeline</label>
+              <input id="snapshotHistorySlider" type="range" min="0" max="0" value="0">
+              <output id="snapshotHistorySliderOutput">0 / 0</output>
+            </div>
+            <div id="snapshotHistoryList" class="snapshot-history-list"></div>
+          </section>
+          <section class="snapshot-history-detail" aria-label="Selected snapshot">
+            <div id="snapshotHistoryPreview" class="snapshot-history-preview"></div>
+            <div class="snapshot-history-detail-copy">
+              <p id="snapshotHistoryMeta" class="snapshot-history-meta">-</p>
+              <p id="snapshotHistoryComment" class="snapshot-history-comment" hidden></p>
+            </div>
+            <div class="snapshot-history-actions">
+              <a id="snapshotHistoryCodeLink" class="snapshot-history-code-link" target="_blank" rel="noreferrer" hidden>Code</a>
+              <button id="restoreSnapshotButton" type="button" disabled>Restore as Latest</button>
+            </div>
+          </section>
+        </div>
       </div>
     </dialog>
 

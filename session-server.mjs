@@ -403,10 +403,12 @@ async function restoreSnapshot(req, res, session, snapshotId) {
   const body = await readOptionalJson(req);
   const code = await readSnapshotCode(session.id, snapshotId);
   const comment = semanticComment(body?.comment || `Restoring snapshot ${snapshotId} as latest.`);
+  const clientId = typeof body?.clientId === "string" ? body.clientId : null;
   const result = await sendCommand(session, "set-code", {
     code,
     comment,
-  });
+  }, { clientId });
+  if (clientId) session.activeClientId = clientId;
   const snapshot = await writeSnapshot(session, {
     kind: "restore",
     comment,
@@ -468,8 +470,8 @@ async function undoCode(req, res, session) {
   });
 }
 
-function sendCommand(session, type, payload) {
-  const client = activeClient(session);
+function sendCommand(session, type, payload, options = {}) {
+  const client = commandClient(session, options.clientId);
   if (!client) throw httpError(409, "No browser tab is connected for this session.");
 
   const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -485,6 +487,13 @@ function sendCommand(session, type, payload) {
     });
     sendEvent(client.res, "command", { id, type, payload });
   });
+}
+
+function commandClient(session, clientId) {
+  if (!clientId) return activeClient(session);
+  const client = session.clients.get(clientId);
+  if (!client) throw httpError(409, "Requested browser tab is not connected for this session.");
+  return client;
 }
 
 function activeClient(session) {
@@ -526,7 +535,15 @@ async function writeSnapshot(session, data, req) {
   await writeFile(join(dir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
   session.lastActivity = meta.createdAt;
   await writeSessionMetadata(session, meta.id);
-  return absolutizeSnapshot(meta, req);
+  const snapshot = absolutizeSnapshot(meta, req);
+  broadcastSessionEvent(session, "snapshot", { sessionId: session.id, snapshot });
+  return snapshot;
+}
+
+function broadcastSessionEvent(session, event, data) {
+  for (const client of session.clients.values()) {
+    sendEvent(client.res, event, data);
+  }
 }
 
 async function createProject(req, res) {

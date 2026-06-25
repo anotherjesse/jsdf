@@ -18,6 +18,7 @@ export interface BrowserSessionEvents {
   onClose?(): void;
   onCommand?(type: string): void;
   onResult?(type: string, result: BrowserSessionCommandResult): void;
+  onSnapshot?(): void;
   onError?(message: string): void;
 }
 
@@ -31,6 +32,7 @@ interface BrowserSessionCommand {
 }
 
 export interface BrowserSessionConnection {
+  readonly clientId: string;
   dispose(): void;
 }
 
@@ -59,8 +61,12 @@ export function connectBrowserSession(
     const command = JSON.parse((event as MessageEvent<string>).data) as BrowserSessionCommand;
     void runCommand(sessionId, command, handlers, events);
   });
+  source.addEventListener("snapshot", () => {
+    if (!disposed) events.onSnapshot?.();
+  });
 
   return {
+    clientId,
     dispose() {
       disposed = true;
       source.close();

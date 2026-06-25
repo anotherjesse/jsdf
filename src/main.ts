@@ -39,6 +39,10 @@ import {
 import { createPreviewBoundsController } from "./editor/preview-bounds-controller";
 import { loadProjectInitialState } from "./editor/project-initial-state";
 import { createProjectSwitcher } from "./editor/project-switcher";
+import {
+  createSessionSnapshotHistory,
+  type SessionSnapshotHistoryController,
+} from "./editor/session-snapshot-history";
 import { createSourceWorkspaceActions } from "./editor/source-workspace-actions";
 import { createSourceWorkspaceSession, type SourceWorkspaceSession } from "./editor/source-workspace-session";
 import { draftStorageKey } from "./editor/workspace-storage";
@@ -55,6 +59,7 @@ async function startApp(): Promise<void> {
   let graphInspector: GraphInspector | null = null;
   let graphInteractionController: GraphInteractionController | null = null;
   let sourceWorkspace: SourceWorkspaceSession | null = null;
+  let sessionSnapshotHistory: SessionSnapshotHistoryController | null = null;
   let appState: AppStateModel;
   let activeExampleId = examples[0]?.id ?? "canonical";
   const appHealthMonitor = installAppHealthMonitor();
@@ -151,6 +156,7 @@ async function startApp(): Promise<void> {
     preserveHiddenNodeKeys: () => graphInteractionController?.preserveHiddenNodeKeys(),
     updateSaveState: appState.updateSaveState,
     compileAgentUpdate: () => sourceCompileController.compile({ status: "Agent update" }),
+    onSnapshotsChanged: () => sessionSnapshotHistory?.refresh(),
   });
   const projectSwitcher = createProjectSwitcher({
     sessionId: browserSessionId,
@@ -221,8 +227,25 @@ async function startApp(): Promise<void> {
     afterBrowserFrame,
     confirm: (message) => window.confirm(message),
   });
+  sessionSnapshotHistory = createSessionSnapshotHistory({
+    sessionId: browserSessionId,
+    elements: elements.snapshotHistory,
+    clientId: browserSessionController.currentClientId,
+    hasUnsavedChanges: appState.hasUnsavedChanges,
+    confirm: (message) => window.confirm(message),
+    onRestoreComplete: (_snapshot, restoredSource) => {
+      if (restoredSource !== null && appState.currentSourceValue() === restoredSource) {
+        sourceWorkspaceSession.markSourceClean(restoredSource);
+      }
+    },
+    onSnapshotsChanged: async () => {
+      await browserSessionController.refreshSnapshotCount();
+      await projectSwitcher.refreshCurrentProject();
+    },
+  });
 
   projectSwitcher.configure();
+  sessionSnapshotHistory.configure();
   browserSessionController.configure();
   configureGraphHistoryShortcutButtons(elements.graphHistory.undoButton, elements.graphHistory.redoButton);
   elements.apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;

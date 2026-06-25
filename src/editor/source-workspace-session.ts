@@ -40,6 +40,7 @@ export interface SourceWorkspaceSession {
   restoreDraft(draft: SavedSourceDraft): void;
   markSaved(documentId: string, versionId: string | null, name: string): void;
   markClean(source: string, name: string): void;
+  markSourceClean(source: string): void;
   detachDeletedSource(): void;
   updateSaveState(): void;
   confirmDiscardUnsavedChanges(): boolean;
@@ -134,6 +135,11 @@ class SourceWorkspaceSessionController implements SourceWorkspaceSession {
     this.cleanSourceSnapshot = source;
     this.cleanNameSnapshot = name;
     this.cleanPreviewSnapshot = this.options.previewSnapshot(this.options.currentPreview());
+    this.updateSaveState();
+  }
+
+  markSourceClean(source: string): void {
+    this.cleanSourceSnapshot = source;
     this.updateSaveState();
   }
 

@@ -105,6 +105,15 @@
     min-height: 78px;
   }
 
+  .snapshot-history-body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .snapshot-history-list {
+    max-height: 220px;
+  }
+
   .session-status {
     flex-basis: 100%;
   }

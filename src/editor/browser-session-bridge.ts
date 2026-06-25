@@ -26,6 +26,7 @@ export interface BrowserSessionBridgeOptions {
   preserveHiddenNodeKeys(): void;
   updateSaveState(): void;
   compileAgentUpdate(): void;
+  onSnapshotsChanged?(): void | Promise<void>;
 }
 
 export function createBrowserSessionBridge(options: BrowserSessionBridgeOptions): BrowserSessionController {
@@ -64,5 +65,6 @@ export function createBrowserSessionBridge(options: BrowserSessionBridgeOptions)
     setCode: applyBrowserSessionCode,
     captureScreenshot: captureBrowserSessionState,
     captureSnapshotState: captureBrowserSessionState,
+    onSnapshotsChanged: options.onSnapshotsChanged,
   });
 }
