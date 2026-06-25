@@ -1,6 +1,6 @@
 import type { Node, SDF3 } from "../core/nodes";
-import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { ParamPath, ParamValue } from "./graph-edit-model";
+import { axisForMatrix, matrixParam, type OrientationAxis } from "./graph-param-model";
 import { CALL_PATCHES, CSG_NODE_KINDS, EXTRA_NODE_CALLS, type CallPatch } from "./graph-source-patch-table";
 import {
   findCalls,
@@ -229,8 +229,8 @@ function entryKLabel(entryIndex: number): string {
 }
 
 function patchOrientSource(source: string, sdf: SDF3, edit: GraphSourceEdit, value: ParamValue): string | null {
-  const axis = axisForMatrix(value);
-  if (!axis) return null;
+  const axis = axisForMatrix(matrixParam(value));
+  if (axis === "custom") return null;
   const ordinal = orientOrdinalForEdit(sdf.node, edit);
   if (ordinal < 0) return null;
   return patchNthOrientArgument(source, ordinal, axis);
@@ -262,7 +262,7 @@ function orientOrdinalForEdit(root: Node, edit: GraphSourceEdit): number {
 
 function orientPatchableNodes(root: Node): Node[] {
   return collectNodes(root)
-    .filter((node) => node.kind === "rotate3" && axisForMatrix(node.params.matrix))
+    .filter((node) => node.kind === "rotate3" && axisForMatrix(matrixParam(node.params.matrix)) !== "custom")
     .sort((a, b) => a.id - b.id);
 }
 
@@ -586,37 +586,6 @@ function axisElement(axis: string): number {
 
 function formatAxisVectorExpression(axis: string, value: number): string {
   return value === 1 ? axis : `mul(${axis}, ${formatNumber(value)})`;
-}
-
-type OrientationAxis = "x" | "y" | "z";
-
-function axisForMatrix(value: ParamValue): OrientationAxis | null {
-  const matrix = matrixParam(value);
-  if (!matrix) return null;
-  for (const axis of ["x", "y", "z"] as OrientationAxis[]) {
-    if (matricesClose(matrix, orientationMatrix(axis))) return axis;
-  }
-  return null;
-}
-
-function matrixParam(value: ParamValue): number[][] | null {
-  if (!Array.isArray(value) || value.length !== 3) return null;
-  const rows = value.map((row) => Array.isArray(row) ? row.map(Number) : []);
-  if (!rows.every((row) => row.length === 3 && row.every(Number.isFinite))) return null;
-  return rows;
-}
-
-function orientationMatrix(axis: OrientationAxis): number[][] {
-  const target = axis === "x" ? X : axis === "y" ? Y : Z;
-  return rotateToMatrix(UP, target);
-}
-
-function matricesClose(a: number[][], b: number[][]): boolean {
-  return a.length === b.length && a.every((row, rowIndex) => {
-    return row.length === b[rowIndex].length && row.every((item, columnIndex) => {
-      return Math.abs(item - b[rowIndex][columnIndex]) < 1e-9;
-    });
-  });
 }
 
 function replaceRange(source: string, start: number, end: number, value: string): string {
