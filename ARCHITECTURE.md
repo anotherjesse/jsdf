@@ -63,6 +63,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 - `web/src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
 - `web/src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
+- `web/src/preview/preview-viewport-controller.ts` owns preview renderers, shader/mesh mode controls, preview layout labels, step/grid controls, mesh job state, STL download state, and debounced render scheduling; `main.ts` supplies the current graph, bounds, document name, and highlight policy.
 
 ## Source Links And Graph Editing
 
@@ -97,7 +98,8 @@ Key pieces:
 - `web/src/preview/webgl-raymarch-renderer.ts` compiles that GLSL into a WebGL2 preview program.
 - `web/src/preview/orbit-camera.ts` owns shared orbit camera state for shader and mesh views.
 - `web/src/preview/view-layout.ts` defines single and multi-panel view layouts.
-- `main.ts` chooses the visible graph, highlight mode, bounds, and ray step count before calling the renderer.
+- `web/src/preview/preview-viewport-controller.ts` owns renderer initialization, shader/mesh mode switching, layout labels, debounced shader renders, and session screenshot rendering.
+- `main.ts` supplies the visible graph, solo/focus render graph, highlight mode, bounds, and document state to the preview viewport controller.
 
 The preview is debounced during typing. Session screenshot capture forces shader mode, flushes the pending preview timer, renders the current valid graph, waits for a browser frame, and then reads the canvas as PNG data.
 
@@ -125,6 +127,7 @@ Key pieces:
 - `web/src/mesh/polygonize-worker.ts` runs polygonization in a Web Worker when available.
 - `web/src/preview/webgl-mesh-renderer.ts` renders generated triangles.
 - `web/src/mesh/stl.ts` writes binary STL output.
+- `web/src/preview/preview-viewport-controller.ts` owns mesh build invalidation, build-job cancellation, mesh stats, mesh highlighting, mesh-mode switching, and STL download wiring.
 
 Mesh generation is on demand. Editing source or changing relevant settings invalidates the mesh; the shader preview remains the fast feedback path.
 

@@ -62,11 +62,11 @@ import { supportedSummary, unsupportedOriginalApi } from "./api/completeness";
 import { currentExample, examples } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
-import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
-import { OrbitCamera } from "./preview/orbit-camera";
-import { viewPanels, type PreviewLayout } from "./preview/view-layout";
-import { WebGLMeshRenderer } from "./preview/webgl-mesh-renderer";
-import { WebGLRaymarchRenderer } from "./preview/webgl-raymarch-renderer";
+import {
+  createPreviewViewportController,
+  type RenderHighlight,
+  type PreviewViewportState,
+} from "./preview/preview-viewport-controller";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!;
 const viewLabels = document.querySelector<HTMLElement>("#viewLabels")!;
@@ -115,12 +115,9 @@ const sessionSnapshotButton = document.querySelector<HTMLButtonElement>("#sessio
 const sessionStatus = document.querySelector<HTMLElement>("#sessionStatus")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
-type RenderView = "shader" | "mesh";
 type EditorView = AppShortcutEditorView;
 type EditorStatusState = "idle" | "ok" | "pending" | "error";
 
-let rayRenderer: WebGLRaymarchRenderer | null = null;
-let meshRenderer: WebGLMeshRenderer | null = null;
 let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
 let activeSdf: SDF3 | null = null;
@@ -133,18 +130,7 @@ let currentSourceLinks: readonly GraphSourceLink[] = [];
 let selectedSourceLink: GraphSourceLink | null = null;
 let pendingHiddenNodeKeys: readonly string[] = [];
 let boundsEditor: BoundsEditor | null = null;
-let mesh: MeshResult | null = null;
-let meshBuildPromise: Promise<void> | null = null;
-let lastBlob: Blob | null = null;
-let renderJob = 0;
-let meshJob = 0;
-let previewTimer = 0;
-let meshTimer = 0;
 let sourceCompileTimer = 0;
-let viewMode: RenderView = "shader";
-let desiredViewMode: RenderView = "shader";
-let previewLayout: PreviewLayout = "single";
-let meshAlgorithm: MeshAlgorithm = "surface-net";
 let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeBounds = boundsForExample(activeExampleId);
@@ -156,6 +142,28 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
+const previewViewport = createPreviewViewportController({
+  elements: {
+    canvas,
+    viewLabels,
+    shaderViewButton,
+    meshViewButton,
+    layoutViewButton,
+    downloadButton,
+    surfaceNetButton,
+    tetraMeshButton,
+    stepsInput,
+    stepsOutput,
+    gridInput,
+    gridOutput,
+    previewStat,
+    meshStat,
+    triangleStat,
+    overlay,
+  },
+  readState: readPreviewViewportState,
+  onPreviewSettingsChange: updateSaveState,
+});
 const appHealthDiagnostics = createAppHealthDiagnosticsReader({
   monitor: appHealthMonitor,
   elements: {
@@ -256,8 +264,6 @@ browserSessionController.configure();
 configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
 configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
-stepsOutput.value = stepsInput.value;
-gridOutput.value = gridInput.value;
 boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
   onChange: handleBoundsChange,
   onInvalid: handleBoundsInvalid,
@@ -267,39 +273,7 @@ updateSaveState();
 sourceWorkspaceActions.renderDialog();
 exposeAppHealthDiagnostics(appHealthDiagnostics);
 
-stepsInput.addEventListener("input", () => {
-  stepsOutput.value = stepsInput.value;
-  updateSaveState();
-  schedulePreview();
-});
-gridInput.addEventListener("input", () => {
-  gridOutput.value = gridInput.value;
-  updateSaveState();
-  if (viewMode === "mesh") {
-    clearMesh({ keepView: true, meshStatText: "queued" });
-    scheduleMeshBuild();
-  } else {
-    clearMesh();
-  }
-});
-shaderViewButton.addEventListener("click", () => {
-  desiredViewMode = "shader";
-  window.clearTimeout(meshTimer);
-  setViewMode("shader");
-});
-meshViewButton.addEventListener("click", () => {
-  desiredViewMode = "mesh";
-  void showMesh();
-});
-layoutViewButton.addEventListener("click", () => {
-  setPreviewLayout(previewLayout === "single" ? "quad" : "single");
-});
-surfaceNetButton.addEventListener("click", () => setMeshAlgorithm("surface-net"));
-tetraMeshButton.addEventListener("click", () => setMeshAlgorithm("tetra"));
 fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
-downloadButton.addEventListener("click", () => {
-  if (lastBlob) downloadBlob(lastBlob, `${slugify(currentDocumentName())}.stl`);
-});
 loadSourceButton.addEventListener("click", sourceWorkspaceActions.openDialog);
 saveSourceButton.addEventListener("click", sourceWorkspaceActions.saveCurrentSource);
 prettifySourceButton.addEventListener("click", prettifyCurrentSource);
@@ -316,8 +290,7 @@ codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
 selectionFocusButton.addEventListener("click", revealSelectedTarget);
 window.addEventListener("resize", () => {
-  activeRenderer()?.redraw();
-  renderViewLabels();
+  previewViewport.handleResize();
 });
 installAppKeyboardShortcuts(window, {
   editorView: () => editorView,
@@ -348,10 +321,7 @@ async function boot(): Promise<void> {
   }
 
   try {
-    const camera = new OrbitCamera(canvas, () => activeRenderer()?.redraw());
-    rayRenderer = new WebGLRaymarchRenderer(canvas, camera);
-    meshRenderer = new WebGLMeshRenderer(canvas, camera);
-    setPreviewLayout(previewLayout, { recordChange: false });
+    previewViewport.initialize();
     graphInspector = new GraphInspector(graphInspectorElement, {
       onSelect: selectNode,
       onHover: handleGraphHover,
@@ -361,9 +331,8 @@ async function boot(): Promise<void> {
       onSourceHover: handleGraphSourceHover,
       onVisibilityChange: handleGraphVisibilityChange,
     });
-    setViewMode("shader");
     compileEditorSource({ status: "Ready", statusState: "idle", invalidateMesh: false });
-    await renderCurrent();
+    await previewViewport.renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
     codeEditor = createCodeEditor(
       codeEditorElement,
@@ -410,21 +379,14 @@ async function captureBrowserSessionState(): Promise<BrowserSessionCommandResult
     code: currentSourceValue(),
     sourceValid: editorSourceValid,
     status: editorStatus.textContent ?? "",
-    viewMode,
-    previewLayout,
+    viewMode: previewViewport.viewMode,
+    previewLayout: previewViewport.previewLayout,
     screenshotDataUrl: canvas.toDataURL("image/png"),
   };
 }
 
 async function renderShaderPreviewForSession(): Promise<void> {
-  desiredViewMode = "shader";
-  window.clearTimeout(meshTimer);
-  setViewMode("shader");
-  window.clearTimeout(previewTimer);
-  previewTimer = 0;
-  if (editorSourceValid) await renderCurrent();
-  else activeRenderer()?.redraw();
-  await waitForBrowserFrame();
+  await previewViewport.renderShaderPreviewForSession(editorSourceValid, waitForBrowserFrame);
 }
 
 function waitForBrowserFrame(): Promise<void> {
@@ -523,9 +485,9 @@ function compileEditorSource(
     restoreSelectedGraphSelection(previousSelectedSourceIdentity, previousSelectedIdentity, sourceLinks);
     graphHistoryController.clear();
     setEditorStatus(options.status, options.statusState ?? "ok");
-    if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
+    if (options.invalidateMesh !== false) previewViewport.invalidateMeshForActiveSdf();
     updateSaveState();
-    schedulePreview(0);
+    previewViewport.schedulePreview(0);
     return true;
   } catch (error) {
     const diagnostic = sourceDiagnosticFromError(error, source);
@@ -585,7 +547,7 @@ function handleSourceLinkCursor(link: GraphSourceLink | null): void {
   if (!node) return;
   setSelectedSourceLink(link, { markCode: false });
   setEditorStatus(`${link.nodeKind} ${link.label}`, "ok");
-  scheduleActivePreview(0);
+  previewViewport.scheduleActivePreview(0);
 }
 
 function handleSourceLinkValueChange(
@@ -681,24 +643,7 @@ function previewHoverSignature(): string {
 }
 
 function schedulePreviewIfHoverChanged(before: string): void {
-  if (previewHoverSignature() !== before) scheduleActivePreview(0);
-}
-
-function scheduleActivePreview(delay = 0): void {
-  if (viewMode === "mesh" && !soloPreview) {
-    updateMeshHighlight();
-    return;
-  }
-  schedulePreview(delay);
-}
-
-function updateMeshHighlight(): void {
-  if (!mesh || mesh.triangles.length === 0) return;
-  const sdf = visibleActiveSdf();
-  if (!sdf) return;
-  const highlight = highlightForRender(null);
-  meshRenderer?.setHighlight(sdf, highlight.node, highlight.mode);
-  if (viewMode === "mesh") overlay.textContent = focusPreview ? previewOverlayText("Focus", focusPreview) : "";
+  if (previewHoverSignature() !== before) previewViewport.scheduleActivePreview(0);
 }
 
 function previewOverlayText(prefix: "Focus" | "Solo", preview: SoloPreview): string {
@@ -726,7 +671,7 @@ function selectNode(node: Node | null): void {
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
     setEditorStatus(`${node.kind} #${node.id}`, "ok");
-    scheduleActivePreview(0);
+    previewViewport.scheduleActivePreview(0);
   }
 }
 
@@ -742,20 +687,11 @@ function handleSoloPreview(preview: SoloPreview | null): void {
   focusPreview = null;
   soloPreview = preview;
   if (preview) {
-    meshRenderer?.setActive(false);
-    rayRenderer?.setActive(true);
-    schedulePreview(0);
+    previewViewport.showSoloPreview();
     return;
   }
 
-  if (viewMode === "mesh") {
-    rayRenderer?.setActive(false);
-    meshRenderer?.setActive(true);
-    meshRenderer?.redraw();
-    setViewMode("mesh");
-    return;
-  }
-  schedulePreview(0);
+  previewViewport.clearSoloPreview();
 }
 
 function handleGraphVisibilityChange(hiddenIds: readonly number[]): void {
@@ -763,17 +699,8 @@ function handleGraphVisibilityChange(hiddenIds: readonly number[]): void {
   focusPreview = null;
   soloPreview = null;
   updateSaveState();
-  invalidateMeshForActiveSdf();
-  schedulePreview(0);
-}
-
-function invalidateMeshForActiveSdf(): void {
-  if (desiredViewMode === "mesh" || viewMode === "mesh") {
-    clearMesh({ keepView: viewMode === "mesh", meshStatText: "queued" });
-    scheduleMeshBuild();
-    return;
-  }
-  clearMesh();
+  previewViewport.invalidateMeshForActiveSdf();
+  previewViewport.schedulePreview(0);
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
@@ -785,8 +712,8 @@ function handleBeforeUnload(event: BeforeUnloadEvent): void {
 function applyGraphMutationStatus(message: string, edit?: GraphSourceEdit, value?: unknown): void {
   const synced = edit ? syncCodeFromGraphEdit(edit, value) : true;
   setEditorStatus(synced ? message : `${message} (preview only)`, synced ? "ok" : "pending");
-  invalidateMeshForActiveSdf();
-  schedulePreview(0);
+  previewViewport.invalidateMeshForActiveSdf();
+  previewViewport.schedulePreview(0);
 }
 
 function syncCodeFromGraphEdit(edit: GraphSourceEdit, value: unknown): boolean {
@@ -925,71 +852,14 @@ function selectGraphHistoryEntry(entry: GraphHistoryEntry, options: { revealSour
   const sourceLink = sourceLinkForGraphEdit(currentSourceLinks, entry);
   if (sourceLink && options.revealSource) {
     revealGraphSource(sourceLink);
-    schedulePreview(0);
+    previewViewport.schedulePreview(0);
     return;
   }
   setEditorView("graph");
   if (sourceLink) setSelectedSourceLink(sourceLink);
   setEditorStatus(`${entry.nodeKind} ${entry.label}`, "ok");
   afterBrowserFrame(() => graphInspector?.revealSelected({ focus: true }));
-  schedulePreview(0);
-}
-
-function clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}): void {
-  window.clearTimeout(meshTimer);
-  meshJob += 1;
-  meshBuildPromise = null;
-  mesh = null;
-  lastBlob = null;
-  downloadButton.disabled = true;
-  meshViewButton.disabled = false;
-  meshViewButton.removeAttribute("aria-busy");
-  triangleStat.textContent = "-";
-  meshStat.textContent = options.meshStatText ?? "-";
-  if (viewMode === "mesh") {
-    if (options.keepView) {
-      overlay.textContent = `Regenerating mesh at ${gridLabel()}...`;
-      shaderViewButton.setAttribute("aria-pressed", "false");
-      meshViewButton.setAttribute("aria-pressed", "true");
-      return;
-    }
-    setViewMode("shader");
-  }
-}
-
-function activeRenderer(): { redraw(): void } | null {
-  return viewMode === "shader" ? rayRenderer : meshRenderer;
-}
-
-function setPreviewLayout(layout: PreviewLayout, options: { recordChange?: boolean } = {}): void {
-  previewLayout = layout;
-  layoutViewButton.setAttribute("aria-pressed", String(layout === "quad"));
-  layoutViewButton.title = layout === "quad" ? "Use single view" : "Use 2x2 view";
-  layoutViewButton.setAttribute("aria-label", layoutViewButton.title);
-  rayRenderer?.setLayout(layout);
-  meshRenderer?.setLayout(layout);
-  renderViewLabels();
-  if (options.recordChange !== false) updateSaveState();
-  activeRenderer()?.redraw();
-}
-
-function renderViewLabels(): void {
-  viewLabels.replaceChildren();
-  viewLabels.hidden = previewLayout !== "quad";
-  if (previewLayout !== "quad") return;
-
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (width <= 0 || height <= 0) return;
-
-  for (const panel of viewPanels(previewLayout, width, height)) {
-    const label = document.createElement("span");
-    label.className = "view-label";
-    label.textContent = panel.label;
-    label.style.left = `${panel.x + 10}px`;
-    label.style.top = `${height - panel.y - panel.height + 10}px`;
-    viewLabels.append(label);
-  }
+  previewViewport.schedulePreview(0);
 }
 
 function setEditorView(mode: EditorView): void {
@@ -1019,89 +889,7 @@ function setEditorView(mode: EditorView): void {
   }
 }
 
-function setMeshAlgorithm(algorithm: MeshAlgorithm): void {
-  setMeshAlgorithmMode(algorithm, { rebuild: true });
-}
-
-function setMeshAlgorithmMode(algorithm: MeshAlgorithm, options: { rebuild: boolean }): void {
-  if (meshAlgorithm === algorithm) return;
-  meshAlgorithm = algorithm;
-  surfaceNetButton.setAttribute("aria-pressed", String(algorithm === "surface-net"));
-  tetraMeshButton.setAttribute("aria-pressed", String(algorithm === "tetra"));
-  updateSaveState();
-  if (!options.rebuild) return;
-  if (viewMode === "mesh") {
-    clearMesh({ keepView: true, meshStatText: "queued" });
-    scheduleMeshBuild();
-  } else {
-    clearMesh();
-  }
-}
-
-function setViewMode(mode: RenderView): void {
-  desiredViewMode = mode;
-  if (mode === "mesh" && (!mesh || mesh.triangles.length === 0)) {
-    shaderViewButton.setAttribute("aria-pressed", "false");
-    meshViewButton.setAttribute("aria-pressed", "true");
-    overlay.textContent = meshBuildPromise ? "Building mesh..." : "";
-    return;
-  }
-  viewMode = mode;
-  shaderViewButton.setAttribute("aria-pressed", String(mode === "shader"));
-  meshViewButton.setAttribute("aria-pressed", String(mode === "mesh"));
-  rayRenderer?.setActive(mode === "shader");
-  meshRenderer?.setActive(mode === "mesh");
-  if (mode === "mesh") updateMeshHighlight();
-  overlay.textContent = "";
-}
-
-function schedulePreview(delay = 300): void {
-  window.clearTimeout(previewTimer);
-  previewTimer = window.setTimeout(() => void renderCurrent(), delay);
-}
-
-function scheduleMeshBuild(delay = 300): void {
-  window.clearTimeout(meshTimer);
-  meshTimer = window.setTimeout(() => void rebuildMeshView(), delay);
-}
-
-async function renderCurrent(): Promise<void> {
-  if (!rayRenderer) return;
-  const preview = soloPreview;
-  const sdf = preview?.sdf ?? visibleActiveSdf();
-  if (!sdf) {
-    previewStat.textContent = "-";
-    overlay.textContent = activeSdf ? "No visible graph nodes." : "Write editor code that returns an SDF3.";
-    return;
-  }
-
-  const job = renderJob + 1;
-  renderJob = job;
-  const steps = Number(stepsInput.value);
-  overlay.textContent = "Compiling shader preview...";
-  stepsInput.disabled = true;
-  const start = performance.now();
-  try {
-    if (job !== renderJob) return;
-    const highlight = highlightForRender(preview);
-    rayRenderer.render(sdf, currentBounds(), steps, highlight.node, highlight.mode);
-    previewStat.textContent = `${(performance.now() - start).toFixed(1)} ms`;
-    if (preview) {
-      overlay.textContent = previewOverlayText("Solo", preview);
-    } else if (focusPreview) {
-      overlay.textContent = previewOverlayText("Focus", focusPreview);
-    } else if (viewMode === "shader") {
-      overlay.textContent = "";
-    }
-  } catch (error) {
-    overlay.textContent = error instanceof Error ? error.message : String(error);
-    previewStat.textContent = "failed";
-  } finally {
-    if (job === renderJob) stepsInput.disabled = false;
-  }
-}
-
-function highlightForRender(preview: SoloPreview | null): { node: Node | null; mode: "mark" | "focus" } {
+function highlightForRender(preview: SoloPreview | null): RenderHighlight {
   if (preview?.node) return { node: isHighlightableNode(preview.node) ? preview.node : null, mode: "mark" };
   if (focusPreview?.sdf.node && isHighlightableNode(focusPreview.node)) {
     return { node: focusPreview.sdf.node, mode: "focus" };
@@ -1137,81 +925,6 @@ function isNodeEffectivelyVisible(nodeId: number): boolean {
   return visible;
 }
 
-async function showMesh(): Promise<void> {
-  if (!mesh || mesh.triangles.length === 0) setViewMode("mesh");
-  await buildMesh();
-  if (desiredViewMode === "mesh" && mesh && mesh.triangles.length > 0) setViewMode("mesh");
-}
-
-async function rebuildMeshView(): Promise<void> {
-  if (desiredViewMode !== "mesh") return;
-  await buildMesh();
-  if (desiredViewMode === "mesh" && viewMode === "mesh" && mesh && mesh.triangles.length > 0) {
-    setViewMode("mesh");
-  }
-}
-
-async function buildMesh(): Promise<void> {
-  if (mesh && mesh.triangles.length > 0) return;
-  if (meshBuildPromise) return meshBuildPromise;
-  const sdf = visibleActiveSdf();
-  if (!sdf) {
-    overlay.textContent = activeSdf ? "No visible graph nodes to mesh." : "Fix the editor code before building mesh view.";
-    return;
-  }
-
-  const job = meshJob + 1;
-  meshJob = job;
-  meshViewButton.disabled = true;
-  meshViewButton.setAttribute("aria-busy", "true");
-  downloadButton.disabled = true;
-  meshStat.textContent = "building";
-  overlay.textContent = `Sampling and polygonizing ${gridLabel()}...`;
-
-  const buildPromise = (async () => {
-    try {
-      const result = await generateMesh(sdf, {
-        grid: Number(gridInput.value),
-        bounds: currentBounds(),
-        preferGPU: true,
-        algorithm: meshAlgorithm,
-      });
-      if (job !== meshJob) return;
-      mesh = result;
-      const highlight = highlightForRender(null);
-      meshRenderer?.render(mesh.triangles, mesh.bounds, sdf, highlight.node, highlight.mode);
-      lastBlob = binarySTL(mesh.triangles, `sdf-browser ${currentDocumentName()}`);
-      const total = mesh.sampleTimeMs + mesh.polygonizeTimeMs;
-      meshStat.textContent = `${total.toFixed(0)} ms ${mesh.usedGPU ? "GPU" : "CPU"}${mesh.usedWorker ? " worker" : ""} ${algorithmLabel(mesh.algorithm)}`;
-      triangleStat.textContent = mesh.triangles.length.toLocaleString();
-      downloadButton.disabled = mesh.triangles.length === 0;
-      if (mesh.triangles.length === 0) {
-        mesh = null;
-        lastBlob = null;
-        overlay.textContent = "Generated no triangles. Try wider bounds or a lower-level example.";
-        return;
-      }
-      overlay.textContent = "";
-    } catch (error) {
-      if (job !== meshJob) return;
-      overlay.textContent = error instanceof Error ? error.message : String(error);
-      meshStat.textContent = "failed";
-    } finally {
-      if (job === meshJob) {
-        meshViewButton.disabled = false;
-        meshViewButton.removeAttribute("aria-busy");
-      }
-    }
-  })();
-
-  meshBuildPromise = buildPromise;
-  try {
-    await buildPromise;
-  } finally {
-    if (meshBuildPromise === buildPromise) meshBuildPromise = null;
-  }
-}
-
 function setEditorStatus(message: string, state: EditorStatusState): void {
   editorStatus.textContent = message;
   if (state === "idle") editorStatus.removeAttribute("data-state");
@@ -1233,7 +946,7 @@ function afterBrowserFrame(callback: () => void): void {
 
 function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
   return {
-    ready: Boolean(codeEditor && graphInspector && activeSdf && rayRenderer && meshRenderer),
+    ready: Boolean(codeEditor && graphInspector && activeSdf && previewViewport.ready),
     editorReady: Boolean(codeEditor),
     graphReady: Boolean(graphInspector),
     activeSdfReady: Boolean(activeSdf),
@@ -1242,10 +955,10 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     status: editorStatus.textContent ?? "",
     sourceCompilePending: Boolean(sourceCompileTimer),
     sourceValid: editorSourceValid,
-    viewMode,
+    viewMode: previewViewport.viewMode,
     editorView,
-    previewLayout,
-    meshAlgorithm,
+    previewLayout: previewViewport.previewLayout,
+    meshAlgorithm: previewViewport.meshAlgorithm,
     sourceLinks: currentSourceLinks.length,
     selectedNode: selectedNode ? `${selectedNode.kind} #${selectedNode.id}` : null,
     selectedSourceLink: selectedSourceLink
@@ -1253,8 +966,8 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
       : null,
     sourceRevealedDecorations: codeEditor?.sourceDecorationCount("revealed") ?? 0,
     hiddenNodes: hiddenNodeIds.size,
-    meshTriangles: mesh ? mesh.triangles.length : null,
-    meshBuildPending: Boolean(meshBuildPromise),
+    meshTriangles: previewViewport.meshTriangles,
+    meshBuildPending: previewViewport.meshBuildPending,
   };
 }
 
@@ -1266,13 +979,20 @@ function visibleActiveSdf(): SDF3 | null {
   return activeSdf ? buildVisibleSdf(activeSdf, hiddenNodeIds) : null;
 }
 
-function algorithmLabel(algorithm: MeshAlgorithm): string {
-  return algorithm === "surface-net" ? "surface-net" : "tetra";
-}
-
-function gridLabel(): string {
-  const grid = Number(gridInput.value);
-  return `${grid}^3 (${(grid ** 3).toLocaleString()} samples)`;
+function readPreviewViewportState(): PreviewViewportState {
+  const visibleSdf = visibleActiveSdf();
+  return {
+    activeSdf,
+    visibleSdf,
+    renderSdf: soloPreview?.sdf ?? visibleSdf,
+    bounds: currentBounds(),
+    documentName: currentDocumentName(),
+    shaderHighlight: highlightForRender(soloPreview),
+    meshHighlight: highlightForRender(null),
+    soloOverlayText: soloPreview ? previewOverlayText("Solo", soloPreview) : "",
+    focusOverlayText: focusPreview ? previewOverlayText("Focus", focusPreview) : "",
+    hasSoloPreview: Boolean(soloPreview),
+  };
 }
 
 function currentDocumentName(): string {
@@ -1316,8 +1036,8 @@ function fitBoundsToCurrentSdf(): void {
     boundsEditor?.setBounds(activeBounds);
     updateSaveState();
     setEditorStatus("Fit bounds", "ok");
-    invalidateMeshForActiveSdf();
-    schedulePreview(0);
+    previewViewport.invalidateMeshForActiveSdf();
+    previewViewport.schedulePreview(0);
   } catch (error) {
     setEditorStatus(error instanceof Error ? error.message : String(error), "error");
   } finally {
@@ -1331,10 +1051,10 @@ function applyPreviewProfile(profile: PreviewProfile): void {
   boundsAreValid = true;
   pendingHiddenNodeKeys = profile.hiddenNodeKeys ?? [];
   boundsEditor?.setBounds(activeBounds);
-  setRangeControl(stepsInput, stepsOutput, profile.raySteps);
-  setRangeControl(gridInput, gridOutput, profile.meshGrid);
-  setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
-  setPreviewLayout(profile.layout ?? "single", { recordChange: false });
+  previewViewport.applyRange(stepsInput, stepsOutput, profile.raySteps);
+  previewViewport.applyRange(gridInput, gridOutput, profile.meshGrid);
+  previewViewport.setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
+  previewViewport.setPreviewLayout(profile.layout ?? "single", { recordChange: false });
 }
 
 function handleBoundsChange(bounds: Bounds3): void {
@@ -1342,8 +1062,8 @@ function handleBoundsChange(bounds: Bounds3): void {
   boundsAreValid = true;
   updateSaveState();
   setEditorStatus("Bounds updated", "ok");
-  invalidateMeshForActiveSdf();
-  schedulePreview(0);
+  previewViewport.invalidateMeshForActiveSdf();
+  previewViewport.schedulePreview(0);
 }
 
 function handleBoundsInvalid(message: string): void {
@@ -1355,27 +1075,14 @@ function handleBoundsInvalid(message: string): void {
 function currentPreviewProfile(): PreviewProfile {
   return createPreviewProfile({
     bounds: activeBounds,
-    meshGrid: Number(gridInput.value),
-    raySteps: Number(stepsInput.value),
-    meshAlgorithm,
-    layout: previewLayout,
+    meshGrid: previewViewport.meshGrid,
+    raySteps: previewViewport.raySteps,
+    meshAlgorithm: previewViewport.meshAlgorithm,
+    layout: previewViewport.previewLayout,
     hiddenNodeKeys: hiddenNodeKeysForCurrentGraph(),
   });
 }
 
 function hiddenNodeKeysForCurrentGraph(): string[] {
   return hiddenNodeKeysForGraph(hiddenNodeIds, pendingHiddenNodeKeys, currentSourceLinks);
-}
-
-function setRangeControl(input: HTMLInputElement, output: HTMLOutputElement, value: number): void {
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const clamped = Math.min(max, Math.max(min, value));
-  input.value = String(clamped);
-  output.value = input.value;
-}
-
-function slugify(value: string): string {
-  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return slug || "sdf";
 }
