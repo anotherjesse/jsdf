@@ -1,0 +1,519 @@
+.param-editor {
+  display: grid;
+  gap: 10px;
+  max-height: 42vh;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: #15181d;
+  padding: 12px;
+}
+
+.param-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+}
+
+.param-title.edited strong::after {
+  margin-left: 6px;
+  color: var(--accent-2);
+  content: "edited";
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.param-title.source-selected {
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  padding-left: 6px;
+}
+
+.param-title-text {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.param-title strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.param-title .param-source-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 5px;
+  background: transparent;
+  padding: 2px 6px;
+  color: color-mix(in srgb, var(--accent) 82%, var(--muted));
+  cursor: default;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.param-title button.param-source-chip {
+  cursor: pointer;
+}
+
+.param-title button.param-source-chip:hover,
+.param-title button.param-source-chip:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  outline: 0;
+}
+
+.param-title .param-source-chip[data-state="derived"] {
+  border-color: color-mix(in srgb, var(--muted) 32%, var(--line));
+  color: #8d98a6;
+}
+
+.param-title-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.param-title-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.param-title-button {
+  color: var(--accent);
+}
+
+.param-code-link {
+  padding: 0;
+}
+
+.param-visibility {
+  width: 28px;
+  border-radius: 6px;
+}
+
+.param-visibility:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.param-isolate[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
+.isolate-icon {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.isolate-icon::before,
+.isolate-icon::after {
+  position: absolute;
+  content: "";
+}
+
+.isolate-icon::before {
+  inset: 1px;
+  border: 1.8px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.78;
+}
+
+.isolate-icon::after {
+  top: 5px;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border: 1.8px solid currentColor;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow:
+    -5px 0 0 -2px currentColor,
+    5px 0 0 -2px currentColor,
+    0 -5px 0 -2px currentColor,
+    0 5px 0 -2px currentColor;
+}
+
+.param-title span,
+.param-empty,
+.graph-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.param-breadcrumb {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 26px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.param-breadcrumb button {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 1px;
+  justify-items: start;
+  min-height: 26px;
+  max-width: 152px;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.param-breadcrumb button small,
+.param-breadcrumb button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.param-breadcrumb button small {
+  color: #8d98a6;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.param-breadcrumb button span {
+  line-height: 1.15;
+}
+
+.param-breadcrumb button[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  color: var(--accent);
+  cursor: default;
+}
+
+.param-breadcrumb button[aria-current="page"] small {
+  color: color-mix(in srgb, var(--accent) 62%, #8d98a6);
+}
+
+.param-breadcrumb-separator {
+  flex: 0 0 auto;
+  color: #65707c;
+  font-size: 11px;
+}
+
+.param-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 1fr) 96px;
+  gap: 6px 10px;
+  align-items: center;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+
+.param-row.edited {
+  border-left-color: var(--accent-2);
+}
+
+.param-row.edited .param-name {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
+.param-row.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.param-row.matched .param-name {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
+.param-row.source-hovered {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.param-row.source-selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.param-row.source-hovered .param-name {
+  color: color-mix(in srgb, var(--accent) 74%, var(--muted));
+}
+
+.param-row.source-selected .param-name {
+  color: var(--accent);
+}
+
+.param-row input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 5px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.param-range {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1px;
+}
+
+.param-range input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.param-range-labels {
+  display: flex;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.param-name-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.param-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  cursor: ew-resize;
+  font-size: 12px;
+  touch-action: none;
+  text-overflow: ellipsis;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.param-name.scrubbing {
+  color: var(--accent-2);
+}
+
+.param-name:focus-visible {
+  border-radius: 4px;
+  color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.param-source-link {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  min-height: 22px;
+  border-radius: 5px;
+  padding: 0;
+  color: var(--accent);
+}
+
+.code-link-icon {
+  position: relative;
+  width: 15px;
+  height: 12px;
+}
+
+.code-link-icon::before,
+.code-link-icon::after {
+  position: absolute;
+  top: 1px;
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.code-link-icon::before {
+  left: 0;
+  content: "<";
+}
+
+.code-link-icon::after {
+  right: 0;
+  content: ">";
+}
+
+.axis-control {
+  display: grid;
+  gap: 6px;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+
+.axis-control.edited {
+  border-left-color: var(--accent-2);
+}
+
+.axis-control.edited .axis-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
+.axis-control.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.axis-control.matched .axis-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
+.axis-control.source-hovered {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.axis-control.source-selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.axis-control.source-hovered .axis-label {
+  color: color-mix(in srgb, var(--accent) 74%, var(--muted));
+}
+
+.axis-control.source-selected .axis-label {
+  color: var(--accent);
+}
+
+.axis-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.axis-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.axis-buttons button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.axis-buttons button + button {
+  border-left: 1px solid var(--line);
+}
+
+.axis-buttons button[aria-pressed="true"] {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.matrix-control {
+  display: grid;
+  gap: 7px;
+  border-left: 2px solid transparent;
+  padding-left: 6px;
+}
+
+.matrix-control.edited {
+  border-left-color: var(--accent-2);
+}
+
+.matrix-control.matched {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.matrix-control.matched .matrix-label {
+  color: color-mix(in srgb, var(--accent-2) 74%, var(--muted));
+}
+
+.matrix-control.source-hovered {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.matrix-control.source-selected {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.matrix-control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.matrix-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.matrix-control.source-hovered .matrix-label {
+  color: color-mix(in srgb, var(--accent) 74%, var(--muted));
+}
+
+.matrix-control.source-selected .matrix-label {
+  color: var(--accent);
+}
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.matrix-grid input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 5px 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.matrix-source-link {
+  width: 24px;
+  min-height: 22px;
+  border-radius: 5px;
+  padding: 0;
+}
+

@@ -1,0 +1,92 @@
+.graph-inspector {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  border-top: 1px solid var(--line);
+}
+
+.graph-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.graph-toolbar input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+.graph-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.graph-match-nav,
+.graph-map-toggle,
+.graph-show-all {
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.graph-match-nav[hidden] {
+  display: none;
+}
+
+.graph-map-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  color: var(--accent);
+}
+
+.graph-show-all {
+  position: relative;
+  width: 32px;
+  min-width: 32px;
+  color: var(--accent);
+  padding: 0;
+}
+
+.graph-show-all[hidden] {
+  display: none;
+}
+
+.graph-show-all .eye-icon {
+  width: 16px;
+  height: 11px;
+}
+
+.graph-show-all .eye-icon::before {
+  width: 5px;
+  height: 5px;
+}
+
+.visibility-count {
+  position: absolute;
+  top: -6px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  border: 1px solid var(--panel);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #061115;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 3px;
+  pointer-events: none;
+}
+

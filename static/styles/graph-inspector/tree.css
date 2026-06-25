@@ -1,0 +1,277 @@
+.graph-tree {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 14px;
+}
+
+.graph-tree-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin: -2px 0 7px;
+  padding: 2px 0 7px;
+  background: var(--panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+}
+
+.graph-tree-header-eye {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  padding: 0;
+}
+
+.graph-tree-header-eye:not(:disabled):hover,
+.graph-tree-header-eye:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+
+.graph-tree-header-eye:disabled {
+  color: color-mix(in srgb, var(--text) 46%, var(--muted));
+  cursor: default;
+}
+
+.graph-tree-header-eye-count {
+  top: -5px;
+  right: -5px;
+}
+
+.graph-tree-header-rule {
+  height: 1px;
+  background: color-mix(in srgb, var(--line) 78%, transparent);
+}
+
+.graph-node-group {
+  display: grid;
+  gap: 4px;
+}
+
+.graph-node-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  gap: 6px;
+  align-items: center;
+  margin-left: calc(var(--depth) * 14px);
+}
+
+.graph-visibility,
+.graph-isolate {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-color: color-mix(in srgb, var(--line) 56%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-2) 58%, transparent);
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+  padding: 0;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.graph-node-row:hover .graph-visibility:not(:disabled),
+.graph-node-row:focus-within .graph-visibility:not(:disabled),
+.graph-node-row:hover .graph-isolate:not(:disabled),
+.graph-node-row:focus-within .graph-isolate:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+}
+
+.graph-visibility:hover:not(:disabled),
+.graph-visibility:focus-visible,
+.graph-isolate:hover:not(:disabled),
+.graph-isolate:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+
+.graph-visibility[data-state="hidden"] {
+  color: #65707c;
+  background: color-mix(in srgb, var(--panel-2) 34%, transparent);
+}
+
+.graph-visibility[data-state="inherited"] {
+  color: #74808d;
+  background: transparent;
+}
+
+.graph-visibility[data-state="root"] {
+  color: #59636f;
+  background: transparent;
+  cursor: default;
+}
+
+.graph-isolate {
+  color: color-mix(in srgb, var(--accent-2) 68%, var(--muted));
+}
+
+.graph-isolate:disabled {
+  color: color-mix(in srgb, var(--text) 36%, var(--muted));
+  background: transparent;
+  cursor: default;
+  opacity: 0.48;
+}
+
+.graph-isolate[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+
+.graph-isolate .isolate-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.eye-icon {
+  position: relative;
+  width: 18px;
+  height: 12px;
+  border: 1.75px solid currentColor;
+  border-radius: 50%;
+  transform: rotate(-5deg);
+}
+
+.eye-icon::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5.5px;
+  height: 5.5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.eye-icon::after {
+  position: absolute;
+  left: 0;
+  top: 4.5px;
+  width: 18px;
+  border-top: 1.85px solid currentColor;
+  content: "";
+  transform: rotate(-35deg);
+  transform-origin: center;
+  opacity: 0;
+}
+
+.graph-visibility[data-state="hidden"] .eye-icon,
+.graph-visibility[data-state="inherited"] .eye-icon {
+  border-style: dashed;
+}
+
+.graph-visibility[data-state="hidden"] .eye-icon::before {
+  width: 3px;
+  height: 3px;
+}
+
+.graph-visibility[data-state="hidden"] .eye-icon::after,
+.graph-visibility[data-state="inherited"] .eye-icon::after {
+  opacity: 1;
+}
+
+.graph-visibility[data-state="inherited"] .eye-icon::after {
+  border-top-style: dashed;
+}
+
+.graph-visibility[data-state="root"] .eye-icon::before {
+  opacity: 0.45;
+}
+
+.graph-node {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.graph-node:hover,
+.graph-node[aria-pressed="true"],
+.graph-node.hovered,
+.graph-node.matched {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.graph-node.hovered:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 68%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
+.graph-node.focus-peek {
+  border-color: color-mix(in srgb, var(--text) 22%, var(--accent));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 54%, transparent);
+}
+
+.graph-node.isolated {
+  border-color: color-mix(in srgb, var(--accent-2) 78%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+}
+
+.graph-node.edited:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 48%, transparent);
+}
+
+.graph-node.hidden-node,
+.graph-map-node.hidden-node,
+.graph-node.inherited-hidden,
+.graph-map-node.inherited-hidden {
+  opacity: 0.42;
+}
+
+.graph-node.inherited-hidden,
+.graph-map-node.inherited-hidden {
+  opacity: 0.58;
+}
+
+.graph-node-row.hidden-node-row {
+  filter: saturate(0.72);
+}
+
+.graph-node-row.inherited-hidden .graph-node {
+  border-color: transparent;
+}
+
+.graph-node.matched:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent-2) 64%, var(--line));
+}
+
+.graph-node span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-node small {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+

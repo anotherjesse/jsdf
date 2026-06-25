@@ -1,0 +1,95 @@
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented.view-toggle {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px 46px;
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.download-icon {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.download-icon::before {
+  position: absolute;
+  left: 8px;
+  top: 2px;
+  width: 2px;
+  height: 10px;
+  background: currentColor;
+  content: "";
+}
+
+.download-icon::after {
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.grid-icon {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+  gap: 3px;
+}
+
+.grid-icon span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 1px;
+}
+
+.range {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.range input {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.range output {
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+

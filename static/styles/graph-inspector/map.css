@@ -1,0 +1,144 @@
+.graph-map {
+  max-height: 280px;
+  overflow: auto;
+  border-bottom: 1px solid var(--line);
+  background: #12151a;
+}
+
+.graph-map svg {
+  display: block;
+  width: var(--graph-map-width, 100%);
+  height: var(--graph-map-height, 170px);
+}
+
+.graph-edge {
+  stroke: #47515d;
+  stroke-width: 1.4;
+}
+
+.graph-edge.selected {
+  stroke: var(--accent-2);
+  stroke-width: 2.1;
+}
+
+.graph-map-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.graph-map-card {
+  fill: #20262e;
+  stroke: #46515d;
+  stroke-width: 1;
+}
+
+.graph-map-node text {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.graph-map-node:hover .graph-map-card,
+.graph-map-node:focus .graph-map-card {
+  stroke: var(--accent);
+}
+
+.graph-map-node.hovered .graph-map-card {
+  fill: color-mix(in srgb, var(--accent-2) 20%, #20262e);
+  stroke: var(--accent-2);
+  stroke-width: 1.8;
+}
+
+.graph-map-node.focus-peek .graph-map-card {
+  fill: color-mix(in srgb, var(--accent) 24%, #20262e);
+  stroke: color-mix(in srgb, var(--text) 24%, var(--accent));
+  stroke-width: 2.2;
+}
+
+.graph-map-node.selected .graph-map-card {
+  fill: color-mix(in srgb, var(--accent) 24%, #20262e);
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.graph-map-node.isolated .graph-map-card {
+  fill: color-mix(in srgb, var(--accent-2) 24%, #20262e);
+  stroke: var(--accent-2);
+  stroke-width: 2;
+}
+
+.graph-map-node.edited .graph-map-card {
+  stroke: var(--accent-2);
+  stroke-dasharray: 5 2;
+}
+
+.graph-map-node.matched .graph-map-card {
+  stroke: var(--accent-2);
+}
+
+.graph-map-node.shared .graph-map-card {
+  stroke-dasharray: 3 2;
+}
+
+.graph-map-eye {
+  color: color-mix(in srgb, var(--text) 70%, var(--muted));
+  cursor: pointer;
+  outline: none;
+}
+
+.graph-map-eye[data-state="root"] {
+  color: #59636f;
+  cursor: default;
+}
+
+.graph-map-eye[data-state="hidden"],
+.graph-map-eye[data-state="inherited"] {
+  color: #74808d;
+}
+
+.graph-map-eye-hit {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.graph-map-eye-outline {
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.45;
+}
+
+.graph-map-eye-pupil {
+  fill: currentColor;
+}
+
+.graph-map-eye-slash {
+  opacity: 0;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+}
+
+.graph-map-eye:hover:not([data-state="root"]) .graph-map-eye-hit,
+.graph-map-eye:focus:not([data-state="root"]) .graph-map-eye-hit {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 48%, transparent);
+}
+
+.graph-map-eye:hover:not([data-state="root"]),
+.graph-map-eye:focus:not([data-state="root"]) {
+  color: var(--accent);
+}
+
+.graph-map-eye[data-state="hidden"] .graph-map-eye-outline,
+.graph-map-eye[data-state="inherited"] .graph-map-eye-outline,
+.graph-map-eye[data-state="inherited"] .graph-map-eye-slash {
+  stroke-dasharray: 2 2;
+}
+
+.graph-map-eye[data-state="hidden"] .graph-map-eye-slash,
+.graph-map-eye[data-state="inherited"] .graph-map-eye-slash {
+  opacity: 1;
+}
+
