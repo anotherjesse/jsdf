@@ -56,16 +56,14 @@ import {
   sourceLinkLabel,
   sourceLinksEqual,
 } from "./editor/source-link-matching";
+import { createSourceWorkspaceSession } from "./editor/source-workspace-session";
 import { buildVisibleSdf } from "./editor/visible-sdf";
 import {
-  clearSourceDraft,
   deleteSavedSourceDocument,
   deleteSavedSourceVersion,
   latestSourceVersion,
   listSavedSourceDocuments,
-  loadSourceDraft,
   loadSavedSourceVersion,
-  saveSourceDraft,
   saveSourceVersion,
   type SavedSourceDocument,
 } from "./editor/workspace-storage";
@@ -160,15 +158,7 @@ let editorView: EditorView = "code";
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeBounds = boundsForExample(activeExampleId);
 let boundsAreValid = true;
-let activeDocumentId: string | null = null;
-let activeSourceVersionId: string | null = null;
-let activeSourceName = currentExample(activeExampleId).name;
 let graphHistoryHoverKey: string | null = null;
-let cleanSourceSnapshot = sourceForExample(activeExampleId);
-let cleanNameSnapshot = activeSourceName;
-let cleanPreviewSnapshot = "";
-let hasUnsavedChanges = false;
-let draftPersistenceEnabled = false;
 let editorSourceValid = true;
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
@@ -226,6 +216,22 @@ const graphHistoryController = createGraphHistoryController({
   onHoverEntry: hoverGraphHistoryEntry,
   onClearEntryHover: clearGraphHistoryEntryHover,
 });
+const sourceWorkspace = createSourceWorkspaceSession({
+  elements: {
+    documentNameInput,
+    dirtyIndicator,
+    saveButton: saveSourceButton,
+  },
+  initialName: currentExample(activeExampleId).name,
+  initialSource: sourceForExample(activeExampleId),
+  initialPreview: currentPreviewProfile(),
+  currentSource: currentSourceValue,
+  currentPreview: currentPreviewProfile,
+  previewSnapshot: previewProfileSnapshot,
+  activeExampleId: () => activeExampleId,
+  canSave: () => boundsAreValid,
+  confirm: (message) => window.confirm(message),
+});
 
 browserSessionController.configure();
 configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
@@ -233,12 +239,10 @@ configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
-documentNameInput.value = activeSourceName;
 boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
   onChange: handleBoundsChange,
   onInvalid: handleBoundsInvalid,
 });
-cleanPreviewSnapshot = previewProfileSnapshot(currentPreviewProfile());
 updateSourceHintsButton();
 updateSaveState();
 renderLoadDialog();
@@ -277,7 +281,6 @@ fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
 downloadButton.addEventListener("click", () => {
   if (lastBlob) downloadBlob(lastBlob, `${slugify(currentDocumentName())}.stl`);
 });
-documentNameInput.addEventListener("input", updateSaveState);
 loadSourceButton.addEventListener("click", openSourceDialog);
 saveSourceButton.addEventListener("click", saveCurrentSource);
 prettifySourceButton.addEventListener("click", prettifyCurrentSource);
@@ -355,7 +358,7 @@ async function boot(): Promise<void> {
     );
     codeEditor.setGraphHintsEnabled(graphHintsEnabled);
     if (healthCheckMode || !restoreSourceDraft()) refreshSourceLinks();
-    draftPersistenceEnabled = !healthCheckMode;
+    sourceWorkspace.setDraftPersistenceEnabled(!healthCheckMode);
     updateSaveState();
     browserSessionController.connect();
   } catch (error) {
@@ -428,17 +431,14 @@ function updateSourceHintsButton(): void {
 }
 
 function loadExample(id: string): void {
-  if (!confirmDiscardUnsavedChanges()) return;
+  if (!sourceWorkspace.confirmDiscardUnsavedChanges()) return;
   clearPendingSourceCompile();
   activeExampleId = id;
   activeBounds = boundsForExample(id);
   boundsAreValid = true;
   boundsEditor?.setBounds(activeBounds);
-  activeDocumentId = null;
-  activeSourceVersionId = null;
-  activeSourceName = currentExample(id).name;
+  sourceWorkspace.loadExample(currentExample(id).name);
   const source = sourceForExample(id);
-  documentNameInput.value = activeSourceName;
   selectedNode = null;
   selectedSourceLink = null;
   hoveredNode = null;
@@ -446,14 +446,14 @@ function loadExample(id: string): void {
   hiddenNodeIds = new Set();
   pendingHiddenNodeKeys = [];
   codeEditor?.setValue(source);
-  markSourceClean(source, activeSourceName);
+  sourceWorkspace.markClean(source, sourceWorkspace.activeSourceName);
   renderLoadDialog();
   sourceDialog.close();
   compileEditorSource({ status: "Ready", statusState: "idle" });
 }
 
 function loadSavedSourceById(documentId: string, versionId: string): void {
-  if (!confirmDiscardUnsavedChanges()) return;
+  if (!sourceWorkspace.confirmDiscardUnsavedChanges()) return;
   const loaded = loadSavedSourceVersion(documentId, versionId);
   if (!loaded) {
     setEditorStatus("Saved source not found", "error");
@@ -464,19 +464,16 @@ function loadSavedSourceById(documentId: string, versionId: string): void {
 
 function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string, preview?: PreviewProfile): void {
   clearPendingSourceCompile();
-  activeDocumentId = document.id;
-  activeSourceVersionId = versionId;
-  activeSourceName = document.name;
+  sourceWorkspace.loadSaved(document.id, versionId, document.name);
   if (preview) applyPreviewProfile(preview);
   else pendingHiddenNodeKeys = [];
-  documentNameInput.value = document.name;
   selectedNode = null;
   selectedSourceLink = null;
   hoveredNode = null;
   focusPreview = null;
   hiddenNodeIds = new Set();
   codeEditor?.setValue(source);
-  markSourceClean(source, document.name);
+  sourceWorkspace.markClean(source, document.name);
   renderLoadDialog();
   sourceDialog.close();
   compileEditorSource({ status: "Ready", statusState: "idle" });
@@ -484,17 +481,14 @@ function loadSavedSource(document: SavedSourceDocument, versionId: string, sourc
 
 function restoreSourceDraft(): boolean {
   if (!codeEditor) return false;
-  const draft = loadSourceDraft();
+  const draft = sourceWorkspace.readDraft();
   if (!draft) return false;
 
   clearPendingSourceCompile();
   if (examples.some((example) => example.id === draft.activeExampleId)) {
     activeExampleId = draft.activeExampleId;
   }
-  activeDocumentId = draft.activeDocumentId;
-  activeSourceVersionId = draft.activeVersionId;
-  activeSourceName = draft.name;
-  documentNameInput.value = draft.name;
+  sourceWorkspace.restoreDraft(draft);
   if (draft.preview) {
     applyPreviewProfile(draft.preview);
   } else {
@@ -519,13 +513,15 @@ function saveCurrentSource(): void {
 
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   try {
-    const saved = saveSourceVersion(currentDocumentName(), source, activeDocumentId, currentPreviewProfile());
+    const saved = saveSourceVersion(
+      currentDocumentName(),
+      source,
+      sourceWorkspace.activeDocumentId,
+      currentPreviewProfile(),
+    );
     const latest = latestSourceVersion(saved);
-    activeDocumentId = saved.id;
-    activeSourceVersionId = latest?.id ?? null;
-    activeSourceName = saved.name;
-    documentNameInput.value = saved.name;
-    markSourceClean(source, saved.name);
+    sourceWorkspace.markSaved(saved.id, latest?.id ?? null, saved.name);
+    sourceWorkspace.markClean(source, saved.name);
     renderLoadDialog();
     setEditorStatus("Saved", "ok");
   } catch (error) {
@@ -539,7 +535,7 @@ function saveCurrentSourceFromShortcut(): void {
     setEditorStatus("Fix bounds before saving", "error");
     return;
   }
-  if (!hasUnsavedChanges) {
+  if (!sourceWorkspace.hasUnsavedChanges) {
     setEditorStatus("No changes to save", "idle");
     return;
   }
@@ -582,7 +578,7 @@ function deleteSavedDocument(documentId: string): void {
     return;
   }
 
-  if (activeDocumentId === documentId) detachDeletedSource();
+  if (sourceWorkspace.activeDocumentId === documentId) sourceWorkspace.detachDeletedSource();
   renderLoadDialog();
   setEditorStatus("Deleted saved shape", "ok");
 }
@@ -596,7 +592,9 @@ function deleteSavedVersion(documentId: string, versionId: string): void {
   if (!window.confirm(`Delete this saved version of "${loaded.document.name}"?`)) return;
 
   deleteSavedSourceVersion(documentId, versionId);
-  if (activeDocumentId === documentId && activeSourceVersionId === versionId) detachDeletedSource();
+  if (sourceWorkspace.activeDocumentId === documentId && sourceWorkspace.activeVersionId === versionId) {
+    sourceWorkspace.detachDeletedSource();
+  }
   renderLoadDialog();
   setEditorStatus("Deleted saved version", "ok");
 }
@@ -907,7 +905,7 @@ function invalidateMeshForActiveSdf(): void {
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
-  if (!hasUnsavedChanges) return;
+  if (!sourceWorkspace.hasUnsavedChanges) return;
   event.preventDefault();
   event.returnValue = "";
 }
@@ -1375,7 +1373,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     graphReady: Boolean(graphInspector),
     activeSdfReady: Boolean(activeSdf),
     healthCheckMode,
-    dirty: hasUnsavedChanges,
+    dirty: sourceWorkspace.hasUnsavedChanges,
     status: editorStatus.textContent ?? "",
     sourceCompilePending: Boolean(sourceCompileTimer),
     sourceValid: editorSourceValid,
@@ -1427,8 +1425,8 @@ function renderLoadDialog(): ReturnType<typeof renderSourceDialog> {
     examples,
     savedDocuments: listSavedSourceDocuments(),
     activeExampleId,
-    activeDocumentId,
-    activeVersionId: activeSourceVersionId,
+    activeDocumentId: sourceWorkspace.activeDocumentId,
+    activeVersionId: sourceWorkspace.activeVersionId,
   }, {
     loadExample,
     loadSaved: loadSavedSourceById,
@@ -1438,57 +1436,15 @@ function renderLoadDialog(): ReturnType<typeof renderSourceDialog> {
 }
 
 function currentDocumentName(): string {
-  return documentNameInput.value.trim() || activeSourceName || "Untitled SDF";
+  return sourceWorkspace.currentDocumentName();
 }
 
 function currentSourceValue(): string {
   return codeEditor?.getValue() ?? sourceForExample(activeExampleId);
 }
 
-function markSourceClean(source: string, name: string): void {
-  cleanSourceSnapshot = source;
-  cleanNameSnapshot = name;
-  cleanPreviewSnapshot = previewProfileSnapshot(currentPreviewProfile());
-  updateSaveState();
-}
-
-function detachDeletedSource(): void {
-  activeDocumentId = null;
-  activeSourceVersionId = null;
-  activeSourceName = currentDocumentName();
-  cleanSourceSnapshot = "";
-  cleanNameSnapshot = "";
-  updateSaveState();
-}
-
 function updateSaveState(): void {
-  const nextDirty = currentSourceValue() !== cleanSourceSnapshot
-    || currentDocumentName() !== cleanNameSnapshot
-    || previewProfileSnapshot(currentPreviewProfile()) !== cleanPreviewSnapshot;
-  hasUnsavedChanges = nextDirty;
-  saveSourceButton.disabled = !nextDirty || !boundsAreValid;
-  dirtyIndicator.hidden = !nextDirty;
-  syncSourceDraft();
-}
-
-function syncSourceDraft(): void {
-  if (!draftPersistenceEnabled) return;
-  try {
-    if (!hasUnsavedChanges) {
-      clearSourceDraft();
-      return;
-    }
-    saveSourceDraft({
-      name: currentDocumentName(),
-      source: currentSourceValue(),
-      preview: currentPreviewProfile(),
-      activeDocumentId,
-      activeVersionId: activeSourceVersionId,
-      activeExampleId,
-    });
-  } catch {
-    // Draft persistence is a fallback; the visible save/error flow stays authoritative.
-  }
+  sourceWorkspace.updateSaveState();
 }
 
 function fitBoundsToCurrentSdf(): void {
@@ -1563,10 +1519,6 @@ function setRangeControl(input: HTMLInputElement, output: HTMLOutputElement, val
   const clamped = Math.min(max, Math.max(min, value));
   input.value = String(clamped);
   output.value = input.value;
-}
-
-function confirmDiscardUnsavedChanges(): boolean {
-  return !hasUnsavedChanges || window.confirm("Discard unsaved changes and load another shape?");
 }
 
 function slugify(value: string): string {
