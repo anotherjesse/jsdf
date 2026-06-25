@@ -4,6 +4,14 @@ import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import type { GraphSourceLink } from "./clean-source-patch";
 import {
+  clearSourceLinkDecorations,
+  rangeForSourceLink,
+  sourceLinkKey,
+  updateFocusedSourceLinkDecorations,
+  updateGraphSourceLinkDecorations,
+  updateSourceLinkDecoration,
+} from "./code-editor-source-decorations";
+import {
   applyPreferredQuickFix as applyEditorPreferredQuickFix,
   runtimeDiagnosticCount as editorRuntimeDiagnosticCount,
   setEditorRuntimeError,
@@ -19,7 +27,7 @@ import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-
 import { sourcePathsEqual } from "./source-link-matching";
 import { adjacentSourceLink, navigableSourceLinks, sourceLinkNavigationKey } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
-import { SourceLinkStatusBar, sourceLinkHoverMessage } from "./source-link-status-bar";
+import { SourceLinkStatusBar } from "./source-link-status-bar";
 import { SourceScrubReadout } from "./source-scrub-readout";
 import type { ScrubModifiers } from "./scrub-values";
 
@@ -196,7 +204,7 @@ export function createCodeEditor(
 
   const updateKeyboardNudgeReadout = (link: GraphSourceLink, value: number) => {
     const domNode = editor.getDomNode();
-    const range = rangeForSourceLink(link);
+    const range = rangeForSourceLink(editor, link);
     if (!domNode || !range) return;
     const visiblePosition = editor.getScrolledVisiblePosition({
       lineNumber: range.startLineNumber,
@@ -242,35 +250,12 @@ export function createCodeEditor(
     return offset >= selectedSourceLink.start && offset <= selectedSourceLink.end ? selectedSourceLink : null;
   };
 
-  const rangeForSourceLink = (link: GraphSourceLink): monaco.Range | null => {
-    const model = editor.getModel();
-    if (!model || link.end <= link.start) return null;
-    const start = model.getPositionAt(link.start);
-    const end = model.getPositionAt(link.end);
-    return new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
-  };
-
-  const sourceLinkKey = (link: GraphSourceLink | null): string | null => {
-    return link ? `${link.nodeId}:${link.label}:${link.start}:${link.end}` : null;
-  };
-
   const markSelectedSourceLink = (link: GraphSourceLink | null, options: { reveal?: boolean } = {}) => {
     selectedSourceLink = link;
     updateSourceLinkStatus(link);
-    const range = link ? rangeForSourceLink(link) : null;
-    if (!range) {
-      selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, []);
-      return;
-    }
-    selectedSourceDecorations = editor.deltaDecorations(selectedSourceDecorations, [{
-      range,
-      options: {
-        className: "source-selected-link",
-        inlineClassName: "source-selected-link",
-        zIndex: 40,
-      },
-    }]);
-    if (options.reveal) {
+    const range = link ? rangeForSourceLink(editor, link) : null;
+    selectedSourceDecorations = updateSourceLinkDecoration(editor, selectedSourceDecorations, link, "selected");
+    if (options.reveal && range) {
       editor.revealRangeInCenterIfOutsideViewport(range);
     }
   };
@@ -300,27 +285,12 @@ export function createCodeEditor(
     deleteSourceInlayHintStateForModel(model);
   };
 
-  const updateHoveredSourceDecorations = (decorations: string[], link: GraphSourceLink | null): string[] => {
-    const range = link ? rangeForSourceLink(link) : null;
-    if (!range) {
-      return editor.deltaDecorations(decorations, []);
-    }
-    return editor.deltaDecorations(decorations, [{
-      range,
-      options: {
-        className: "source-hovered-link",
-        inlineClassName: "source-hovered-link",
-        zIndex: 30,
-      },
-    }]);
-  };
-
   const markLocalHoveredSourceLink = (link: GraphSourceLink | null) => {
-    localHoveredSourceDecorations = updateHoveredSourceDecorations(localHoveredSourceDecorations, link);
+    localHoveredSourceDecorations = updateSourceLinkDecoration(editor, localHoveredSourceDecorations, link, "hovered");
   };
 
   const markHoveredSourceLink = (link: GraphSourceLink | null) => {
-    hoveredSourceDecorations = updateHoveredSourceDecorations(hoveredSourceDecorations, link);
+    hoveredSourceDecorations = updateSourceLinkDecoration(editor, hoveredSourceDecorations, link, "hovered");
   };
 
   const syncCursorSourceLink = (position: monaco.Position | null | undefined) => {
@@ -417,7 +387,7 @@ export function createCodeEditor(
     link: GraphSourceLink,
     options: SourceLinkSelectOptions & { reveal?: boolean; selectRange?: boolean } = {},
   ): boolean => {
-    const range = rangeForSourceLink(link);
+    const range = rangeForSourceLink(editor, link);
     if (!range) return false;
     cursorLinkKey = sourceLinkKey(link);
     markSelectedSourceLink(link, { reveal: options.reveal });
@@ -433,7 +403,7 @@ export function createCodeEditor(
   };
 
   const updateSourceLinkStatus = (link: GraphSourceLink | null, valueOverride?: number | null) => {
-    const range = link ? rangeForSourceLink(link) : null;
+    const range = link ? rangeForSourceLink(editor, link) : null;
     if (!link || !range) {
       sourceLinkStatusBar.update(null);
       return;
@@ -514,18 +484,7 @@ export function createCodeEditor(
     }
 
     const links = sourceLinks.filter((link) => link.nodeId === focusedNodeId && link.end > link.start);
-    focusedNodeDecorations = editor.deltaDecorations(focusedNodeDecorations, links.map((link) => {
-      const start = model.getPositionAt(link.start);
-      const end = model.getPositionAt(link.end);
-      return {
-        range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-        options: {
-          className: "source-focused-link",
-          inlineClassName: "source-focused-link",
-          zIndex: 10,
-        },
-      };
-    }));
+    focusedNodeDecorations = updateFocusedSourceLinkDecorations(editor, focusedNodeDecorations, links);
 
     if (reveal && links[0]) {
       editor.revealPositionInCenterIfOutsideViewport(model.getPositionAt(links[0].start));
@@ -676,26 +635,13 @@ export function createCodeEditor(
       const model = editor.getModel();
       if (!model) return;
       updateSourceInlayHintState(sourceLinks);
-      revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, []);
-      localHoveredSourceDecorations = editor.deltaDecorations(localHoveredSourceDecorations, []);
-      hoveredSourceDecorations = editor.deltaDecorations(hoveredSourceDecorations, []);
-      editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
-      sourceLinkDecorations = editor.deltaDecorations(sourceLinkDecorations, sourceLinks
-        .filter((link) => link.end > link.start)
-        .map((link) => {
-          const start = model.getPositionAt(link.start);
-          const end = model.getPositionAt(link.end);
-          const isNumber = isScrubbableSourceLink(link) && readSourceLinkNumber(editor.getValue(), link) != null;
-          return {
-            range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-            options: {
-              inlineClassName: `source-graph-link ${isNumber ? "source-number-link" : "source-node-link"}`,
-              hoverMessage: {
-                value: sourceLinkHoverMessage(link, isNumber),
-              },
-            },
-          };
-        }));
+      revealedSourceDecorations = clearSourceLinkDecorations(editor, revealedSourceDecorations);
+      localHoveredSourceDecorations = clearSourceLinkDecorations(editor, localHoveredSourceDecorations);
+      hoveredSourceDecorations = clearSourceLinkDecorations(editor, hoveredSourceDecorations);
+      editedSourceDecorations = clearSourceLinkDecorations(editor, editedSourceDecorations);
+      sourceLinkDecorations = updateGraphSourceLinkDecorations(editor, sourceLinkDecorations, sourceLinks, (link) => {
+        return isScrubbableSourceLink(link) && readSourceLinkNumber(editor.getValue(), link) != null;
+      });
       applyFocusedNodeDecorations(false);
       selectedSourceLink = liveSourceLinkFor(selectedSourceLink);
       markSelectedSourceLink(selectedSourceLink);
@@ -725,37 +671,19 @@ export function createCodeEditor(
       markHoveredSourceLink(link);
     },
     markEditedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
-      const range = link ? rangeForSourceLink(link) : null;
-      if (!range) {
-        editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, []);
-        return;
-      }
-      editedSourceDecorations = editor.deltaDecorations(editedSourceDecorations, [{
-        range,
-        options: {
-          className: "source-edited-link",
-          inlineClassName: "source-edited-link",
-          zIndex: 50,
-        },
-      }]);
-      if (options.reveal) {
+      const range = link ? rangeForSourceLink(editor, link) : null;
+      editedSourceDecorations = updateSourceLinkDecoration(editor, editedSourceDecorations, link, "edited");
+      if (options.reveal && range) {
         editor.revealRangeInCenterIfOutsideViewport(range);
       }
     },
     revealSourceLink(link: GraphSourceLink) {
-      const range = rangeForSourceLink(link);
+      const range = rangeForSourceLink(editor, link);
       if (!range) return;
       cancelCursorSourceLinkSync();
       selectedSourceLink = link;
       updateSourceLinkStatus(link);
-      revealedSourceDecorations = editor.deltaDecorations(revealedSourceDecorations, [{
-        range,
-        options: {
-          className: "source-revealed-link",
-          inlineClassName: "source-revealed-link",
-          zIndex: 45,
-        },
-      }]);
+      revealedSourceDecorations = updateSourceLinkDecoration(editor, revealedSourceDecorations, link, "revealed");
       editor.setSelection(range);
       editor.revealRangeInCenterIfOutsideViewport(range);
       editor.focus();
