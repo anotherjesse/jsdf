@@ -1,6 +1,7 @@
 import type { Node, SDF3 } from "../core/nodes";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
+import { GraphInspectorToolbar } from "./graph-inspector-toolbar";
 import { renderGraphMap } from "./graph-map-renderer";
 import { GraphParamPanel } from "./graph-param-panel";
 import { renderGraphTree } from "./graph-tree-renderer";
@@ -9,7 +10,6 @@ import {
   graphNodeIdSetsEqual,
   graphNodePath,
   hiddenNodeIdsForIsolatedGraphNode,
-  renderEyeIcon,
 } from "./graph-visibility";
 import {
   getParamAtPath,
@@ -55,14 +55,7 @@ export class GraphInspector {
   private readonly hiddenNodeIds = new Set<number>();
   private readonly dirtyNodeIds = new Set<number>();
   private readonly dirtyParamKeys = new Set<string>();
-  private readonly toolbar = document.createElement("div");
-  private readonly filterInput = document.createElement("input");
-  private readonly previousMatchButton = document.createElement("button");
-  private readonly nextMatchButton = document.createElement("button");
-  private readonly mapButton = document.createElement("button");
-  private readonly showAllButton = document.createElement("button");
-  private readonly showAllCount = document.createElement("span");
-  private readonly summary = document.createElement("span");
+  private readonly toolbar: GraphInspectorToolbar;
   private readonly map = document.createElement("div");
   private readonly tree = document.createElement("div");
   private readonly params = document.createElement("div");
@@ -73,68 +66,18 @@ export class GraphInspector {
     private readonly options: GraphInspectorOptions,
   ) {
     root.replaceChildren();
-    this.toolbar.className = "graph-toolbar";
-    this.filterInput.type = "search";
-    this.filterInput.className = "graph-filter-input";
-    this.filterInput.placeholder = "Filter";
-    this.filterInput.setAttribute("aria-label", "Filter graph nodes");
-    this.filterInput.setAttribute("aria-keyshortcuts", "Control+F Meta+F /");
-    this.previousMatchButton.type = "button";
-    this.previousMatchButton.className = "graph-match-nav";
-    this.previousMatchButton.textContent = "Prev";
-    this.previousMatchButton.title = "Previous matching node (Shift+Enter or ArrowUp)";
-    this.previousMatchButton.setAttribute("aria-label", "Previous matching graph node");
-    this.previousMatchButton.setAttribute("aria-keyshortcuts", "Shift+Enter ArrowUp");
-    this.previousMatchButton.hidden = true;
-    this.nextMatchButton.type = "button";
-    this.nextMatchButton.className = "graph-match-nav";
-    this.nextMatchButton.textContent = "Next";
-    this.nextMatchButton.title = "Next matching node (Enter or ArrowDown)";
-    this.nextMatchButton.setAttribute("aria-label", "Next matching graph node");
-    this.nextMatchButton.setAttribute("aria-keyshortcuts", "Enter ArrowDown");
-    this.nextMatchButton.hidden = true;
-    this.mapButton.type = "button";
-    this.mapButton.className = "graph-map-toggle";
-    this.mapButton.textContent = "Map";
-    this.mapButton.title = "Toggle graph map";
-    this.mapButton.setAttribute("aria-label", "Toggle graph map");
-    this.mapButton.setAttribute("aria-pressed", "false");
-    this.showAllButton.type = "button";
-    this.showAllButton.className = "graph-show-all";
-    this.showAllButton.title = "Show all hidden nodes (Shift+V)";
-    this.showAllButton.setAttribute("aria-label", "Show all hidden graph nodes");
-    this.showAllButton.setAttribute("aria-keyshortcuts", "Shift+V");
-    this.showAllButton.hidden = true;
-    this.showAllCount.className = "visibility-count";
-    this.showAllCount.setAttribute("aria-hidden", "true");
-    this.showAllButton.append(renderEyeIcon("visible"), this.showAllCount);
-    this.summary.className = "graph-summary";
-    this.filterInput.addEventListener("input", () => {
-      this.filter = this.filterInput.value;
-      this.render();
-    });
-    this.filterInput.addEventListener("keydown", (event) => {
-      const matchDirection = filterMatchDirectionForKey(event);
-      if (matchDirection) {
-        event.preventDefault();
-        this.selectFilterMatch(matchDirection);
-        return;
-      }
-      if (event.key === "Escape" && this.filter) {
-        event.preventDefault();
-        this.filter = "";
-        this.filterInput.value = "";
+    this.toolbar = new GraphInspectorToolbar({
+      onFilterChange: (filter) => {
+        this.filter = filter;
         this.render();
-      }
+      },
+      onSelectMatch: (direction) => this.selectFilterMatch(direction),
+      onToggleMap: (showMap) => {
+        this.showMap = showMap;
+        this.render();
+      },
+      onShowAllNodes: () => this.showAllNodes(),
     });
-    this.previousMatchButton.addEventListener("click", () => this.selectFilterMatch(-1));
-    this.nextMatchButton.addEventListener("click", () => this.selectFilterMatch(1));
-    this.mapButton.addEventListener("click", () => {
-      this.showMap = !this.showMap;
-      this.mapButton.setAttribute("aria-pressed", String(this.showMap));
-      this.render();
-    });
-    this.showAllButton.addEventListener("click", () => this.showAllNodes());
     window.addEventListener("pointermove", (event) => {
       if (!(event.target instanceof globalThis.Node) || !this.root.contains(event.target)) {
         this.clearHover();
@@ -151,14 +94,6 @@ export class GraphInspector {
     root.addEventListener("pointerleave", () => {
       this.clearHover();
     });
-    this.toolbar.append(
-      this.filterInput,
-      this.previousMatchButton,
-      this.nextMatchButton,
-      this.mapButton,
-      this.showAllButton,
-      this.summary,
-    );
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
     this.tree.tabIndex = 0;
@@ -192,7 +127,7 @@ export class GraphInspector {
       attachSoloHover: (target, path) => this.attachSoloHover(target, path),
       requestRender: () => this.render(),
     });
-    root.append(this.toolbar, this.map, this.tree, this.params);
+    root.append(this.toolbar.element, this.map, this.tree, this.params);
   }
 
   setSdf(sdf: SDF3, hiddenNodeIds: readonly number[] = []): void {
@@ -291,8 +226,7 @@ export class GraphInspector {
   }
 
   focusFilter(options: { select?: boolean } = {}): void {
-    this.filterInput.focus({ preventScroll: true });
-    if (options.select) this.filterInput.select();
+    this.toolbar.focusFilter(options);
   }
 
   buildSoloPreviewForNodeId(id: number): SoloPreview | null {
@@ -328,24 +262,21 @@ export class GraphInspector {
     this.params.replaceChildren();
     if (!this.sdf) return;
     const model = buildGraphModel(this.sdf.node, this.filter);
-    this.renderSummary(model);
-    this.updateMatchNavigation(model);
-    this.renderShowAllControl();
+    const matched = this.matchingNodes(model).length;
+    this.toolbar.updateStats({
+      filter: this.filter,
+      total: model.nodes.length,
+      edges: model.edges.length,
+      visible: model.visibleNodeIds.size,
+      matched,
+      hidden: this.hiddenNodeIds.size,
+    });
     this.map.hidden = !this.showMap;
     if (this.showMap) this.renderMap(model);
     this.renderTree(model);
     this.renderParams();
     this.syncTreeActiveDescendant();
     this.revealSelectedNode();
-  }
-
-  private renderShowAllControl(): void {
-    const hidden = this.hiddenNodeIds.size;
-    this.showAllButton.hidden = hidden === 0;
-    this.showAllCount.textContent = hidden > 99 ? "99+" : String(hidden);
-    const label = hidden === 1 ? "Show 1 hidden node" : `Show ${hidden} hidden nodes`;
-    this.showAllButton.title = `${label} (Shift+V)`;
-    this.showAllButton.setAttribute("aria-label", label);
   }
 
   private renderTree(model: GraphModel): void {
@@ -370,26 +301,6 @@ export class GraphInspector {
       onKeyDown: (event, node) => this.handleNodeKeyDown(event, node),
       attachSoloHover: (target, path) => this.attachSoloHover(target, path),
     });
-  }
-
-  private renderSummary(model: GraphModel): void {
-    const total = model.nodes.length;
-    const visible = model.visibleNodeIds.size;
-    const matched = this.matchingNodes(model).length;
-    const hidden = this.hiddenNodeIds.size;
-    const suffix = hidden > 0 ? `, ${hidden} hidden` : "";
-    this.summary.textContent = this.filter
-      ? `${matched} ${matched === 1 ? "match" : "matches"}, ${visible}/${total} shown${suffix}`
-      : `${total} nodes, ${model.edges.length} edges${suffix}`;
-  }
-
-  private updateMatchNavigation(model: GraphModel): void {
-    const show = this.filter.trim() !== "" && this.matchingNodes(model).length > 0;
-    const enabled = show && this.matchingNodes(model).length > 1;
-    this.previousMatchButton.hidden = !show;
-    this.nextMatchButton.hidden = !show;
-    this.previousMatchButton.disabled = !enabled;
-    this.nextMatchButton.disabled = !enabled;
   }
 
   private selectFilterMatch(direction: 1 | -1): void {
@@ -740,15 +651,6 @@ export class GraphInspector {
       return link.nodeId === nodeId && link.end > link.start;
     }) ?? null;
   }
-}
-
-function filterMatchDirectionForKey(event: KeyboardEvent): -1 | 1 | null {
-  if (event.metaKey || event.ctrlKey || event.altKey) return null;
-  if (event.key === "Enter") return event.shiftKey ? -1 : 1;
-  if (event.shiftKey) return null;
-  if (event.key === "ArrowDown") return 1;
-  if (event.key === "ArrowUp") return -1;
-  return null;
 }
 
 function containsEventTarget(parent: Element, target: EventTarget | null): boolean {

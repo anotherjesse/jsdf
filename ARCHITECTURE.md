@@ -72,6 +72,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
+- `src/editor/graph-inspector-toolbar.ts` owns the graph inspector toolbar DOM, filter input keyboard handling, match navigation controls, map toggle, hidden-node count, and summary labels.
 - `src/editor/graph-map-renderer.ts` owns the graph inspector's SVG overview map rendering, map node classes, visibility affordances, and map keyboard/click event adaptation.
 - `src/editor/graph-param-panel.ts` owns selected-node parameter panel DOM rendering, orientation and matrix edit wiring, and panel-local custom matrix state; `src/editor/graph-param-panel-controls.ts` owns panel-local DOM helpers, breadcrumb/source-link affordances, edit-session ids, and numeric scrub handle wiring.
 - `src/editor/graph-param-model.ts` owns numeric param discovery, orientation matrix helpers, matrix cell paths, slider bounds, step sizing, and numeric formatting used by the graph inspector.
@@ -100,7 +101,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/graph-param-panel.ts` renders selected-node parameters and emits graph edits/source-hover callbacks while the inspector owns graph selection, visibility, and solo state; `editor/graph-param-panel-controls.ts` keeps shared panel control rendering and scrub-handle helpers out of the stateful panel class.
 - `editor/graph-tree-renderer.ts` renders the inspector's recursive node tree from the same graph model while the inspector owns authoritative state and action callbacks.
 - `editor/graph-visibility.ts` provides pure graph lookup and visibility-set helpers plus visibility control metadata/icons.
-- `editor/graph-inspector.ts` shows the graph and owns node selection, visibility changes, and solo/focus preview state.
+- `editor/graph-inspector.ts` shows the graph and owns node selection, visibility changes, and solo/focus preview state; `editor/graph-inspector-toolbar.ts` owns the filter/map/visibility summary toolbar.
 - `editor/graph-history.ts` records graph edit undo/redo entries.
 - `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.
 - `editor/graph-interaction-controller.ts` coordinates source-link selection, graph hover, graph-history hover/select, hidden-node persistence, and source patching for graph edits.
