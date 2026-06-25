@@ -19,7 +19,7 @@ const checks = [
 ];
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const webRoot = resolve(scriptDir, "..");
+const appRoot = resolve(scriptDir, "..");
 const defaultHost = "127.0.0.1";
 const defaultTimeoutMs = 90_000;
 
@@ -147,9 +147,9 @@ Options:
 }
 
 async function startViteServer(port) {
-  const viteBin = resolve(webRoot, "node_modules/vite/bin/vite.js");
+  const viteBin = resolve(appRoot, "node_modules/vite/bin/vite.js");
   if (!existsSync(viteBin)) {
-    throw new Error("Vite is not installed. Run npm install in web/ before npm run verify:live.");
+    throw new Error("Vite is not installed. Run npm install before npm run verify:live.");
   }
 
   const serverPort = port ?? await freePort();
@@ -164,7 +164,7 @@ async function startViteServer(port) {
     "--base",
     "/",
   ], {
-    cwd: webRoot,
+    cwd: appRoot,
     stdio: ["ignore", "pipe", "pipe"],
   });
   collectProcessLogs(viteProcess, logs);

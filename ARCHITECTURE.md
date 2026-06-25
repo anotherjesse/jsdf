@@ -1,15 +1,18 @@
 # Architecture
 
-This document describes the active browser-native architecture for `sdf browser`. The repository is derived from Michael Fogleman's original Python [`sdf`](https://github.com/fogleman/sdf) project, but the legacy Python package has been removed from this tree. The product architecture described here is the TypeScript app in `web/`.
+This document describes the active browser-native architecture for `sdf browser`. The repository is derived from Michael Fogleman's original Python [`sdf`](https://github.com/fogleman/sdf) project, but the legacy Python package has been removed from this tree. The product architecture described here is the root-level npm app.
 
 ## System Shape
 
 `sdf browser` has two cooperating runtimes:
 
-- A Node/Vite session server in `web/session-server.mjs`
-- A browser app in `web/src/` that owns editing, graph state, rendering, mesh generation, local saves, and browser-session command handling
+- A Node/Vite session server in `session-server.mjs`
+- Static HTML/CSS shells in `static/`
+- A browser app in `src/` that owns editing, graph state, rendering, mesh generation, local saves, and browser-session command handling
 
 The server deliberately does not render or evaluate SDFs. It serves the app, routes session API requests, relays commands to the active browser tab over Server-Sent Events, and persists session snapshots under `.sessions/`.
+
+Vite serves `static/` as the web root, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells separate from implementation code and keeps `.sessions/` outside the served static root.
 
 ```mermaid
 flowchart LR
@@ -27,13 +30,13 @@ flowchart LR
 
 The editor source is plain JavaScript executed with the SDF API and `Math` injected as globals.
 
-1. `web/src/editor/evaluate-source.ts` builds a runtime object from `web/src/api/index.ts`.
+1. `src/editor/evaluate-source.ts` builds a runtime object from `src/api/index.ts`.
 2. The source is executed with `new Function(...)`.
 3. The direct return value must be an `SDF3`. If no top-level return exists, `source-auto-return.ts` tries to return the final expression.
 4. API calls create an SDF graph of `Node` objects rather than immediately sampling geometry.
 5. `main.ts` stores the result as `activeSdf`; `graph-interaction-controller.ts` refreshes source links, updates the graph inspector, restores graph selection, and manages graph-visible state. The preview viewport then invalidates mesh state and schedules a shader preview.
 
-Important data types live in `web/src/core/nodes.ts`:
+Important data types live in `src/core/nodes.ts`:
 
 - `SDF2` and `SDF3` are wrappers around graph `Node`s.
 - Each `Node` has a `kind`, `params`, `children`, `dim`, and current-graph runtime `id`.
@@ -41,7 +44,7 @@ Important data types live in `web/src/core/nodes.ts`:
 
 ## Browser App Responsibilities
 
-`web/src/main.ts` is the browser app coordinator. It wires typed app element groups, Monaco, graph inspection, renderers, mesh building, document persistence, and session commands.
+`src/main.ts` is the browser app coordinator. It wires typed app element groups, Monaco, graph inspection, renderers, mesh building, document persistence, and session commands.
 
 The major state buckets are:
 
@@ -56,19 +59,19 @@ The app is intentionally client-heavy: after the page loads, source evaluation, 
 
 Common editor interaction policy lives outside the coordinator where possible:
 
-- `web/src/editor/app-elements.ts` owns required DOM selector lookup and groups elements by the controller that consumes them.
-- `web/src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
-- `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
-- `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
-- `web/src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
-- `web/src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
-- `web/src/editor/graph-interaction-controller.ts` owns graph/source-link selection, hover/focus/solo preview state, hidden-node state, source-link refresh, graph edit source sync, and graph-history interaction callbacks.
-- `web/src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
-- `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
-- `web/src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; `main.ts` supplies the actual compile callback.
-- `web/src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
-- `web/src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
-- `web/src/preview/preview-viewport-controller.ts` owns preview renderers, shader/mesh mode controls, preview layout labels, step/grid controls, mesh job state, STL download state, and debounced render scheduling; `main.ts` supplies the current graph, bounds, document name, and highlight policy.
+- `src/editor/app-elements.ts` owns required DOM selector lookup and groups elements by the controller that consumes them.
+- `src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
+- `src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
+- `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
+- `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
+- `src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
+- `src/editor/graph-interaction-controller.ts` owns graph/source-link selection, hover/focus/solo preview state, hidden-node state, source-link refresh, graph edit source sync, and graph-history interaction callbacks.
+- `src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
+- `src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
+- `src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; `main.ts` supplies the actual compile callback.
+- `src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
+- `src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
+- `src/preview/preview-viewport-controller.ts` owns preview renderers, shader/mesh mode controls, preview layout labels, step/grid controls, mesh job state, STL download state, and debounced render scheduling; `main.ts` supplies the current graph, bounds, document name, and highlight policy.
 
 ## Source Links And Graph Editing
 
@@ -100,11 +103,11 @@ flowchart LR
 
 Key pieces:
 
-- `web/src/glsl/compiler.ts` emits one GLSL distance function per graph node and a final `scene(vec3 p)`.
-- `web/src/preview/webgl-raymarch-renderer.ts` compiles that GLSL into a WebGL2 preview program.
-- `web/src/preview/orbit-camera.ts` owns shared orbit camera state for shader and mesh views.
-- `web/src/preview/view-layout.ts` defines single and multi-panel view layouts.
-- `web/src/preview/preview-viewport-controller.ts` owns renderer initialization, shader/mesh mode switching, layout labels, debounced shader renders, and session screenshot rendering.
+- `src/glsl/compiler.ts` emits one GLSL distance function per graph node and a final `scene(vec3 p)`.
+- `src/preview/webgl-raymarch-renderer.ts` compiles that GLSL into a WebGL2 preview program.
+- `src/preview/orbit-camera.ts` owns shared orbit camera state for shader and mesh views.
+- `src/preview/view-layout.ts` defines single and multi-panel view layouts.
+- `src/preview/preview-viewport-controller.ts` owns renderer initialization, shader/mesh mode switching, layout labels, debounced shader renders, and session screenshot rendering.
 - `main.ts` supplies the visible graph, solo/focus render graph, highlight mode, bounds, and document state to the preview viewport controller.
 
 The preview is debounced during typing. Session screenshot capture forces shader mode, flushes the pending preview timer, renders the current valid graph, waits for a browser frame, and then reads the canvas as PNG data.
@@ -125,15 +128,15 @@ flowchart LR
 
 Key pieces:
 
-- `web/src/mesh/bounds.ts` estimates or pads bounds. The UI can override bounds manually.
-- `web/src/mesh/generate.ts` resolves grid dimensions, samples the field, polygonizes the volume, and returns `MeshResult`.
-- `web/src/gpu/sampler.ts` samples the SDF volume with WebGPU when available.
-- CPU sampling falls back to `evaluate3` from `web/src/evaluate/`.
+- `src/mesh/bounds.ts` estimates or pads bounds. The UI can override bounds manually.
+- `src/mesh/generate.ts` resolves grid dimensions, samples the field, polygonizes the volume, and returns `MeshResult`.
+- `src/gpu/sampler.ts` samples the SDF volume with WebGPU when available.
+- CPU sampling falls back to `evaluate3` from `src/evaluate/`.
 - Polygonization uses `surface-net` by default or `tetra` when selected.
-- `web/src/mesh/polygonize-worker.ts` runs polygonization in a Web Worker when available.
-- `web/src/preview/webgl-mesh-renderer.ts` renders generated triangles.
-- `web/src/mesh/stl.ts` writes binary STL output.
-- `web/src/preview/preview-viewport-controller.ts` owns mesh build invalidation, build-job cancellation, mesh stats, mesh highlighting, mesh-mode switching, and STL download wiring.
+- `src/mesh/polygonize-worker.ts` runs polygonization in a Web Worker when available.
+- `src/preview/webgl-mesh-renderer.ts` renders generated triangles.
+- `src/mesh/stl.ts` writes binary STL output.
+- `src/preview/preview-viewport-controller.ts` owns mesh build invalidation, build-job cancellation, mesh stats, mesh highlighting, mesh-mode switching, and STL download wiring.
 
 Mesh generation is on demand. Editing source or changing relevant settings invalidates the mesh; the shader preview remains the fast feedback path.
 
@@ -156,7 +159,7 @@ sequenceDiagram
   Server->>Client: JSON snapshot metadata
 ```
 
-Server-side responsibilities in `web/session-server.mjs`:
+Server-side responsibilities in `session-server.mjs`:
 
 - Create or resume session metadata
 - Serve `/s/<session-id>` app pages
@@ -167,7 +170,7 @@ Server-side responsibilities in `web/session-server.mjs`:
 - Serve snapshot source and screenshot files
 - Restore earlier code snapshots through `/undo`
 
-Browser-side responsibilities are split between `web/src/editor/browser-session.ts`, `web/src/editor/browser-session-controller.ts`, and `main.ts`:
+Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, and `main.ts`:
 
 - `browser-session.ts` derives the session id from the current `/s/<session-id>` route, connects to the server with `EventSource`, executes `get-status`, `get-code`, `set-code`, and `capture-screenshot`, and posts command results back to the server.
 - `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot POSTs.
@@ -182,9 +185,9 @@ There are two persistence layers:
 - Browser workspace persistence in `localStorage`
 - Session snapshots on disk under `.sessions/`
 
-Workspace persistence is stored by `web/src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `web/src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `web/src/editor/source-workspace-actions.ts` coordinates the source load/save/delete commands around that session state and delegates app-specific graph, bounds, preview, and compilation updates back to `main.ts`. `web/src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
+Workspace persistence is stored by `src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `src/editor/source-workspace-actions.ts` coordinates the source load/save/delete commands around that session state and delegates app-specific graph, bounds, preview, and compilation updates back to `main.ts`. `src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
 
-Session snapshot persistence is implemented in `web/session-server.mjs`. Snapshot folders can contain:
+Session snapshot persistence is implemented in `session-server.mjs`. Snapshot folders can contain:
 
 - `meta.json`
 - `code.js`
@@ -209,18 +212,18 @@ The app has focused verifier pages plus TypeScript checks:
 - `preview-check.html` checks shader and mesh preview rendering
 - `examples-visual-check.html` renders all bundled examples and checks for nonblank visual output
 
-Health diagnostics are exposed and assembled from `web/src/editor/app-health.ts`, with app state read from `main.ts`.
+Health diagnostics are exposed and assembled from `src/editor/app-health.ts`, with app state read from `main.ts`.
 
 ## Extension Points
 
 When adding a new SDF operation or primitive, update the graph-centered pipeline end to end:
 
-1. Add the API builder in `web/src/api/`.
-2. Add the node kind and method/global wiring in `web/src/core/nodes.ts` if needed.
-3. Add CPU evaluation support in `web/src/evaluate/`.
-4. Add GLSL compilation support in `web/src/glsl/compiler.ts`.
-5. Add WGSL compilation support in `web/src/wgsl/compiler.ts` when mesh/WebGPU paths need it.
-6. Add API reference/completion data in `web/src/editor/api-reference-data.ts`.
+1. Add the API builder in `src/api/`.
+2. Add the node kind and method/global wiring in `src/core/nodes.ts` if needed.
+3. Add CPU evaluation support in `src/evaluate/`.
+4. Add GLSL compilation support in `src/glsl/compiler.ts`.
+5. Add WGSL compilation support in `src/wgsl/compiler.ts` when mesh/WebGPU paths need it.
+6. Add API reference/completion data in `src/editor/api-reference-data.ts`.
 7. Add user-facing docs in `docs/API.md`.
 8. Add focused examples or verifier coverage.
 

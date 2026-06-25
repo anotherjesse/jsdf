@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>sdf app health check</title>
+    <title>sdf preview check</title>
     <style>
       :root {
         color-scheme: dark;
@@ -26,7 +26,7 @@
       main {
         display: grid;
         gap: 14px;
-        max-width: 1180px;
+        max-width: 980px;
         margin: 0 auto;
         padding: 28px;
       }
@@ -49,9 +49,10 @@
         color: var(--fail);
       }
 
-      iframe {
-        width: 100%;
-        height: 620px;
+      canvas {
+        display: block;
+        width: min(100%, 760px);
+        height: 440px;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #0d0f12;
@@ -59,7 +60,7 @@
 
       pre {
         overflow: auto;
-        min-height: 240px;
+        min-height: 260px;
         margin: 0;
         border: 1px solid var(--line);
         border-radius: 8px;
@@ -70,11 +71,11 @@
   </head>
   <body>
     <main>
-      <h1>sdf app health check</h1>
-      <div id="status">Running app health verification...</div>
-      <iframe id="appFrame" title="SDF browser app under test"></iframe>
+      <h1>sdf preview check</h1>
+      <div id="status">Running preview runtime verification...</div>
+      <canvas id="canvas" width="760" height="440"></canvas>
       <pre id="report"></pre>
     </main>
-    <script type="module" src="./src/app-health-check.ts"></script>
+    <script type="module" src="/src/preview-check.ts"></script>
   </body>
 </html>

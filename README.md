@@ -2,7 +2,7 @@
 
 `sdf browser` is a browser-native signed distance field playground and modeling tool. You write small JavaScript snippets that build 2D and 3D SDF graphs, preview them instantly in WebGL, inspect the generated graph, and export meshes when you want triangles.
 
-The project is centered on the app in [`web/`](web/):
+The project is a root-level npm/Vite app with a small static shell in [`static/`](static/) and TypeScript implementation modules in [`src/`](src/):
 
 - A Monaco-based SDF editor with source links into the graph
 - A JavaScript SDF API for primitives, CSG, transforms, deformations, extrusion, and revolve
@@ -16,7 +16,6 @@ For a visual JavaScript API reference, see [`docs/API.md`](docs/API.md). For a d
 ## Quick Start
 
 ```sh
-cd web
 npm install
 npm run dev
 ```
@@ -95,21 +94,25 @@ curl -s "$BASE/connect.md"
 ## Project Layout
 
 - [`docs/API.md`](docs/API.md) is the visual JavaScript API reference.
-- [`web/src/api/`](web/src/api/) defines the browser SDF API surface.
-- [`web/src/core/`](web/src/core/) contains graph nodes, math helpers, and easing utilities.
-- [`web/src/glsl/`](web/src/glsl/) compiles SDF graphs for the raymarch preview.
-- [`web/src/wgsl/`](web/src/wgsl/) contains the WebGPU-oriented compiler path.
-- [`web/src/mesh/`](web/src/mesh/) handles bounds, polygonization, and STL output.
-- [`web/src/preview/`](web/src/preview/) renders shader and mesh previews.
-- [`web/src/editor/`](web/src/editor/) owns the editor, graph integration, diagnostics, and browser-session client.
-- [`web/session-server.mjs`](web/session-server.mjs) serves the app and exposes the local session API.
+- [`static/`](static/) contains the app HTML shell, verifier pages, and shared CSS served by Vite.
+- [`src/api/`](src/api/) defines the browser SDF API surface.
+- [`src/core/`](src/core/) contains graph nodes, math helpers, and easing utilities.
+- [`src/evaluate/`](src/evaluate/) contains CPU reference evaluators.
+- [`src/glsl/`](src/glsl/) compiles SDF graphs for the raymarch preview.
+- [`src/wgsl/`](src/wgsl/) contains the WebGPU-oriented compiler path.
+- [`src/gpu/`](src/gpu/) handles WebGPU sampling support when available.
+- [`src/mesh/`](src/mesh/) handles bounds, polygonization, and STL output.
+- [`src/preview/`](src/preview/) renders shader and mesh previews.
+- [`src/editor/`](src/editor/) owns the editor, graph integration, diagnostics, and browser-session client.
+- [`src/workflow.ts`](src/workflow.ts) exposes `generate`, `save`, `sample_slice`, and `show_slice` helpers for browser workflows.
+- [`session-server.mjs`](session-server.mjs) serves the app and exposes the local session API.
+- [`vite.config.ts`](vite.config.ts) uses `static/` as the Vite root and aliases `/src` to the TypeScript source tree.
 
 ## Checks
 
-The web package includes TypeScript checking and browser verifier pages.
+The app includes TypeScript checking and browser verifier pages.
 
 ```sh
-cd web
 npm run check
 ```
 

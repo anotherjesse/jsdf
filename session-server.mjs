@@ -7,13 +7,28 @@ import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, "..");
+const repoRoot = __dirname;
+const staticRoot = resolve(repoRoot, "static");
+const sourceRoot = resolve(repoRoot, "src");
 const sessionsRoot = resolve(repoRoot, ".sessions");
 const sessionIdPattern = /^[1-9A-HJ-NP-Za-km-z]{10}$/;
 const snapshotIdPattern = /^\d{6}$/;
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const commandTimeoutMs = 30000;
 const bodyLimitBytes = 50 * 1024 * 1024;
+const viteFsDeny = [".env", ".env.*", "*.{crt,pem}", "**/.git/**", ".sessions", "**/.sessions/**"];
+const staticHtmlPages = new Set([
+  "api-check.html",
+  "app-health-check.html",
+  "checks.html",
+  "editor-check.html",
+  "examples-visual-check.html",
+  "graph-check.html",
+  "index.html",
+  "mesh-check.html",
+  "preview-check.html",
+  "raymarch-hello.html",
+]);
 
 const sessions = new Map();
 
@@ -21,11 +36,20 @@ await mkdir(sessionsRoot, { recursive: true });
 
 const httpServer = createServer();
 const vite = await createViteServer({
-  root: __dirname,
+  root: staticRoot,
   appType: "custom",
+  resolve: {
+    alias: {
+      "/src": sourceRoot,
+    },
+  },
   server: {
     middlewareMode: true,
     hmr: { server: httpServer },
+    fs: {
+      allow: [repoRoot],
+      deny: viteFsDeny,
+    },
   },
 });
 
@@ -62,6 +86,15 @@ async function handleRequest(req, res) {
     ensureSession(sessionId);
     await serveIndex(req, res, url.pathname);
     return;
+  }
+
+  if ((req.method === "GET" || req.method === "HEAD") && isStaticHtmlPage(url.pathname)) {
+    await serveStaticHtml(req, res, url.pathname);
+    return;
+  }
+
+  if (isPrivateStaticPath(url.pathname)) {
+    throw httpError(404, "Not found.");
   }
 
   await runViteMiddleware(req, res);
@@ -142,6 +175,21 @@ function parseSessionRoute(pathname) {
     sessionId: parts[2],
     tail: parts.slice(3),
   };
+}
+
+function isPrivateStaticPath(pathname) {
+  let decodedPathname;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    return true;
+  }
+  return decodedPathname === "/.sessions" || decodedPathname.startsWith("/.sessions/");
+}
+
+function isStaticHtmlPage(pathname) {
+  const page = pathname.startsWith("/") ? pathname.slice(1) : pathname;
+  return staticHtmlPages.has(page);
 }
 
 function ensureSession(id) {
@@ -807,10 +855,18 @@ The browser tab connects to \`GET /events\` with Server-Sent Events and posts co
 }
 
 async function serveIndex(req, res, pathname) {
-  let template = await readFile(join(__dirname, "index.html"), "utf8");
+  let template = await readFile(join(staticRoot, "index.html"), "utf8");
   if (pathname.startsWith("/s/")) {
     template = template.replace("<head>", "<head>\n    <base href=\"/\">");
   }
+  const html = await vite.transformIndexHtml(pathname, template);
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(req.method === "HEAD" ? "" : html);
+}
+
+async function serveStaticHtml(req, res, pathname) {
+  const page = pathname.slice(1);
+  const template = await readFile(join(staticRoot, page), "utf8");
   const html = await vite.transformIndexHtml(pathname, template);
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(req.method === "HEAD" ? "" : html);

@@ -19,7 +19,7 @@ Unlike the original Python API, JavaScript cannot overload `|`, `&`, or `-`, so 
 
 ## Reference Conventions
 
-The editor exposes the modeling API as globals, along with `Math`. You do not need imports inside the app. TypeScript code in this repository imports the same surface from [web/src/api](../web/src/api/index.ts), while package-style consumers can import from [web/src/index.ts](../web/src/index.ts).
+The editor exposes the modeling API as globals, along with `Math`. You do not need imports inside the app. TypeScript code in this repository imports the same surface from [src/api](../src/api/index.ts), while package-style consumers can import from [src/index.ts](../src/index.ts).
 
 Most operations are available in both named and method form:
 
@@ -42,7 +42,7 @@ The API keeps Python-style snake_case names for familiarity. Common multiword me
 
 ## Examples
 
-The app includes browser examples in [web/src/examples.ts](../web/src/examples.ts). These examples are also available from the example picker in the editor.
+The app includes browser examples in [src/examples.ts](../src/examples.ts). These examples are also available from the example picker in the editor.
 
 | Gearlike | Knurling | Smooth blobby | Weave |
 | --- | --- | --- | --- |
@@ -189,7 +189,7 @@ const b = sphere().k(0.25);
 return a.union(b);
 ```
 
-The browser API does not currently accept arbitrary JavaScript distance functions as custom primitives. Compose supported nodes instead so the renderer, graph inspector, source links, and mesh generator can all understand the model. The core graph objects live in [web/src/core/nodes.ts](../web/src/core/nodes.ts), and the exported modeling functions live in [web/src/api](../web/src/api/index.ts).
+The browser API does not currently accept arbitrary JavaScript distance functions as custom primitives. Compose supported nodes instead so the renderer, graph inspector, source links, and mesh generator can all understand the model. The core graph objects live in [src/core/nodes.ts](../src/core/nodes.ts), and the exported modeling functions live in [src/api](../src/api/index.ts).
 
 # Function Reference
 

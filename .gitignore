@@ -1,4 +1,5 @@
 /.sessions/
+.DS_Store
 *.stl
 node_modules/
-web/dist/
+dist/
