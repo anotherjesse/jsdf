@@ -22,7 +22,10 @@ import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-
 import { sourcePathsEqual } from "./source-link-matching";
 import { adjacentSourceLink, navigableSourceLinks, sourceLinkNavigationKey } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
+import { SourceLinkStatusBar, formatScrubReadoutValue, sourceLinkHoverMessage } from "./source-link-status-bar";
 import type { ScrubModifiers } from "./scrub-values";
+
+export { sourceLinkHoverMessage, sourceLinkStatusText } from "./source-link-status-bar";
 
 interface MonacoEnvironment {
   getWorker(): Worker;
@@ -106,33 +109,20 @@ export function createCodeEditor(
   const scrubReadout = document.createElement("div");
   scrubReadout.className = "source-scrub-readout";
   scrubReadout.setAttribute("aria-hidden", "true");
-  const sourceLinkStatus = document.createElement("div");
-  sourceLinkStatus.className = "source-link-status";
-  sourceLinkStatus.hidden = true;
-  sourceLinkStatus.setAttribute("aria-label", "Selected graph source link");
-  sourceLinkStatus.setAttribute("aria-live", "polite");
-  const sourceLinkStatusTarget = document.createElement("button");
-  sourceLinkStatusTarget.type = "button";
-  sourceLinkStatusTarget.className = "source-link-status-target";
-  sourceLinkStatusTarget.disabled = true;
-  const sourceLinkStatusText = document.createElement("span");
-  sourceLinkStatusText.className = "source-link-status-text";
-  sourceLinkStatusTarget.append(sourceLinkStatusText);
-  const sourceLinkNavigation = document.createElement("span");
-  sourceLinkNavigation.className = "source-link-status-navigation";
-  const sourceLinkPreviousButton = renderSourceLinkNavigationButton("previous", "<");
-  const sourceLinkNextButton = renderSourceLinkNavigationButton("next", ">");
-  const sourceLinkNavigationIndex = document.createElement("span");
-  sourceLinkNavigationIndex.className = "source-link-status-index";
-  sourceLinkNavigation.append(sourceLinkPreviousButton, sourceLinkNavigationIndex, sourceLinkNextButton);
-  const sourceLinkStatusControls = document.createElement("span");
-  sourceLinkStatusControls.className = "source-link-status-controls";
-  sourceLinkStatusControls.hidden = true;
-  const sourceLinkDecreaseButton = renderSourceLinkStepButton("decrease", "-");
-  const sourceLinkIncreaseButton = renderSourceLinkStepButton("increase", "+");
-  sourceLinkStatusControls.append(sourceLinkDecreaseButton, sourceLinkIncreaseButton);
-  sourceLinkStatus.append(sourceLinkStatusTarget, sourceLinkNavigation, sourceLinkStatusControls);
-  editor.getDomNode()?.append(scrubReadout, sourceLinkStatus);
+  const sourceLinkStatusBar = new SourceLinkStatusBar({
+    onNavigate(direction) {
+      selectAdjacentSourceLink(direction);
+    },
+    onNudge(direction, modifiers) {
+      nudgeStatusSourceLink(direction, modifiers);
+    },
+    onReveal() {
+      const link = liveSourceLinkFor(selectedSourceLink);
+      if (!link) return;
+      selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true });
+    },
+  });
+  editor.getDomNode()?.append(scrubReadout, sourceLinkStatusBar.element);
 
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
@@ -463,34 +453,6 @@ export function createCodeEditor(
     });
   };
 
-  sourceLinkDecreaseButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    nudgeStatusSourceLink(-1, modifiersForMouseEvent(event));
-  });
-  sourceLinkIncreaseButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    nudgeStatusSourceLink(1, modifiersForMouseEvent(event));
-  });
-  sourceLinkPreviousButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    selectAdjacentSourceLink(-1);
-  });
-  sourceLinkNextButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    selectAdjacentSourceLink(1);
-  });
-  sourceLinkStatusTarget.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const link = liveSourceLinkFor(selectedSourceLink);
-    if (!link) return;
-    selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true });
-  });
-
   const selectSourceLink = (
     link: GraphSourceLink,
     options: SourceLinkSelectOptions & { reveal?: boolean; selectRange?: boolean } = {},
@@ -513,19 +475,7 @@ export function createCodeEditor(
   const updateSourceLinkStatus = (link: GraphSourceLink | null, valueOverride?: number | null) => {
     const range = link ? rangeForSourceLink(link) : null;
     if (!link || !range) {
-      sourceLinkStatus.hidden = true;
-      sourceLinkStatusText.textContent = "";
-      sourceLinkStatusTarget.disabled = true;
-      sourceLinkStatusTarget.removeAttribute("aria-label");
-      sourceLinkPreviousButton.disabled = true;
-      sourceLinkNextButton.disabled = true;
-      sourceLinkNavigationIndex.textContent = "";
-      sourceLinkNavigationIndex.removeAttribute("aria-label");
-      sourceLinkNavigationIndex.removeAttribute("title");
-      sourceLinkStatusControls.hidden = true;
-      sourceLinkDecreaseButton.disabled = true;
-      sourceLinkIncreaseButton.disabled = true;
-      sourceLinkStatus.removeAttribute("title");
+      sourceLinkStatusBar.update(null);
       return;
     }
     const value = valueOverride !== undefined
@@ -533,34 +483,10 @@ export function createCodeEditor(
       : isScrubbableSourceLink(link)
         ? readSourceLinkNumber(editor.getValue(), link)
         : null;
-    const isNumber = value != null;
-    sourceLinkStatus.hidden = false;
-    sourceLinkStatus.dataset.numeric = String(isNumber);
-    sourceLinkStatusText.textContent = sourceLinkStatusTextForLink(link, value);
-    sourceLinkStatusTarget.disabled = false;
-    sourceLinkStatusTarget.setAttribute("aria-label", `Reveal ${sourceLinkStatusTextForLink(link)} in Graph`);
-    sourceLinkStatus.title = sourceLinkHoverMessage(link, isNumber);
-    const navigationState = sourceLinkNavigationState(link);
-    const hasNavigation = navigationState.total > 1;
-    const navigationText = navigationState.total > 0
-      ? `${Math.max(0, navigationState.index) + 1}/${navigationState.total}`
-      : "";
-    sourceLinkPreviousButton.disabled = !hasNavigation;
-    sourceLinkNextButton.disabled = !hasNavigation;
-    sourceLinkNavigationIndex.textContent = navigationText;
-    sourceLinkNavigationIndex.setAttribute("aria-label", navigationText ? `Linked range ${navigationText}` : "No linked range");
-    sourceLinkNavigationIndex.title = navigationText ? `Linked range ${navigationText}` : "";
-    sourceLinkPreviousButton.setAttribute("aria-label", `Previous graph-linked code range from ${sourceLinkStatusTextForLink(link)}`);
-    sourceLinkNextButton.setAttribute("aria-label", `Next graph-linked code range from ${sourceLinkStatusTextForLink(link)}`);
-    sourceLinkPreviousButton.title = "Previous linked range (Cmd/Ctrl+Alt+Up)";
-    sourceLinkNextButton.title = "Next linked range (Cmd/Ctrl+Alt+Down)";
-    sourceLinkStatusControls.hidden = !isNumber;
-    sourceLinkDecreaseButton.disabled = !isNumber;
-    sourceLinkIncreaseButton.disabled = !isNumber;
-    sourceLinkDecreaseButton.setAttribute("aria-label", `Decrease ${sourceLinkStatusTextForLink(link)}`);
-    sourceLinkIncreaseButton.setAttribute("aria-label", `Increase ${sourceLinkStatusTextForLink(link)}`);
-    sourceLinkDecreaseButton.title = "Decrease value; Shift/Alt-click for finer steps";
-    sourceLinkIncreaseButton.title = "Increase value; Shift/Alt-click for finer steps";
+    sourceLinkStatusBar.update(link, {
+      value,
+      navigation: sourceLinkNavigationState(link),
+    });
   };
 
   const currentSourceLinkForNavigation = (): GraphSourceLink | null => {
@@ -1035,13 +961,6 @@ function sourceNudgeDirectionForKey(key: string): -1 | 1 | null {
   return null;
 }
 
-function modifiersForMouseEvent(event: MouseEvent): ScrubModifiers {
-  return {
-    altKey: event.altKey,
-    shiftKey: event.shiftKey,
-  };
-}
-
 function markerForEditorError(
   error: CodeEditorError,
   model: monaco.editor.ITextModel,
@@ -1075,54 +994,6 @@ function markerForEditorError(
     marker.code = SDF_API_TYPO_MARKER_CODE;
   }
   return marker;
-}
-
-export function sourceLinkHoverMessage(link: GraphSourceLink, isNumber: boolean): string {
-  const target = `${link.nodeKind} #${link.nodeId} ${link.label}`;
-  return isNumber
-    ? `Graph: ${target}. Drag sideways or press Alt+Up/Down to tweak. Use chip arrows or Cmd/Ctrl+Alt+Up/Down to inspect linked ranges; Cmd/Ctrl-click opens this node in Graph.`
-    : `Graph: ${target}. Use chip arrows or Cmd/Ctrl+Alt+Up/Down to inspect linked ranges; Cmd/Ctrl-click opens this node in Graph.`;
-}
-
-export function sourceLinkStatusText(link: GraphSourceLink, value: number | null = null): string {
-  return sourceLinkStatusTextForLink(link, value);
-}
-
-function sourceLinkStatusTextForLink(link: GraphSourceLink, value: number | null = null): string {
-  const label = `${link.nodeKind} #${link.nodeId} · ${link.label}`;
-  return value == null ? label : `${label} = ${formatScrubReadoutValue(value)}`;
-}
-
-function renderSourceLinkStepButton(direction: "decrease" | "increase", label: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "source-link-status-step";
-  button.dataset.direction = direction;
-  button.textContent = label;
-  button.disabled = true;
-  button.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  return button;
-}
-
-function renderSourceLinkNavigationButton(direction: "previous" | "next", label: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "source-link-status-nav";
-  button.dataset.direction = direction;
-  button.textContent = label;
-  button.disabled = true;
-  button.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  return button;
-}
-
-function formatScrubReadoutValue(value: number): string {
-  return Number.isInteger(value) ? String(value) : Number(value.toFixed(4)).toString();
 }
 
 let nextSourceEditSession = 1;
