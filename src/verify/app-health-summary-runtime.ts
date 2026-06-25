@@ -10,6 +10,8 @@ export interface AppHealthDomSummary {
   graphActionButtons: readonly string[];
   graphActionShortcuts: readonly string[];
   graphActionIcons: readonly string[];
+  viewportButtons: readonly string[];
+  viewportColumns: number;
   codeEditor: boolean;
   graphInspector: boolean;
   graphFilterShortcut: string;
@@ -76,6 +78,9 @@ export function verifyDom(dom: AppHealthDomSummary, errors: string[]): void {
   if (!dom.graphActionButtons.includes("Undo graph edit")) errors.push("app frame DOM missing Undo graph action");
   if (!dom.graphActionButtons.includes("Redo graph edit")) errors.push("app frame DOM missing Redo graph action");
   if (!dom.graphActionButtons.includes("Reset graph edits")) errors.push("app frame DOM missing Reset graph action");
+  if (!dom.viewportButtons.includes("Download STL")) errors.push("app frame DOM missing STL download button");
+  if (!dom.viewportButtons.includes("Download 3MF")) errors.push("app frame DOM missing 3MF download button");
+  if (dom.viewportColumns < 5) errors.push(`app frame viewport toggle rendered ${dom.viewportColumns} columns`);
   verifyGraphActionShortcuts("DOM", dom.graphActionShortcuts, errors);
   for (const icon of ["undo-icon", "redo-icon", "reset-icon"]) {
     if (!dom.graphActionIcons.includes(icon)) errors.push(`app frame DOM missing ${icon}`);
@@ -101,6 +106,9 @@ export function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthDomSummary
       .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     graphActionIcons: Array.from(frameDocument?.querySelectorAll<HTMLElement>(".editor-actions button > span[aria-hidden='true']") ?? [])
       .flatMap((icon) => [...icon.classList]),
+    viewportButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".view-toggle button") ?? [])
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
+    viewportColumns: gridColumnCount(frameDocument?.querySelector<HTMLElement>(".view-toggle") ?? null),
     codeEditor: Boolean(frameDocument?.querySelector("#codeEditor")),
     graphInspector: Boolean(frameDocument?.querySelector("#graphInspector")),
     graphFilterShortcut: frameDocument?.querySelector(".graph-filter-input")?.getAttribute("aria-keyshortcuts") ?? "",
@@ -109,6 +117,12 @@ export function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthDomSummary
     selectionFocusShortcut: frameDocument?.querySelector("#selectionFocusButton")?.getAttribute("aria-keyshortcuts") ?? "",
     selectionFocusVisible: Boolean(frameDocument?.querySelector<HTMLButtonElement>("#selectionFocusButton:not([hidden])")),
   };
+}
+
+function gridColumnCount(element: HTMLElement | null): number {
+  if (!element) return 0;
+  const columns = getComputedStyle(element).gridTemplateColumns;
+  return columns === "none" ? 0 : columns.split(/\s+/).filter(Boolean).length;
 }
 
 function verifyGraphActionShortcuts(label: string, shortcuts: readonly string[], errors: string[]): void {

@@ -1,6 +1,7 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "../mesh/generate";
 import type { Bounds3 } from "../mesh/bounds";
+import { write_3mf, type ThreeMfExportReport } from "../mesh/three-mf";
 import { OrbitCamera } from "./orbit-camera";
 import { viewPanels, type PreviewLayout } from "./view-layout";
 import { WebGLMeshRenderer } from "./webgl-mesh-renderer";
@@ -20,6 +21,7 @@ export interface PreviewViewportElements {
   meshViewButton: HTMLButtonElement;
   layoutViewButton: HTMLButtonElement;
   downloadButton: HTMLButtonElement;
+  download3mfButton: HTMLButtonElement;
   surfaceNetButton: HTMLButtonElement;
   tetraMeshButton: HTMLButtonElement;
   stepsInput: HTMLInputElement;
@@ -89,6 +91,7 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
   private mesh: MeshResult | null = null;
   private meshBuildPromise: Promise<void> | null = null;
   private lastBlob: Blob | null = null;
+  private last3mfReport: ThreeMfExportReport | null = null;
   private renderJob = 0;
   private meshJob = 0;
   private previewTimer = 0;
@@ -129,6 +132,19 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     elements.tetraMeshButton.addEventListener("click", () => this.setMeshAlgorithm("tetra"));
     elements.downloadButton.addEventListener("click", () => {
       if (this.lastBlob) downloadBlob(this.lastBlob, `${slugify(options.readState().documentName)}.stl`);
+    });
+    elements.download3mfButton.addEventListener("click", () => {
+      if (!this.mesh) return;
+      const state = options.readState();
+      if (!state.visibleSdf) return;
+      const export3mf = write_3mf(`${slugify(state.documentName)}.3mf`, this.mesh, state.visibleSdf, {
+        download: false,
+        name: state.documentName,
+      });
+      downloadBlob(export3mf.blob, `${slugify(state.documentName)}.3mf`);
+      if (export3mf.report.warnings.length > 0) {
+        console.warn("3MF export warnings", export3mf.report);
+      }
     });
   }
 
@@ -348,7 +364,9 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     this.meshBuildPromise = null;
     this.mesh = null;
     this.lastBlob = null;
+    this.last3mfReport = null;
     this.options.elements.downloadButton.disabled = true;
+    this.options.elements.download3mfButton.disabled = true;
     this.options.elements.meshViewButton.disabled = false;
     this.options.elements.meshViewButton.removeAttribute("aria-busy");
     this.options.elements.triangleStat.textContent = "-";
@@ -413,6 +431,7 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     this.options.elements.meshViewButton.disabled = true;
     this.options.elements.meshViewButton.setAttribute("aria-busy", "true");
     this.options.elements.downloadButton.disabled = true;
+    this.options.elements.download3mfButton.disabled = true;
     this.options.elements.meshStat.textContent = "building";
     this.options.elements.overlay.textContent = `Sampling and polygonizing ${this.gridLabel()}...`;
 
@@ -427,20 +446,28 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
         if (job !== this.meshJob) return;
         this.mesh = result;
         const nextState = this.options.readState();
-        const visibleSdf = nextState.visibleSdf ?? state.visibleSdf;
+        const visibleSdf = nextState.visibleSdf ?? state.visibleSdf!;
         this.meshRenderer?.render(this.mesh.triangles, this.mesh.bounds, visibleSdf, nextState.meshHighlight.node, nextState.meshHighlight.mode);
         this.lastBlob = binarySTL(this.mesh.triangles, `sdf-browser ${nextState.documentName}`);
+        this.last3mfReport = write_3mf(`${slugify(nextState.documentName)}.3mf`, this.mesh, visibleSdf, {
+          download: false,
+          name: nextState.documentName,
+        }).report;
         const total = this.mesh.sampleTimeMs + this.mesh.polygonizeTimeMs;
         this.options.elements.meshStat.textContent = `${total.toFixed(0)} ms ${this.mesh.usedGPU ? "GPU" : "CPU"}${this.mesh.usedWorker ? " worker" : ""} ${algorithmLabel(this.mesh.algorithm)}`;
         this.options.elements.triangleStat.textContent = this.mesh.triangles.length.toLocaleString();
         this.options.elements.downloadButton.disabled = this.mesh.triangles.length === 0;
+        this.options.elements.download3mfButton.disabled = this.mesh.triangles.length === 0;
         if (this.mesh.triangles.length === 0) {
           this.mesh = null;
           this.lastBlob = null;
+          this.last3mfReport = null;
           this.options.elements.overlay.textContent = "Generated no triangles. Try wider bounds or a lower-level example.";
           return;
         }
-        this.options.elements.overlay.textContent = "";
+        this.options.elements.overlay.textContent = this.last3mfReport.warnings.length > 0
+          ? `3MF warning: ${this.last3mfReport.warnings[0]}`
+          : "";
       } catch (error) {
         if (job !== this.meshJob) return;
         this.options.elements.overlay.textContent = error instanceof Error ? error.message : String(error);

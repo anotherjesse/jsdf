@@ -72,6 +72,8 @@ The app includes browser examples in [src/examples.ts](../src/examples.ts). Thes
 
 The default preview raymarches the SDF graph directly in WebGL, so you can work quickly without building triangles. Mesh generation is explicit: switch to Mesh in the UI, or call `generate` / `save` from JavaScript.
 
+Once Mesh view has generated triangles, the viewport download controls offer both STL and 3MF exports.
+
 ```js
 const shape = rounded_box([1.8, 0.8, 0.35], 0.12);
 void generate(shape, { grid: 80, algorithm: "surface-net" })

@@ -32,6 +32,7 @@ export interface AppElements {
     meshViewButton: HTMLButtonElement;
     layoutViewButton: HTMLButtonElement;
     downloadButton: HTMLButtonElement;
+    download3mfButton: HTMLButtonElement;
     surfaceNetButton: HTMLButtonElement;
     tetraMeshButton: HTMLButtonElement;
     stepsInput: HTMLInputElement;
@@ -120,6 +121,7 @@ export function queryAppElements(root: ParentNode = document): AppElements {
   const meshViewButton = query<HTMLButtonElement>(root, "#meshViewButton");
   const layoutViewButton = query<HTMLButtonElement>(root, "#layoutViewButton");
   const downloadButton = query<HTMLButtonElement>(root, "#downloadButton");
+  const download3mfButton = query<HTMLButtonElement>(root, "#download3mfButton");
   const surfaceNetButton = query<HTMLButtonElement>(root, "#surfaceNetButton");
   const tetraMeshButton = query<HTMLButtonElement>(root, "#tetraMeshButton");
   const fitBoundsButton = query<HTMLButtonElement>(root, "#fitBoundsButton");
@@ -205,6 +207,7 @@ export function queryAppElements(root: ParentNode = document): AppElements {
       meshViewButton,
       layoutViewButton,
       downloadButton,
+      download3mfButton,
       surfaceNetButton,
       tetraMeshButton,
       stepsInput,
