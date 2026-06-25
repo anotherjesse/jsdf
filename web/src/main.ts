@@ -5,11 +5,10 @@ import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, Sourc
 import { evaluateSource } from "./editor/evaluate-source";
 import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
 import {
-  connectBrowserSession,
   sessionIdFromLocation,
   type BrowserSessionCommandResult,
-  type BrowserSessionConnection,
 } from "./editor/browser-session";
+import { createBrowserSessionController } from "./editor/browser-session-controller";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import { sourceForExample } from "./editor/example-source";
 import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
@@ -136,7 +135,6 @@ let meshJob = 0;
 let previewTimer = 0;
 let meshTimer = 0;
 let sourceCompileTimer = 0;
-let browserSessionConnection: BrowserSessionConnection | null = null;
 let viewMode: RenderView = "shader";
 let desiredViewMode: RenderView = "shader";
 let previewLayout: PreviewLayout = "single";
@@ -161,8 +159,23 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
+const browserSessionController = createBrowserSessionController({
+  sessionId: activeBrowserSessionId,
+  elements: {
+    strip: sessionStrip,
+    idLabel: sessionIdLabel,
+    copyAgentPromptButton,
+    snapshotButton: sessionSnapshotButton,
+    status: sessionStatus,
+  },
+  readStatus: readBrowserSessionStatus,
+  readCode: currentSourceValue,
+  setCode: applyBrowserSessionCode,
+  captureScreenshot: captureBrowserSessionState,
+  captureSnapshotState: captureBrowserSessionState,
+});
 
-configureBrowserSessionUi();
+browserSessionController.configure();
 configureEditorModeShortcuts();
 configureGraphHistoryButtons();
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
@@ -282,45 +295,12 @@ async function boot(): Promise<void> {
     if (healthCheckMode || !restoreSourceDraft()) refreshSourceLinks();
     draftPersistenceEnabled = !healthCheckMode;
     updateSaveState();
-    connectActiveBrowserSession();
+    browserSessionController.connect();
   } catch (error) {
     gpuBadge.textContent = "Preview error";
     gpuBadge.classList.add("warn");
     overlay.textContent = error instanceof Error ? error.message : String(error);
   }
-}
-
-function configureBrowserSessionUi(): void {
-  if (!activeBrowserSessionId) {
-    sessionStrip.hidden = true;
-    return;
-  }
-
-  sessionStrip.hidden = false;
-  sessionIdLabel.textContent = activeBrowserSessionId;
-  sessionStatus.textContent = "Connecting";
-  copyAgentPromptButton.addEventListener("click", copyAgentPrompt);
-  sessionSnapshotButton.addEventListener("click", () => void createManualBrowserSessionSnapshot());
-  void refreshBrowserSessionSnapshotCount();
-}
-
-function connectActiveBrowserSession(): void {
-  if (!activeBrowserSessionId || browserSessionConnection) return;
-  browserSessionConnection = connectBrowserSession(activeBrowserSessionId, {
-    readStatus: readBrowserSessionStatus,
-    readCode: currentSourceValue,
-    setCode: applyBrowserSessionCode,
-    captureScreenshot: captureBrowserSessionScreenshot,
-  }, {
-    onOpen: () => setBrowserSessionStatus("Connected", "ok"),
-    onClose: () => setBrowserSessionStatus("Reconnecting", "pending"),
-    onCommand: (type) => setBrowserSessionStatus(sessionCommandLabel(type), "pending"),
-    onResult: (type) => {
-      setBrowserSessionStatus(`${sessionCommandLabel(type)} done`, "ok");
-      void refreshBrowserSessionSnapshotCount();
-    },
-    onError: (message) => setBrowserSessionStatus(message, "error"),
-  });
 }
 
 function readBrowserSessionStatus(): BrowserSessionCommandResult {
@@ -337,10 +317,6 @@ async function applyBrowserSessionCode(code: string, comment: string): Promise<B
   codeEditor?.setValue(code);
   updateSaveState();
   compileEditorSource({ status: comment ? "Agent update" : "Agent update" });
-  return captureBrowserSessionState();
-}
-
-async function captureBrowserSessionScreenshot(): Promise<BrowserSessionCommandResult> {
   return captureBrowserSessionState();
 }
 
@@ -369,87 +345,6 @@ async function renderShaderPreviewForSession(): Promise<void> {
 
 function waitForBrowserFrame(): Promise<void> {
   return new Promise((resolve) => afterBrowserFrame(resolve));
-}
-
-async function copyAgentPrompt(): Promise<void> {
-  if (!activeBrowserSessionId) return;
-  const prompt = [
-    "Join my sdf browser session. Fetch the connection instructions and follow them:",
-    "",
-    `curl -s ${window.location.origin}/api/sessions/${activeBrowserSessionId}/connect.md`,
-    "",
-    "That URL identifies my local session.",
-  ].join("\n");
-  try {
-    await navigator.clipboard.writeText(prompt);
-    setBrowserSessionStatus("Copied agent prompt", "ok");
-  } catch {
-    setBrowserSessionStatus("Copy failed", "error");
-  }
-}
-
-async function createManualBrowserSessionSnapshot(): Promise<void> {
-  if (!activeBrowserSessionId) return;
-  const comment = window.prompt("Snapshot comment", "");
-  if (comment == null) return;
-
-  sessionSnapshotButton.disabled = true;
-  try {
-    const state = await captureBrowserSessionState();
-    const response = await fetch(`/api/sessions/${activeBrowserSessionId}/snapshots`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...state,
-        kind: "manual",
-        comment: comment.trim(),
-      }),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const saved = await response.json() as { snapshot?: { id?: string } };
-    setBrowserSessionStatus(saved.snapshot?.id ? `Snapshot ${saved.snapshot.id}` : "Snapshot saved", "ok");
-    await refreshBrowserSessionSnapshotCount();
-  } catch (error) {
-    setBrowserSessionStatus(error instanceof Error ? error.message : String(error), "error");
-  } finally {
-    sessionSnapshotButton.disabled = false;
-  }
-}
-
-async function refreshBrowserSessionSnapshotCount(): Promise<void> {
-  if (!activeBrowserSessionId) return;
-  try {
-    const response = await fetch(`/api/sessions/${activeBrowserSessionId}/snapshots`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = await response.json() as { snapshots?: unknown[] };
-    const count = body.snapshots?.length ?? 0;
-    if (count > 0 && sessionStatus.textContent && !sessionStatus.textContent.includes("snapshot")) {
-      sessionStatus.title = `${count} snapshot${count === 1 ? "" : "s"}`;
-    }
-  } catch {
-    // Snapshot count is informational; connection state stays more important.
-  }
-}
-
-function setBrowserSessionStatus(message: string, state: EditorStatusState): void {
-  sessionStatus.textContent = message;
-  sessionStatus.dataset.state = state;
-  sessionStatus.title = message;
-}
-
-function sessionCommandLabel(type: string): string {
-  switch (type) {
-    case "get-status":
-      return "Status";
-    case "get-code":
-      return "Code read";
-    case "set-code":
-      return "Code update";
-    case "capture-screenshot":
-      return "Screenshot";
-    default:
-      return "Agent command";
-  }
 }
 
 function setGraphHintsEnabled(enabled: boolean): void {

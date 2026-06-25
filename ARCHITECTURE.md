@@ -146,13 +146,11 @@ Server-side responsibilities in `web/session-server.mjs`:
 - Serve snapshot source and screenshot files
 - Restore earlier code snapshots through `/undo`
 
-Browser-side responsibilities in `web/src/editor/browser-session.ts` and `main.ts`:
+Browser-side responsibilities are split between `web/src/editor/browser-session.ts`, `web/src/editor/browser-session-controller.ts`, and `main.ts`:
 
-- Derive the session id from the current `/s/<session-id>` route
-- Connect to the server with `EventSource`
-- Execute `get-status`, `get-code`, `set-code`, and `capture-screenshot`
-- Post command results back to the server
-- Include app health, source validity, status text, current code, view state, and screenshot data in results
+- `browser-session.ts` derives the session id from the current `/s/<session-id>` route, connects to the server with `EventSource`, executes `get-status`, `get-code`, `set-code`, and `capture-screenshot`, and posts command results back to the server.
+- `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot POSTs.
+- `main.ts` supplies app-specific handlers that read health/source state, apply agent source updates, render the current shader preview, and return screenshot data.
 
 The active browser tab is the source of truth for rendered state. The server only persists what the tab reports.
 
