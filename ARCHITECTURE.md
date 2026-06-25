@@ -31,7 +31,7 @@ The editor source is plain JavaScript executed with the SDF API and `Math` injec
 2. The source is executed with `new Function(...)`.
 3. The direct return value must be an `SDF3`. If no top-level return exists, `source-auto-return.ts` tries to return the final expression.
 4. API calls create an SDF graph of `Node` objects rather than immediately sampling geometry.
-5. `main.ts` stores the result as `activeSdf`, refreshes source links, updates the graph inspector, invalidates mesh state, and schedules a shader preview.
+5. `main.ts` stores the result as `activeSdf`; `graph-interaction-controller.ts` refreshes source links, updates the graph inspector, restores graph selection, and manages graph-visible state. The preview viewport then invalidates mesh state and schedules a shader preview.
 
 Important data types live in `web/src/core/nodes.ts`:
 
@@ -61,6 +61,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `web/src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `web/src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
+- `web/src/editor/graph-interaction-controller.ts` owns graph/source-link selection, hover/focus/solo preview state, hidden-node state, source-link refresh, graph edit source sync, and graph-history interaction callbacks.
 - `web/src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
 - `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 - `web/src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; `main.ts` supplies the actual compile callback.
@@ -77,6 +78,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/graph-inspector.ts` shows the graph and allows node selection, visibility changes, solo/focus preview, and numeric param edits.
 - `editor/graph-history.ts` records graph edit undo/redo entries.
 - `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.
+- `editor/graph-interaction-controller.ts` coordinates source-link selection, graph hover, graph-history hover/select, hidden-node persistence, and source patching for graph edits.
 - `editor/graph-source-identity.ts` helps restore selection across recompiles when node ids change.
 - `editor/source-link-matching.ts` owns shared source-link equality, node/edit lookup, and compact labels used across the editor.
 
