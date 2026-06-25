@@ -70,6 +70,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
+- `src/editor/graph-map-renderer.ts` owns the graph inspector's SVG overview map rendering, map node classes, visibility affordances, and map keyboard/click event adaptation.
 - `src/editor/graph-param-model.ts` owns numeric param discovery, orientation matrix helpers, matrix cell paths, slider bounds, step sizing, and numeric formatting used by the graph inspector.
 - `src/editor/graph-visibility.ts` owns graph visibility state metadata, visibility icons, node lookup/path helpers, hidden-subtree calculations, and isolate-visible set construction.
 - `src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
@@ -90,6 +91,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/clean-source-patch.ts` finds links between source ranges and graph node params.
 - `editor/code-editor.ts` renders those links in Monaco and reports selections or value edits.
 - `editor/graph-edit-model.ts` provides the shared edit/path model so source patching, graph history, and graph inspector UI do not import each other for data shapes.
+- `editor/graph-map-renderer.ts` renders the inspector's SVG overview map from a graph model while the inspector keeps authoritative selection, hover, and visibility state.
 - `editor/graph-param-model.ts` provides pure numeric-param and orientation-matrix helpers so the graph inspector can stay focused on rendering controls and handling DOM interaction.
 - `editor/graph-visibility.ts` provides pure graph lookup and visibility-set helpers plus visibility control metadata/icons.
 - `editor/graph-inspector.ts` shows the graph and allows node selection, visibility changes, solo/focus preview, and numeric param edits.

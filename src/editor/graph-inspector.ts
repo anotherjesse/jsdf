@@ -1,8 +1,8 @@
 import type { Node, SDF3 } from "../core/nodes";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
+import { renderGraphMap } from "./graph-map-renderer";
 import {
-  effectiveVisibleGraphNodeIds,
   findGraphNode,
   graphNodeIdSetsEqual,
   graphNodePath,
@@ -506,177 +506,24 @@ export class GraphInspector {
   }
 
   private renderMap(model: GraphModel): void {
-    const nodes = model.nodes.filter((view) => model.visibleNodeIds.has(view.node.id));
-    if (nodes.length === 0) {
-      this.map.textContent = "";
-      return;
-    }
-
-    const levels = new Map<number, GraphNodeView[]>();
-    for (const view of nodes) {
-      const level = levels.get(view.depth) ?? [];
-      level.push(view);
-      levels.set(view.depth, level);
-    }
-    for (const level of levels.values()) level.sort((a, b) => a.node.id - b.node.id);
-
-    const maxRows = Math.max(...[...levels.values()].map((level) => level.length), 1);
-    const width = Math.max(390, 80 + (model.maxDepth + 1) * 112);
-    const height = Math.max(148, 42 + maxRows * 34);
-    const xSpan = width - 64;
-    const ySpan = height - 40;
-    const positions = new Map<number, { x: number; y: number }>();
-    for (const [depth, level] of levels) {
-      const x = 32 + (model.maxDepth === 0 ? 0 : xSpan * (depth / model.maxDepth));
-      level.forEach((view, index) => {
-        const y = 20 + (level.length === 1 ? ySpan / 2 : ySpan * (index / (level.length - 1)));
-        positions.set(view.node.id, { x, y });
-      });
-    }
-
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "SDF graph");
-    this.map.style.setProperty("--graph-map-height", `${height}px`);
-    this.map.style.setProperty("--graph-map-width", `${width}px`);
-
-    const effectiveVisibleNodeIds = effectiveVisibleGraphNodeIds(this.sdf?.node ?? null, this.hiddenNodeIds);
-
-    for (const edge of model.edges) {
-      const from = positions.get(edge.from);
-      const to = positions.get(edge.to);
-      if (!from || !to) continue;
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", String(from.x));
-      line.setAttribute("y1", String(from.y));
-      line.setAttribute("x2", String(to.x));
-      line.setAttribute("y2", String(to.y));
-      line.classList.add("graph-edge");
-      if (this.selected && (edge.from === this.selected.id || edge.to === this.selected.id)) {
-        line.classList.add("selected");
-      }
-      svg.append(line);
-    }
-
-    for (const view of nodes) {
-      const position = positions.get(view.node.id);
-      if (!position) continue;
-      svg.append(this.renderMapNode(view, position.x, position.y, effectiveVisibleNodeIds));
-    }
-
-    this.map.replaceChildren(svg);
-  }
-
-  private renderMapNode(view: GraphNodeView, x: number, y: number, effectiveVisibleNodeIds: ReadonlySet<number>): SVGElement {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.classList.add("graph-map-node");
-    if (this.selected?.id === view.node.id) group.classList.add("selected");
-    if (this.hovered?.id === view.node.id) group.classList.add("hovered");
-    if (this.focusHoverNodeId === view.node.id) group.classList.add("focus-peek");
-    if (this.lockedSoloNodeId === view.node.id) group.classList.add("isolated");
-    if (this.dirtyNodeIds.has(view.node.id)) group.classList.add("edited");
-    const directlyHidden = this.hiddenNodeIds.has(view.node.id);
-    const inheritedHidden = !directlyHidden && !effectiveVisibleNodeIds.has(view.node.id);
-    if (directlyHidden) group.classList.add("hidden-node");
-    if (inheritedHidden) group.classList.add("inherited-hidden");
-    if (this.filter && view.matched) group.classList.add("matched");
-    if (view.parents.size > 1) group.classList.add("shared");
-    group.dataset.nodeId = String(view.node.id);
-    group.setAttribute("role", "button");
-    group.setAttribute("tabindex", "0");
-    group.setAttribute("aria-label", `${view.node.kind} #${view.node.id}`);
-    group.setAttribute("aria-keyshortcuts", this.nodeKeyboardShortcuts(view.node));
-
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(x - 50));
-    rect.setAttribute("y", String(y - 12));
-    rect.setAttribute("width", "100");
-    rect.setAttribute("height", "24");
-    rect.setAttribute("rx", "6");
-    rect.classList.add("graph-map-card");
-
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", String(x + 9));
-    text.setAttribute("y", String(y + 4));
-    text.textContent = mapLabel(view.node.kind);
-
-    const path = graphNodePath(this.sdf?.node ?? null, view.node.id);
-    const { isRoot } = graphVisibilityStateForPath(this.sdf?.node ?? null, this.hiddenNodeIds, view.node, path);
-    const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
-    group.append(rect, this.renderMapEye(view.node, x - 34, y, visibilityMeta), text);
-    group.addEventListener("click", () => this.select(view.node));
-    this.attachSoloHover(group, path);
-    group.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        this.select(view.node);
-        return;
-      }
-      this.handleNodeKeyDown(event, view.node);
+    if (!this.sdf) return;
+    renderGraphMap({
+      container: this.map,
+      root: this.sdf.node,
+      model,
+      hiddenNodeIds: this.hiddenNodeIds,
+      selectedNodeId: this.selected?.id ?? null,
+      hoveredNodeId: this.hovered?.id ?? null,
+      focusHoverNodeId: this.focusHoverNodeId,
+      lockedSoloNodeId: this.lockedSoloNodeId,
+      dirtyNodeIds: this.dirtyNodeIds,
+      filter: this.filter,
+      nodeKeyboardShortcuts: (node) => this.nodeKeyboardShortcuts(node),
+      onSelect: (node) => this.select(node),
+      onToggleVisibility: (node, options) => this.toggleNodeVisibility(node, options),
+      onKeyDown: (event, node) => this.handleNodeKeyDown(event, node),
+      attachSoloHover: (target, path) => this.attachSoloHover(target, path),
     });
-    return group;
-  }
-
-  private renderMapEye(
-    node: Node,
-    x: number,
-    y: number,
-    visibilityMeta: ReturnType<typeof graphVisibilityMeta>,
-  ): SVGElement {
-    const eye = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    eye.classList.add("graph-map-eye");
-    eye.dataset.state = visibilityMeta.state;
-    if (!visibilityMeta.disabled) {
-      eye.setAttribute("role", "button");
-      eye.setAttribute("tabindex", "0");
-    }
-    eye.setAttribute("aria-label", `${visibilityShortcutTitle(visibilityMeta.title)} ${node.kind} #${node.id}`);
-    eye.setAttribute("aria-keyshortcuts", "V");
-    eye.setAttribute("aria-pressed", String(visibilityMeta.pressed));
-
-    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    hitArea.setAttribute("x", String(x - 11));
-    hitArea.setAttribute("y", String(y - 11));
-    hitArea.setAttribute("width", "22");
-    hitArea.setAttribute("height", "22");
-    hitArea.setAttribute("rx", "5");
-    hitArea.classList.add("graph-map-eye-hit");
-
-    const outline = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-    outline.setAttribute("cx", String(x));
-    outline.setAttribute("cy", String(y));
-    outline.setAttribute("rx", "7.4");
-    outline.setAttribute("ry", "4.8");
-    outline.classList.add("graph-map-eye-outline");
-
-    const pupil = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    pupil.setAttribute("cx", String(x));
-    pupil.setAttribute("cy", String(y));
-    pupil.setAttribute("r", visibilityMeta.state === "hidden" ? "1.7" : "2.4");
-    pupil.classList.add("graph-map-eye-pupil");
-
-    const slash = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    slash.setAttribute("x1", String(x - 7.6));
-    slash.setAttribute("y1", String(y + 5.7));
-    slash.setAttribute("x2", String(x + 7.6));
-    slash.setAttribute("y2", String(y - 5.7));
-    slash.classList.add("graph-map-eye-slash");
-
-    eye.append(hitArea, outline, pupil, slash);
-    if (!visibilityMeta.disabled) {
-      eye.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.toggleNodeVisibility(node, { isolate: event.altKey });
-      });
-      eye.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        event.stopPropagation();
-        this.toggleNodeVisibility(node, { focus: true });
-      });
-    }
-    return eye;
   }
 
   private toggleNodeVisibility(node: Node, options: { focus?: boolean; isolate?: boolean } = {}): void {
@@ -1567,10 +1414,6 @@ function attachScrubber(
     label.classList.remove("scrubbing");
     finish();
   });
-}
-
-function mapLabel(kind: string): string {
-  return kind.length > 10 ? `${kind.slice(0, 9)}...` : kind;
 }
 
 function containsEventTarget(parent: Element, target: EventTarget | null): boolean {
