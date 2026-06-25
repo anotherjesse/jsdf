@@ -40,7 +40,7 @@ import {
 } from "./index";
 import { mul } from "../core/math";
 
-export const intentionallyUnsupported = [
+export const unsupportedOriginalApi = [
   "text",
   "image",
   "measure_text",
@@ -49,6 +49,12 @@ export const intentionallyUnsupported = [
   "Mesh.from_file",
   "Mesh.sdf",
 ] as const;
+
+export const supportedSummary = {
+  moduleExports: 47,
+  sdf2Methods: 17,
+  sdf3Methods: 28,
+};
 
 export function buildApiCompletenessFixtures(): { two: SDF2[]; three: SDF3[] } {
   const two = [

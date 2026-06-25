@@ -26,7 +26,6 @@ import {
   union,
   type SDF3,
 } from "./api";
-import { intentionallyUnsupported } from "./api/completeness";
 import { add, mul } from "./core/math";
 
 export interface Example {
@@ -255,11 +254,3 @@ export const examples: Example[] = [
 export function currentExample(id: string): Example {
   return examples.find((example) => example.id === id) ?? examples[0];
 }
-
-export const unsupportedPythonApi = intentionallyUnsupported;
-
-export const supportedSummary = {
-  moduleExports: 47,
-  sdf2Methods: 17,
-  sdf3Methods: 28,
-};

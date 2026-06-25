@@ -1,5 +1,5 @@
 import * as api from "../index";
-import { buildApiCompletenessFixtures, intentionallyUnsupported } from "../api/completeness";
+import { buildApiCompletenessFixtures, unsupportedOriginalApi } from "../api/completeness";
 import { type SDF, type SDF2, type SDF3 } from "../core/nodes";
 import { findGraphSourceLinks } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
@@ -126,7 +126,7 @@ export async function runApiRuntimeVerification(): Promise<ApiRuntimeVerificatio
   return {
     ok: errors.length === 0,
     supportedCount: expectedExports.length + expected2Methods.length + expected3Methods.length,
-    unsupported: [...intentionallyUnsupported],
+    unsupported: [...unsupportedOriginalApi],
     fixtureCounts: { two: fixtures.two.length, three: fixtures.three.length },
     nodeKinds: { covered: [...covered].sort(), missing },
     timings: { evaluateMs, glslCompileMs, wgslCompileMs, workflowMs },

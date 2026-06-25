@@ -63,7 +63,8 @@ import {
   saveSourceVersion,
   type SavedSourceDocument,
 } from "./editor/workspace-storage";
-import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
+import { supportedSummary, unsupportedOriginalApi } from "./api/completeness";
+import { currentExample, examples } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
 import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "./mesh/generate";
@@ -203,7 +204,7 @@ browserSessionController.configure();
 configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
 configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
 updateGraphHistoryButtonLabels();
-apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
+apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
 documentNameInput.value = activeSourceName;
