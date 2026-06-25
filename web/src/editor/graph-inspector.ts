@@ -5,6 +5,7 @@ import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeVie
 import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
 import { isCountParamLabel, isNonNegativeParamLabel, nudgeNumericParamValue, scrubNumericParamValue } from "./scrub-values";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
+import { sourceLinksEqual } from "./source-link-matching";
 
 export type ParamPath = Array<string | number>;
 export type ParamValue = unknown;
@@ -1622,17 +1623,6 @@ function paramKey(nodeId: number, path: ParamPath): string {
 
 function pathStartsWith(path: ParamPath, prefix: ParamPath): boolean {
   return prefix.length > 0 && prefix.length < path.length && prefix.every((part, index) => part === path[index]);
-}
-
-function sourceLinksEqual(a: GraphSourceLink | null, b: GraphSourceLink | null): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return a.nodeId === b.nodeId
-    && a.nodeKind === b.nodeKind
-    && a.label === b.label
-    && a.start === b.start
-    && a.end === b.end
-    && pathsEqual(a.path, b.path);
 }
 
 function matrixParam(value: unknown): number[][] | null {

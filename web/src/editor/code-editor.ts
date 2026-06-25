@@ -28,6 +28,7 @@ import {
 } from "./source-diagnostic-fixes";
 import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./source-inlay-hints";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
+import { sourcePathsEqual } from "./source-link-matching";
 import { adjacentSourceLink, navigableSourceLinks, sourceLinkNavigationKey } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
 import type { ScrubModifiers } from "./scrub-values";
@@ -611,7 +612,7 @@ export function createCodeEditor(
     return sourceLinks.find((link) => {
       return link.nodeId === candidate.nodeId
         && link.label === candidate.label
-        && paramPathsEqual(link.path, candidate.path)
+        && sourcePathsEqual(link.path, candidate.path)
         && link.end > link.start;
     }) ?? null;
   };
@@ -1261,10 +1262,6 @@ function modifiersForMouseEvent(event: MouseEvent): ScrubModifiers {
     altKey: event.altKey,
     shiftKey: event.shiftKey,
   };
-}
-
-function paramPathsEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
 }
 
 function markerForEditorError(

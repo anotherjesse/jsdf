@@ -72,6 +72,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/graph-history.ts` records graph edit undo/redo entries.
 - `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.
 - `editor/graph-source-identity.ts` helps restore selection across recompiles when node ids change.
+- `editor/source-link-matching.ts` owns shared source-link equality, node/edit lookup, and compact labels used across the editor.
 
 Graph edits patch source instead of mutating long-lived graph objects. The source remains the durable user artifact, and recompilation rebuilds the graph.
 

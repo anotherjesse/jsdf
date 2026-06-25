@@ -49,6 +49,13 @@ import {
 } from "./editor/preview-profile";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
+import {
+  graphNodeLabel,
+  sourceLinkForGraphEdit,
+  sourceLinkForNodeId,
+  sourceLinkLabel,
+  sourceLinksEqual,
+} from "./editor/source-link-matching";
 import { buildVisibleSdf } from "./editor/visible-sdf";
 import {
   clearSourceDraft,
@@ -844,7 +851,7 @@ function handleGraphSourceHover(link: GraphSourceLink | null): void {
 
 function selectNode(node: Node | null): void {
   selectedNode = node;
-  const sourceLink = node ? sourceLinkForNodeId(node.id) : null;
+  const sourceLink = node ? sourceLinkForNodeId(currentSourceLinks, node.id) : null;
   setSelectedSourceLink(sourceLink);
   codeEditor?.setFocusedNode(node?.id ?? null, { reveal: editorView === "code" });
   if (node && activeSdf) {
@@ -953,7 +960,7 @@ function setSelectedSourceLink(
 }
 
 function revealSelectedTarget(): void {
-  const link = selectedSourceLink ?? (selectedNode ? sourceLinkForNodeId(selectedNode.id) : null);
+  const link = selectedSourceLink ?? (selectedNode ? sourceLinkForNodeId(currentSourceLinks, selectedNode.id) : null);
   if (editorView === "graph") {
     if (link) revealGraphSource(link);
     else setEditorView("code");
@@ -971,9 +978,9 @@ function revealSelectedTarget(): void {
 
 function updateSelectionFocusButton(): void {
   const label = selectedSourceLink
-    ? selectedSourceLinkLabel(selectedSourceLink)
+    ? sourceLinkLabel(selectedSourceLink)
     : selectedNode
-      ? selectedNodeLabel(selectedNode)
+      ? graphNodeLabel(selectedNode)
       : "";
 
   if (!label) {
@@ -993,57 +1000,9 @@ function updateSelectionFocusButton(): void {
   selectionFocusButton.setAttribute("aria-keyshortcuts", SELECTED_TARGET_SHORTCUTS);
 }
 
-function selectedSourceLinkLabel(link: GraphSourceLink): string {
-  return `${link.nodeKind} #${link.nodeId} ${link.label}`;
-}
-
-function selectedNodeLabel(node: Node): string {
-  return `${node.kind} #${node.id}`;
-}
-
 function sourceFocusNodeId(): number | null {
   const node = hoveredNode ?? selectedNode;
   return node && !isActiveRootNode(node) ? node.id : null;
-}
-
-function sourceLinkForNodeId(nodeId: number): GraphSourceLink | null {
-  return currentSourceLinks.find((link) => {
-    return link.nodeId === nodeId && link.label === "call" && link.end > link.start;
-  }) ?? currentSourceLinks.find((link) => {
-    return link.nodeId === nodeId && link.end > link.start;
-  }) ?? null;
-}
-
-function sourceLinkForGraphEdit(links: readonly GraphSourceLink[], edit: GraphSourceEdit): GraphSourceLink | null {
-  return links.find((link) => {
-    return link.nodeId === edit.nodeId && link.end > link.start && paramPathsEqual(link.path, edit.path);
-  }) ?? links.find((link) => {
-    return link.nodeId === edit.nodeId
-      && link.end > link.start
-      && link.scrubbable === false
-      && paramPathStartsWith(edit.path, link.path);
-  }) ?? links.find((link) => {
-    return link.nodeId === edit.nodeId && link.end > link.start;
-  }) ?? null;
-}
-
-function paramPathsEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
-}
-
-function paramPathStartsWith(path: readonly unknown[], prefix: readonly unknown[]): boolean {
-  return prefix.length <= path.length && prefix.every((part, index) => path[index] === part);
-}
-
-function sourceLinksEqual(a: GraphSourceLink | null, b: GraphSourceLink | null): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return a.nodeId === b.nodeId
-    && a.nodeKind === b.nodeKind
-    && a.label === b.label
-    && a.start === b.start
-    && a.end === b.end
-    && paramPathsEqual(a.path, b.path);
 }
 
 function hoverGraphHistoryEntry(entry: GraphHistoryEntry, options: { shiftKey: boolean }): void {
@@ -1427,7 +1386,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     sourceLinks: currentSourceLinks.length,
     selectedNode: selectedNode ? `${selectedNode.kind} #${selectedNode.id}` : null,
     selectedSourceLink: selectedSourceLink
-      ? selectedSourceLinkLabel(selectedSourceLink)
+      ? sourceLinkLabel(selectedSourceLink)
       : null,
     sourceRevealedDecorations: codeEditor?.sourceDecorationCount("revealed") ?? 0,
     hiddenNodes: hiddenNodeIds.size,

@@ -1,4 +1,5 @@
 import type { GraphSourceLink } from "./clean-source-patch";
+import { sourcePathsEqual } from "./source-link-matching";
 
 export interface GraphNodeSourceIdentity {
   nodeKind: string;
@@ -119,8 +120,4 @@ function graphCallLinks(links: readonly GraphSourceLink[]): GraphSourceLink[] {
 
 function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
-}
-
-function sourcePathsEqual(a: readonly (string | number)[], b: readonly (string | number)[]): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
 }
