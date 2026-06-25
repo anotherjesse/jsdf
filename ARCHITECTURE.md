@@ -54,6 +54,11 @@ The major state buckets are:
 
 The app is intentionally client-heavy: after the page loads, source evaluation, preview rendering, mesh generation, and saves all happen in the browser.
 
+Common editor interaction policy lives outside the coordinator where possible:
+
+- `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
+- `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
+
 ## Source Links And Graph Editing
 
 The editor and graph inspector stay connected through source links:

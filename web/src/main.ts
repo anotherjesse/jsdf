@@ -5,6 +5,16 @@ import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, Sourc
 import { evaluateSource } from "./editor/evaluate-source";
 import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
 import {
+  configureEditorModeShortcutButtons,
+  configureGraphHistoryShortcutButtons,
+  GRAPH_FILTER_SHORTCUTS,
+  installAppKeyboardShortcuts,
+  SELECTED_TARGET_SHORTCUTS,
+  SOURCE_HINTS_SHORTCUT,
+  SOURCE_PRETTIFY_SHORTCUT,
+  type AppShortcutEditorView,
+} from "./editor/app-shortcuts";
+import {
   sessionIdFromLocation,
   type BrowserSessionCommandResult,
 } from "./editor/browser-session";
@@ -99,19 +109,11 @@ const sessionStatus = document.querySelector<HTMLElement>("#sessionStatus")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
 type RenderView = "shader" | "mesh";
-type EditorView = "code" | "graph";
+type EditorView = AppShortcutEditorView;
 type EditorStatusState = "idle" | "ok" | "pending" | "error";
 type PreviewProfile = SavedSourcePreview;
 
 const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
-const EDITOR_CODE_SHORTCUTS = "Control+Alt+1 Meta+Alt+1";
-const EDITOR_GRAPH_SHORTCUTS = "Control+Alt+2 Meta+Alt+2";
-const GRAPH_FILTER_SHORTCUTS = "Control+F Meta+F /";
-const GRAPH_UNDO_SHORTCUTS = "Control+Z Meta+Z";
-const GRAPH_REDO_SHORTCUTS = "Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y";
-const SOURCE_HINTS_SHORTCUT = "Alt+Shift+H";
-const SOURCE_PRETTIFY_SHORTCUT = "Alt+Shift+F";
-const SELECTED_TARGET_SHORTCUTS = "Control+Alt+Enter Meta+Alt+Enter";
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -176,8 +178,9 @@ const browserSessionController = createBrowserSessionController({
 });
 
 browserSessionController.configure();
-configureEditorModeShortcuts();
-configureGraphHistoryButtons();
+configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
+configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
+updateGraphHistoryButtonLabels();
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedPythonApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
@@ -248,8 +251,21 @@ window.addEventListener("resize", () => {
   activeRenderer()?.redraw();
   renderViewLabels();
 });
-window.addEventListener("keydown", handleAppKeyboardShortcuts, { capture: true });
-window.addEventListener("keydown", handleGraphKeyboardShortcuts);
+installAppKeyboardShortcuts(window, {
+  editorView: () => editorView,
+  selectionFocusVisible: () => !selectionFocusButton.hidden,
+  revealSelectedTarget,
+  setEditorView,
+  focusGraphFilter: () => graphInspector?.focusFilter({ select: true }),
+  toggleSourceHints: toggleGraphHints,
+  prettifySource: prettifyCurrentSource,
+  openSourceDialog,
+  saveSource: saveCurrentSourceFromShortcut,
+  canUndoGraph: () => graphHistory.canUndo,
+  canRedoGraph: () => graphHistory.canRedo,
+  undoGraphEdit,
+  redoGraphEdit,
+});
 window.addEventListener("beforeunload", handleBeforeUnload);
 
 void boot();
@@ -470,6 +486,18 @@ function saveCurrentSource(): void {
     const message = error instanceof Error ? error.message : String(error);
     setEditorStatus(`Save failed: ${message}`, "error");
   }
+}
+
+function saveCurrentSourceFromShortcut(): void {
+  if (!boundsAreValid) {
+    setEditorStatus("Fix bounds before saving", "error");
+    return;
+  }
+  if (!hasUnsavedChanges) {
+    setEditorStatus("No changes to save", "idle");
+    return;
+  }
+  saveCurrentSource();
 }
 
 function currentSourceCompilesForSave(): boolean {
@@ -855,158 +883,10 @@ function redoGraphEdit(): void {
   applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
 }
 
-function configureGraphHistoryButtons(): void {
-  undoGraphButton.setAttribute("aria-keyshortcuts", GRAPH_UNDO_SHORTCUTS);
-  redoGraphButton.setAttribute("aria-keyshortcuts", GRAPH_REDO_SHORTCUTS);
-  updateGraphHistoryButtonLabels();
-}
-
-function configureEditorModeShortcuts(): void {
-  codeModeButton.title = "Code (Cmd/Ctrl+Alt+1)";
-  codeModeButton.setAttribute("aria-keyshortcuts", EDITOR_CODE_SHORTCUTS);
-  graphModeButton.title = "Graph (Cmd/Ctrl+Alt+2)";
-  graphModeButton.setAttribute("aria-keyshortcuts", EDITOR_GRAPH_SHORTCUTS);
-}
-
-function handleAppKeyboardShortcuts(event: KeyboardEvent): void {
-  if (isSelectedTargetShortcut(event) && !selectionFocusButton.hidden) {
-    event.preventDefault();
-    if (!event.repeat) revealSelectedTarget();
-    return;
-  }
-
-  const editorShortcutMode = editorModeShortcut(event);
-  if (editorShortcutMode) {
-    event.preventDefault();
-    if (!event.repeat) setEditorView(editorShortcutMode);
-    return;
-  }
-
-  if (editorView === "graph" && isGraphFilterShortcut(event) && !isEditableEventTarget(event.target)) {
-    event.preventDefault();
-    if (!event.repeat) graphInspector?.focusFilter({ select: true });
-    return;
-  }
-
-  if (isSourceHintsShortcut(event)) {
-    event.preventDefault();
-    if (!event.repeat) toggleGraphHints();
-    return;
-  }
-
-  if (isPrettifyShortcut(event) && !isEditableEventTarget(event.target)) {
-    event.preventDefault();
-    if (!event.repeat) prettifyCurrentSource();
-    return;
-  }
-
-  if (isLoadShortcut(event)) {
-    event.preventDefault();
-    if (!event.repeat) openSourceDialog();
-    return;
-  }
-
-  if (!isSaveShortcut(event)) return;
-  event.preventDefault();
-  if (event.repeat) return;
-  if (!boundsAreValid) {
-    setEditorStatus("Fix bounds before saving", "error");
-    return;
-  }
-  if (!hasUnsavedChanges) {
-    setEditorStatus("No changes to save", "idle");
-    return;
-  }
-  saveCurrentSource();
-}
-
-function isLoadShortcut(event: KeyboardEvent): boolean {
-  return isCommandShortcut(event, "o");
-}
-
-function isSaveShortcut(event: KeyboardEvent): boolean {
-  return isCommandShortcut(event, "s");
-}
-
-function isGraphFilterShortcut(event: KeyboardEvent): boolean {
-  if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key === "/") {
-    return true;
-  }
-  return isCommandShortcut(event, "f");
-}
-
-function editorModeShortcut(event: KeyboardEvent): EditorView | null {
-  if (!(event.metaKey || event.ctrlKey) || !event.altKey || event.shiftKey) return null;
-  const key = event.key.toLowerCase();
-  if (key === "1") return "code";
-  if (key === "2") return "graph";
-  return null;
-}
-
-function isSourceHintsShortcut(event: KeyboardEvent): boolean {
-  if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
-  return event.code === "KeyH" || event.key.toLowerCase() === "h";
-}
-
-function isPrettifyShortcut(event: KeyboardEvent): boolean {
-  if (event.metaKey || event.ctrlKey || !event.altKey || !event.shiftKey) return false;
-  return event.code === "KeyF" || event.key.toLowerCase() === "f";
-}
-
-function isSelectedTargetShortcut(event: KeyboardEvent): boolean {
-  return (event.metaKey || event.ctrlKey)
-    && event.altKey
-    && !event.shiftKey
-    && event.key === "Enter";
-}
-
-function isCommandShortcut(event: KeyboardEvent, key: string): boolean {
-  return (event.metaKey || event.ctrlKey)
-    && !event.altKey
-    && !event.shiftKey
-    && event.key.toLowerCase() === key;
-}
-
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
   if (!hasUnsavedChanges) return;
   event.preventDefault();
   event.returnValue = "";
-}
-
-function handleGraphKeyboardShortcuts(event: KeyboardEvent): void {
-  if (editorView !== "graph") return;
-  if (!event.metaKey && !event.ctrlKey) return;
-  if (event.altKey || isEditableEventTarget(event.target)) return;
-
-  const key = event.key.toLowerCase();
-  if (key === "z" && event.shiftKey) {
-    if (!graphHistory.canRedo) return;
-    event.preventDefault();
-    redoGraphEdit();
-    return;
-  }
-
-  if (key === "z") {
-    if (!graphHistory.canUndo) return;
-    event.preventDefault();
-    undoGraphEdit();
-    return;
-  }
-
-  if (key === "y") {
-    if (!graphHistory.canRedo) return;
-    event.preventDefault();
-    redoGraphEdit();
-  }
-}
-
-function isEditableEventTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
 }
 
 function resetGraphEdits(): void {
