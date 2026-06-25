@@ -13,9 +13,9 @@ This document describes the active browser-native architecture for `sdf browser`
 
 The server deliberately does not render or evaluate SDFs. It serves the app, routes session API requests, relays commands to the active browser tab over Server-Sent Events, and persists session snapshots under `.sessions/`.
 
-Vite serves `static/` as the web root through `server/static-app.mjs`, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells separate from implementation code and keeps `.sessions/` outside the served static root.
+Vite serves `static/` as the web root through `server/static-app.mjs`, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells and assets separate from implementation code, keeps HTML entrypoints in the conventional Vite root, and keeps `.sessions/` outside the served static root.
 
-The browser-facing stylesheet is `static/styles.css`. It is intentionally only an import manifest; implementation CSS is split under `static/styles/` by UI surface (`base`, `editor-shell`, `code-editor`, `graph-inspector`, `preview`, `session`, `source-dialog`, and `responsive`) so the static shell stays conventional without hiding all app styling in one huge file. The graph inspector surface has its own nested manifest at `static/styles/graph-inspector.css`, with map, tree, params, shell, and shared-control styles split under `static/styles/graph-inspector/`.
+The browser-facing stylesheet is `static/styles/index.css`. It is intentionally only an import manifest; implementation CSS is split under `static/styles/` by UI surface (`base`, `editor-shell`, `code-editor`, `graph-inspector`, `preview`, `session`, `source-dialog`, and `responsive`) so static assets stay grouped without hiding all app styling in one huge file. The graph inspector surface has its own nested manifest at `static/styles/graph-inspector.css`, with map, tree, params, shell, and shared-control styles split under `static/styles/graph-inspector/`.
 
 ```mermaid
 flowchart LR
