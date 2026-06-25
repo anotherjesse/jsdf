@@ -12,6 +12,7 @@
     "vite": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
+    "check": "npm test && npm run verify:live && npm run build",
     "verify:live": "node scripts/run-live-verifiers.mjs",
     "test": "tsc --noEmit"
   },

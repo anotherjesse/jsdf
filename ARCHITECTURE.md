@@ -177,6 +177,7 @@ The `.sessions/` directory is local-only and ignored by git.
 
 The app has focused verifier pages plus TypeScript checks:
 
+- `npm run check` runs the standard CI/local gate: TypeScript, live browser verification, and production build
 - `npm test` runs `tsc --noEmit`
 - `npm run build` type-checks and builds the Vite app
 - `npm run verify:live` runs on Node 22 or newer, starts a temporary Vite server, launches headless Chrome or Chromium through the DevTools Protocol, and runs the full browser verifier suite

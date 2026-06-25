@@ -110,9 +110,15 @@ The web package includes TypeScript checking and browser verifier pages.
 
 ```sh
 cd web
+npm run check
+```
+
+`npm run check` runs the TypeScript check, the live browser verifier, and the production Vite build. The individual commands are also available when you want a narrower loop:
+
+```sh
 npm test
-npm run build
 npm run verify:live
+npm run build
 ```
 
 `npm run verify:live` requires Node 22 or newer. It starts a temporary Vite server, launches headless Chrome or Chromium, visits every focused verifier page, and fails if any page reports an error. Set `CHROME_PATH=/path/to/chrome` if Chrome is not installed in a standard location.

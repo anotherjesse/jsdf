@@ -548,7 +548,7 @@ export async function runEditorRuntimeVerification(
       if (!sourceLinkStatus.hiddenAfterClear) {
         errors.push(`source link status stayed visible after clear as ${visibleSourceLinkStatus(codeRoot) || "nothing"}`);
       }
-      codeEditor.markSelectedSourceLink(boxCallLink);
+      codeEditor.markSelectedSourceLink(boxCallLink, { reveal: true });
       await nextFrame();
       if (cursorEvents.at(-1) !== "box:call") {
         errors.push(`cursor over box call emitted ${cursorEvents.at(-1) || "nothing"}`);
@@ -561,12 +561,12 @@ export async function runEditorRuntimeVerification(
       }
     }
 
-    const selectedSourceDecorations = codeRoot.querySelectorAll(".source-selected-link").length;
+    const selectedSourceDecorations = codeEditor.sourceDecorationCount("selected");
     const selectedGraphParams = graphRoot.querySelectorAll(".param-row.source-selected, .axis-control.source-selected").length;
     const selectedGraphTitles = graphRoot.querySelectorAll(".param-title.source-selected").length;
     const graphSourceHoverDecorations = codeRoot.querySelectorAll(".source-hovered-link").length;
     if (selectedSourceDecorations === 0) {
-      errors.push("selected source decoration did not render");
+      errors.push("selected source decoration did not remain registered");
     }
     if (recursiveDecorationMessages.length > 0) {
       errors.push("editor selection triggered recursive Monaco decoration warnings");
