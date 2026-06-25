@@ -2,6 +2,7 @@ import type { Node, SDF3 } from "../core/nodes";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { renderGraphMap } from "./graph-map-renderer";
+import { renderGraphTree } from "./graph-tree-renderer";
 import {
   findGraphNode,
   graphNodeIdSetsEqual,
@@ -329,14 +330,7 @@ export class GraphInspector {
     this.renderShowAllControl();
     this.map.hidden = !this.showMap;
     if (this.showMap) this.renderMap(model);
-    if (model.visibleNodeIds.size === 0) {
-      const empty = document.createElement("div");
-      empty.className = "param-empty graph-empty";
-      empty.textContent = "No matching nodes";
-      this.tree.append(empty);
-    } else {
-      this.tree.append(this.renderTreeHeader(), this.renderNode(this.sdf.node, 0, model, [this.sdf.node], String(this.sdf.node.id)));
-    }
+    this.renderTree(model);
     this.renderParams();
     this.syncTreeActiveDescendant();
     this.revealSelectedNode();
@@ -351,123 +345,28 @@ export class GraphInspector {
     this.showAllButton.setAttribute("aria-label", label);
   }
 
-  private renderTreeHeader(): HTMLElement {
-    const header = document.createElement("div");
-    header.className = "graph-tree-header";
-
-    const hidden = this.hiddenNodeIds.size;
-    const visibility = document.createElement("button");
-    visibility.type = "button";
-    visibility.className = "graph-tree-header-eye";
-    visibility.disabled = hidden === 0;
-    visibility.title = hidden === 0 ? "Visibility" : "Show all hidden nodes (Shift+V)";
-    visibility.setAttribute("aria-label", hidden === 0 ? "Visibility column" : "Show all hidden graph nodes");
-    visibility.setAttribute("aria-keyshortcuts", "Shift+V");
-    visibility.append(renderEyeIcon("visible"));
-    if (hidden > 0) {
-      const count = document.createElement("span");
-      count.className = "visibility-count graph-tree-header-eye-count";
-      count.setAttribute("aria-hidden", "true");
-      count.textContent = hidden > 99 ? "99+" : String(hidden);
-      visibility.append(count);
-      visibility.addEventListener("click", () => this.showAllNodes({ focus: true }));
-    }
-
-    const rule = document.createElement("div");
-    rule.className = "graph-tree-header-rule";
-    rule.setAttribute("aria-hidden", "true");
-
-    header.append(visibility, rule);
-    return header;
-  }
-
-  private renderNode(node: Node, depth: number, model: GraphModel, path: Node[], instanceKey: string): HTMLElement {
-    const group = document.createElement("div");
-    group.className = "graph-node-group";
-    const view = model.nodeById.get(node.id);
-
-    const row = document.createElement("div");
-    row.className = "graph-node-row";
-    row.style.setProperty("--depth", String(depth));
-
-    const { isRoot, directlyHidden, inheritedHidden } = graphVisibilityStateForPath(this.sdf?.node ?? null, this.hiddenNodeIds, node, path);
-    const effectivelyHidden = directlyHidden || inheritedHidden;
-    const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
-    row.dataset.visibilityState = visibilityMeta.state;
-    if (effectivelyHidden) row.classList.add("hidden-node-row");
-    if (inheritedHidden && !directlyHidden) row.classList.add("inherited-hidden");
-
-    const visibility = document.createElement("button");
-    visibility.type = "button";
-    visibility.className = "graph-visibility";
-    visibility.disabled = visibilityMeta.disabled;
-    visibility.dataset.state = visibilityMeta.state;
-    if (inheritedHidden && !directlyHidden) visibility.classList.add("inherited-hidden");
-    visibility.title = visibilityShortcutTitle(visibilityMeta.title);
-    visibility.setAttribute("aria-label", `${visibility.title} ${node.kind} #${node.id}`);
-    visibility.setAttribute("aria-keyshortcuts", "V");
-    visibility.setAttribute("aria-pressed", String(visibilityMeta.pressed));
-    visibility.append(renderEyeIcon(visibilityMeta.state));
-    visibility.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.toggleNodeVisibility(node, { isolate: event.altKey });
+  private renderTree(model: GraphModel): void {
+    if (!this.sdf) return;
+    renderGraphTree({
+      container: this.tree,
+      root: this.sdf.node,
+      model,
+      hiddenNodeIds: this.hiddenNodeIds,
+      selectedNodeId: this.selected?.id ?? null,
+      hoveredNodeId: this.hovered?.id ?? null,
+      focusHoverNodeId: this.focusHoverNodeId,
+      lockedSoloNodeId: this.lockedSoloNodeId,
+      dirtyNodeIds: this.dirtyNodeIds,
+      filter: this.filter,
+      nodeKeyboardShortcuts: (node) => this.nodeKeyboardShortcuts(node),
+      soloPreviewForNode: (node) => this.soloPreviewForNode(node),
+      onSelect: (node) => this.select(node),
+      onToggleVisibility: (node, options) => this.toggleNodeVisibility(node, options),
+      onToggleLockedSolo: (node) => this.toggleLockedSolo(node),
+      onShowAllNodes: (options) => this.showAllNodes(options),
+      onKeyDown: (event, node) => this.handleNodeKeyDown(event, node),
+      attachSoloHover: (target, path) => this.attachSoloHover(target, path),
     });
-
-    const soloPreview = this.soloPreviewForNode(node);
-    const isolate = document.createElement("button");
-    isolate.type = "button";
-    isolate.className = "graph-isolate";
-    isolate.disabled = !soloPreview;
-    isolate.title = soloPreview ? "Isolate this node in preview (I)" : "This node cannot be isolated";
-    isolate.setAttribute("aria-label", soloPreview ? `Isolate ${node.kind} #${node.id} in preview` : `${node.kind} #${node.id} cannot be isolated`);
-    isolate.setAttribute("aria-pressed", String(soloPreview ? node.id === this.lockedSoloNodeId : false));
-    if (soloPreview) isolate.setAttribute("aria-keyshortcuts", "I");
-    isolate.append(renderIsolateIcon(), screenReaderText("Isolate"));
-    isolate.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.toggleLockedSolo(node);
-    });
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "graph-node";
-    if (effectivelyHidden) button.classList.add("hidden-node");
-    if (inheritedHidden && !directlyHidden) button.classList.add("inherited-hidden");
-    if (this.filter && view?.matched) button.classList.add("matched");
-    if (this.hovered?.id === node.id) button.classList.add("hovered");
-    if (this.focusHoverNodeId === node.id) button.classList.add("focus-peek");
-    if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
-    if (this.dirtyNodeIds.has(node.id)) button.classList.add("edited");
-    button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
-    button.setAttribute("aria-selected", String(this.selected?.id === node.id));
-    button.setAttribute("aria-keyshortcuts", this.nodeKeyboardShortcuts(node));
-    button.id = graphNodeElementId(instanceKey);
-    button.setAttribute("role", "treeitem");
-    button.dataset.nodeId = String(node.id);
-    const label = document.createElement("span");
-    label.textContent = node.kind;
-    const meta = document.createElement("small");
-    const shared = (view?.parents.size ?? 0) > 1;
-    meta.textContent = `#${node.id} ${node.dim}D${shared ? " shared" : ""}${this.dirtyNodeIds.has(node.id) ? " edited" : ""}${directlyHidden ? " hidden" : inheritedHidden ? " parent hidden" : ""}`;
-    button.append(label, meta);
-    button.addEventListener("click", () => this.select(node));
-    button.addEventListener("keydown", (event) => this.handleNodeKeyDown(event, node));
-    this.attachSoloHover(row, path);
-    row.append(visibility, button, isolate);
-    group.append(row);
-
-    node.children.forEach((child, childIndex) => {
-      if (childMatchesFilter(child.node, model.visibleNodeIds)) {
-        group.append(this.renderNode(
-          child.node,
-          depth + 1,
-          model,
-          [...path, child.node],
-          `${instanceKey}-${childIndex}-${child.node.id}`,
-        ));
-      }
-    });
-    return group;
   }
 
   private renderSummary(model: GraphModel): void {
@@ -1426,10 +1325,6 @@ function relatedEventTarget(event: Event): EventTarget | null {
 
 function visibilityShortcutTitle(title: string): string {
   return title === "Full shape stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
-}
-
-function graphNodeElementId(instanceKey: string): string {
-  return `graph-node-${instanceKey}`;
 }
 
 function breadcrumbRelation(path: readonly Node[], index: number): string {
