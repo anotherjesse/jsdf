@@ -62,6 +62,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
 - `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 - `web/src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
+- `web/src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
 
 ## Source Links And Graph Editing
 
@@ -172,7 +173,7 @@ There are two persistence layers:
 - Browser workspace persistence in `localStorage`
 - Session snapshots on disk under `.sessions/`
 
-Workspace persistence is stored by `web/src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `web/src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `web/src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
+Workspace persistence is stored by `web/src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `web/src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `web/src/editor/source-workspace-actions.ts` coordinates the source load/save/delete commands around that session state and delegates app-specific graph, bounds, preview, and compilation updates back to `main.ts`. `web/src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
 
 Session snapshot persistence is implemented in `web/session-server.mjs`. Snapshot folders can contain:
 
