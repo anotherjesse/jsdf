@@ -74,6 +74,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 - `src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; compile execution is delegated to `source-compile-controller.ts` through app wiring.
 - `src/editor/source-compile-controller.ts` owns source evaluation, source-link discovery for compiled graphs, active SDF validity, diagnostic failure handling, and preview invalidation after successful compiles.
+- `src/editor/source-language-features.ts` owns Monaco JavaScript language providers for API completions, formatting, hover docs, signature help, SDF quick fixes, graph source-link inlay hints, and inlay-hint command routing.
 - `src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
 - `src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
 - `src/preview/preview-viewport-controller.ts` owns preview renderers, shader/mesh mode controls, preview layout labels, step/grid controls, mesh job state, STL download state, and debounced render scheduling; `main.ts` supplies the current graph, bounds, document name, and highlight policy.
@@ -92,6 +93,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.
 - `editor/graph-interaction-controller.ts` coordinates source-link selection, graph hover, graph-history hover/select, hidden-node persistence, and source patching for graph edits.
 - `editor/graph-source-identity.ts` helps restore selection across recompiles when node ids change.
+- `editor/source-language-features.ts` registers graph source-link inlay hints and routes inlay-hint selections back into the active editor instance.
 - `editor/source-link-matching.ts` owns shared source-link equality, node/edit lookup, and compact labels used across the editor.
 
 Graph edits patch source instead of mutating long-lived graph objects. The source remains the durable user artifact, and recompilation rebuilds the graph.
