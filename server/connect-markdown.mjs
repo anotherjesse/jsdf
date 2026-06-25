@@ -115,6 +115,28 @@ Use arrays for vectors, for example \`[x, y, z]\`. Scalar sizes expand to all ax
 - \`polygon(points): SDF2\`
 - \`vesica(radius, distance): SDF2\`
 
+### Names And Colors
+
+Names and colors are annotations. They do not change the signed distance field, so evaluation, CSG, transforms, and STL export stay geometry-only.
+
+- \`name(shape, label): SDF\`, or \`shape.name(label): SDF\`
+- \`color(shape, "#rrggbb" | [r, g, b]): SDF\`, or \`shape.color(...): SDF\`
+
+\`\`\`js
+const body = rounded_box([2, 1, 0.4], 0.08)
+  .name("body")
+  .color("#0f766e");
+
+const badge = cylinder(0.18)
+  .translate([0.6, 0, 0.24])
+  .name("badge")
+  .color("#facc15");
+
+return union(body, badge, { k: 0.03 });
+\`\`\`
+
+\`.name(...)\` is useful for readable source, graph labels, and \`colorsByName\` maps during 3MF export. \`.color(...)\` drives shader/mesh preview colors and 3MF triangle colors. Numeric color arrays can use normalized \`0..1\` channels or \`0..255\` channels. Subtractive cutters do not assign color to the cut surface by default; \`base.difference(cutter.color("#ef4444"))\` keeps the base color.
+
 ### CSG And Shape Operations
 
 Most operations are available as globals and as methods. For example, \`union(a, b, { k: 0.1 })\` and \`a.union(b, { k: 0.1 })\` are equivalent. \`k\` enables smooth blending for that operation; \`shape.k(value)\` marks the shape with a smoothness value used by the next CSG operation.
@@ -161,7 +183,33 @@ Most operations are available as globals and as methods. For example, \`union(a,
 
 ### Workflow Globals
 
-\`generate\`, \`save\`, \`sample_slice\`, and \`show_slice\` are available for manual workflows, but browser session edits should return an \`SDF3\` for the renderer.
+\`generate\`, \`save\`, \`save3mf\`, \`sample_slice\`, and \`show_slice\` are available for manual workflows, but browser session edits should return an \`SDF3\` for the renderer.
+
+- \`generate(sdf, options = {}): Promise<MeshResult>\`
+- \`save(filename, sdf, options = {}): Promise<Blob>\`; use \`.stl\` filenames
+- \`save3mf(filename, sdf, options = {}): Promise<{ blob, report }>\`; use \`.3mf\` filenames
+- \`sample_slice(sdf, options = {}): SliceSample\`
+- \`show_slice(sdf, options = {}): HTMLCanvasElement\`
+
+\`save3mf\` packages the generated mesh as a colored 3MF. It uses \`.color(...)\` annotations by default, or \`colorsByName\` when you want source names to pick export colors.
+
+\`\`\`js
+const left = sphere(0.7).translate([-0.55, 0, 0]).name("left");
+const right = sphere(0.7).translate([0.55, 0, 0]).name("right");
+const shape = union(left, right);
+
+void save3mf("two-color.3mf", shape, {
+  grid: 96,
+  colorsByName: {
+    left: "#ef4444",
+    right: "#22c55e",
+  },
+}).then(({ report }) => console.log(report.colors));
+
+return shape;
+\`\`\`
+
+Once Mesh view has generated triangles, the viewport download controls can export either STL or 3MF for the visible model.
 
 ## Browser Session API Reference
 
