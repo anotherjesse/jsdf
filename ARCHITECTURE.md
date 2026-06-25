@@ -167,6 +167,7 @@ Mesh generation is on demand. Editing source or changing relevant settings inval
 ## Browser Session Architecture
 
 Browser sessions are local collaboration channels identified by URLs like `/s/<session-id>`.
+The UI calls these persisted local workspaces projects, but the server keeps the existing session id as the route and local capability. Project APIs are an index over `.sessions/<session-id>/`, while session APIs address one live browser channel.
 
 ```mermaid
 sequenceDiagram
@@ -186,12 +187,14 @@ sequenceDiagram
 Server-side responsibilities in `session-server.mjs`:
 
 - Create or resume session metadata
+- List, create, and rename user-facing projects through `/api/projects`
 - Serve `/s/<session-id>` app pages
 - Expose `/api/sessions/<session-id>/connect.md`
 - Maintain connected browser clients through `GET /events`
 - Relay commands with timeout handling
 - Persist snapshots under `.sessions/<session-id>/snapshots/<number>/`
 - Serve snapshot source and screenshot files
+- Restore a chosen snapshot as the latest state through `/snapshots/:snapshot-id/restore`
 - Restore earlier code snapshots through `/undo`
 
 The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code.
@@ -221,6 +224,7 @@ Session snapshot persistence is implemented in `session-server.mjs`. Snapshot fo
 - `screenshot.png`
 
 The `.sessions/` directory is local-only and ignored by git.
+Session metadata in `.sessions/<session-id>/session.json` carries the user-facing project name, latest snapshot id, update time, and connection bookkeeping. Project summaries derive their latest thumbnail from the newest snapshot with a screenshot.
 
 ## Verification
 

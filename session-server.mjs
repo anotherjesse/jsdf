@@ -44,6 +44,12 @@ async function handleRequest(req, res) {
     return;
   }
 
+  const projectRoute = parseProjectRoute(url.pathname);
+  if (projectRoute) {
+    await handleProjectRoute(req, res, url, projectRoute);
+    return;
+  }
+
   const route = parseSessionRoute(url.pathname);
   if (route) {
     await handleSessionRoute(req, res, url, route);
@@ -80,6 +86,7 @@ async function handleSessionRoute(req, res, url, route) {
       res,
       renderConnectMarkdown({
         base: `${requestOrigin(req)}/api/sessions/${sessionId}`,
+        projectBase: `${requestOrigin(req)}/api/projects`,
         sessionId,
       }),
       "text/markdown; charset=utf-8",
@@ -127,6 +134,11 @@ async function handleSessionRoute(req, res, url, route) {
     return;
   }
 
+  if (req.method === "POST" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "restore") {
+    await restoreSnapshot(req, res, session, tail[1]);
+    return;
+  }
+
   if (req.method === "GET" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "screenshot.png") {
     await sendSnapshotFile(res, session.id, tail[1], "screenshot.png", "image/png");
     return;
@@ -145,6 +157,43 @@ async function handleSessionRoute(req, res, url, route) {
   throw httpError(404, "Session route not found.");
 }
 
+async function handleProjectRoute(req, res, url, route) {
+  if (!route.projectId && route.tail.length === 0 && req.method === "GET") {
+    await sendJson(res, { projects: await listProjectSummaries(req) });
+    return;
+  }
+
+  if (!route.projectId && route.tail.length === 0 && req.method === "POST") {
+    await createProject(req, res);
+    return;
+  }
+
+  if (route.projectId && route.tail.length === 0 && req.method === "GET") {
+    validateSessionId(route.projectId);
+    const project = await readProjectSummary(route.projectId, req);
+    if (!project) throw httpError(404, "Project not found.");
+    await sendJson(res, { project });
+    return;
+  }
+
+  if (route.projectId && route.tail.length === 0 && (req.method === "PATCH" || req.method === "PUT")) {
+    validateSessionId(route.projectId);
+    await renameProject(req, res, route.projectId);
+    return;
+  }
+
+  throw httpError(404, "Project route not found.");
+}
+
+function parseProjectRoute(pathname) {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "api" || parts[1] !== "projects") return null;
+  return {
+    projectId: parts[2] ?? null,
+    tail: parts.slice(3),
+  };
+}
+
 function parseSessionRoute(pathname) {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "api" || parts[1] !== "sessions" || !parts[2]) return null;
@@ -161,14 +210,17 @@ function ensureSession(id) {
   session = {
     id,
     createdAt: new Date().toISOString(),
+    name: null,
     clients: new Map(),
     activeClientId: null,
     pendingCommands: new Map(),
     nextSnapshotNumber: 1,
     lastActivity: null,
+    latestSnapshotId: null,
+    diskReady: null,
   };
   sessions.set(id, session);
-  void initializeSessionDisk(session);
+  session.diskReady = initializeSessionDisk(session);
   return session;
 }
 
@@ -179,12 +231,32 @@ async function initializeSessionDisk(session) {
   try {
     const existing = JSON.parse(await readFile(join(sessionDir(session.id), "session.json"), "utf8"));
     if (typeof existing.createdAt === "string") session.createdAt = existing.createdAt;
+    if (typeof existing.name === "string") session.name = projectName(existing.name) || null;
+    if (typeof existing.updatedAt === "string") session.lastActivity = existing.updatedAt;
   } catch {
     await writeSessionMetadata(session);
   }
 
-  session.nextSnapshotNumber = (await latestSnapshotNumber(session.id)) + 1;
+  const latestNumber = await latestSnapshotNumber(session.id);
+  session.nextSnapshotNumber = latestNumber + 1;
+  session.latestSnapshotId = latestNumber > 0 ? snapshotIdForNumber(latestNumber) : null;
   await writeSessionMetadata(session);
+}
+
+async function ensureSessionReady(session) {
+  if (!session.diskReady) session.diskReady = initializeSessionDisk(session);
+  await session.diskReady;
+}
+
+async function persistSessionMetadata(session, latestSnapshotId) {
+  await ensureSessionReady(session);
+  await writeSessionMetadata(session, latestSnapshotId);
+}
+
+function scheduleSessionMetadataWrite(session, latestSnapshotId) {
+  void persistSessionMetadata(session, latestSnapshotId).catch(() => {
+    // Metadata writes are best-effort for connection churn; API calls surface their own errors.
+  });
 }
 
 function registerEventClient(req, res, session, clientId) {
@@ -207,7 +279,7 @@ function registerEventClient(req, res, session, clientId) {
   session.clients.set(clientId, client);
   session.activeClientId = clientId;
   session.lastActivity = new Date().toISOString();
-  void writeSessionMetadata(session);
+  scheduleSessionMetadataWrite(session);
   sendEvent(res, "hello", { sessionId: session.id, clientId });
 
   req.on("close", () => {
@@ -216,7 +288,7 @@ function registerEventClient(req, res, session, clientId) {
     if (session.activeClientId === clientId) {
       session.activeClientId = mostRecentClient(session)?.id ?? null;
     }
-    void writeSessionMetadata(session);
+    scheduleSessionMetadataWrite(session);
   });
 }
 
@@ -232,6 +304,7 @@ async function receiveCommandResult(req, res, session, commandId) {
 }
 
 async function sendSessionStatus(req, res, session) {
+  await ensureSessionReady(session);
   const snapshots = await listSnapshots(session.id, req);
   if (!activeClient(session)) {
     await sendJson(res, {
@@ -321,6 +394,37 @@ async function createSnapshot(req, res, session) {
   await sendJson(res, { ok: true, snapshot });
 }
 
+async function restoreSnapshot(req, res, session, snapshotId) {
+  validateSnapshotId(snapshotId);
+  const target = await readSnapshotMetadata(session.id, snapshotId, req);
+  if (!target.codeUrl) throw httpError(409, "Snapshot has no source code to restore.");
+
+  const body = await readOptionalJson(req);
+  const code = await readSnapshotCode(session.id, snapshotId);
+  const comment = semanticComment(body?.comment || `Restoring snapshot ${snapshotId} as latest.`);
+  const result = await sendCommand(session, "set-code", {
+    code,
+    comment,
+  });
+  const snapshot = await writeSnapshot(session, {
+    kind: "restore",
+    comment,
+    code: String(result?.code ?? code),
+    sourceValid: Boolean(result?.sourceValid),
+    status: String(result?.status ?? ""),
+    screenshotDataUrl: typeof result?.screenshotDataUrl === "string" ? result.screenshotDataUrl : null,
+    restoredSnapshotId: snapshotId,
+  }, req);
+
+  await sendJson(res, {
+    ok: true,
+    restoredSnapshot: target,
+    snapshot,
+    sourceValid: Boolean(result?.sourceValid),
+    status: String(result?.status ?? ""),
+  });
+}
+
 async function undoCode(req, res, session) {
   const body = await readOptionalJson(req);
   const current = await sendCommand(session, "get-code", {});
@@ -395,8 +499,8 @@ function mostRecentClient(session) {
 }
 
 async function writeSnapshot(session, data, req) {
-  await initializeSessionDisk(session);
-  const id = String(session.nextSnapshotNumber++).padStart(6, "0");
+  await ensureSessionReady(session);
+  const id = snapshotIdForNumber(session.nextSnapshotNumber++);
   const dir = join(snapshotsDir(session.id), id);
   await mkdir(dir, { recursive: true });
 
@@ -424,6 +528,122 @@ async function writeSnapshot(session, data, req) {
   return absolutizeSnapshot(meta, req);
 }
 
+async function createProject(req, res) {
+  const body = await readOptionalJson(req);
+  const sessionId = await generateUniqueSessionId();
+  const session = ensureSession(sessionId);
+  session.name = projectName(body?.name) || defaultProjectName(sessionId);
+  session.lastActivity = new Date().toISOString();
+  await ensureSessionReady(session);
+  await writeSessionMetadata(session);
+  const project = await readProjectSummary(sessionId, req);
+  await sendJson(res, { ok: true, project, url: `/s/${sessionId}` }, 201);
+}
+
+async function renameProject(req, res, sessionId) {
+  if (!await sessionExists(sessionId)) throw httpError(404, "Project not found.");
+  const body = await readJson(req);
+  const session = ensureSession(sessionId);
+  await ensureSessionReady(session);
+  session.name = projectName(body?.name) || defaultProjectName(sessionId);
+  session.lastActivity = new Date().toISOString();
+  await writeSessionMetadata(session);
+  const project = await readProjectSummary(sessionId, req);
+  await sendJson(res, { ok: true, project });
+}
+
+async function listProjectSummaries(req) {
+  const ids = new Set(sessions.keys());
+  try {
+    const entries = await readdir(sessionsRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && sessionIdPattern.test(entry.name)) ids.add(entry.name);
+    }
+  } catch {
+    return [];
+  }
+
+  const projects = [];
+  for (const sessionId of ids) {
+    const project = await readProjectSummary(sessionId, req);
+    if (project) projects.push(project);
+  }
+  return projects.sort((a, b) => projectSortTime(b) - projectSortTime(a));
+}
+
+async function readProjectSummary(sessionId, req) {
+  const live = sessions.get(sessionId) ?? null;
+  if (live) await ensureSessionReady(live);
+  const metadata = await readSessionMetadata(sessionId);
+  if (!live && !metadata && !await sessionExists(sessionId)) return null;
+
+  const snapshots = await listSnapshots(sessionId, req);
+  const latestSnapshot = snapshots.at(-1) ?? null;
+  const latestScreenshotSnapshot = [...snapshots].reverse().find((snapshot) => snapshot.screenshotUrl) ?? null;
+  const createdAt = live?.createdAt ?? metadata?.createdAt ?? null;
+  const updatedAt = latestIsoDate([
+    latestSnapshot?.createdAt,
+    live?.lastActivity,
+    metadata?.updatedAt,
+    createdAt,
+  ]);
+  const origin = req ? requestOrigin(req) : "";
+  return {
+    id: sessionId,
+    projectId: sessionId,
+    name: projectName(live?.name ?? metadata?.name) || defaultProjectName(sessionId),
+    path: `/s/${sessionId}`,
+    url: `${origin}/s/${sessionId}`,
+    apiUrl: `${origin}/api/sessions/${sessionId}`,
+    snapshotsUrl: `${origin}/api/sessions/${sessionId}/snapshots`,
+    createdAt,
+    updatedAt,
+    connected: Boolean(live && live.clients.size > 0),
+    connectedClients: live?.clients.size ?? 0,
+    activeClientId: live?.activeClientId ?? metadata?.activeClientId ?? null,
+    snapshotCount: snapshots.length,
+    latestSnapshotId: latestSnapshot?.id ?? live?.latestSnapshotId ?? metadata?.latestSnapshotId ?? null,
+    latestSnapshot,
+    latestScreenshotSnapshotId: latestScreenshotSnapshot?.id ?? null,
+    latestScreenshotUrl: latestScreenshotSnapshot?.screenshotUrl ?? null,
+  };
+}
+
+async function readSessionMetadata(sessionId) {
+  try {
+    return JSON.parse(await readFile(join(sessionDir(sessionId), "session.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function sessionExists(sessionId) {
+  if (sessions.has(sessionId)) return true;
+  try {
+    return (await stat(sessionDir(sessionId))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function projectSortTime(project) {
+  const time = Date.parse(project.updatedAt ?? project.createdAt ?? "");
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function latestIsoDate(values) {
+  let latestValue = null;
+  let latestTime = -Infinity;
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const time = Date.parse(value);
+    if (Number.isNaN(time) || time < latestTime) continue;
+    latestTime = time;
+    latestValue = value;
+  }
+  return latestValue;
+}
+
 async function listSnapshots(sessionId, req, options = {}) {
   const absoluteUrls = options.absoluteUrls !== false;
   let entries = [];
@@ -446,6 +666,17 @@ async function listSnapshots(sessionId, req, options = {}) {
   return snapshots.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+async function readSnapshotMetadata(sessionId, snapshotId, req, options = {}) {
+  validateSnapshotId(snapshotId);
+  let meta;
+  try {
+    meta = JSON.parse(await readFile(join(snapshotsDir(sessionId), snapshotId, "meta.json"), "utf8"));
+  } catch {
+    throw httpError(404, "Snapshot metadata not found.");
+  }
+  return options.absoluteUrls === false ? meta : absolutizeSnapshot(meta, req);
+}
+
 async function sendSnapshotFile(res, sessionId, snapshotId, filename, contentType) {
   validateSnapshotId(snapshotId);
   const file = join(snapshotsDir(sessionId), snapshotId, filename);
@@ -463,7 +694,11 @@ async function sendSnapshotFile(res, sessionId, snapshotId, filename, contentTyp
 
 async function readSnapshotCode(sessionId, snapshotId) {
   validateSnapshotId(snapshotId);
-  return readFile(join(snapshotsDir(sessionId), snapshotId, "code.js"), "utf8");
+  try {
+    return await readFile(join(snapshotsDir(sessionId), snapshotId, "code.js"), "utf8");
+  } catch {
+    throw httpError(404, "Snapshot source not found.");
+  }
 }
 
 async function latestSnapshotNumber(sessionId) {
@@ -479,13 +714,15 @@ async function latestSnapshotNumber(sessionId) {
 
 async function writeSessionMetadata(session, latestSnapshotId = null) {
   await mkdir(sessionDir(session.id), { recursive: true });
+  if (latestSnapshotId !== null) session.latestSnapshotId = latestSnapshotId;
   const metadata = {
     id: session.id,
+    name: projectName(session.name) || defaultProjectName(session.id),
     createdAt: session.createdAt,
     updatedAt: new Date().toISOString(),
     activeClientId: session.activeClientId,
     connectedClients: session.clients.size,
-    latestSnapshotId,
+    latestSnapshotId: session.latestSnapshotId,
     snapshotsUrl: `/api/sessions/${session.id}/snapshots`,
   };
   await writeFile(join(sessionDir(session.id), "session.json"), `${JSON.stringify(metadata, null, 2)}\n`);
@@ -498,6 +735,7 @@ function sessionSummary(session) {
     connectedClients: session.clients.size,
     activeClientId: session.activeClientId,
     lastActivity: session.lastActivity,
+    name: projectName(session.name) || defaultProjectName(session.id),
     snapshotsUrl: `/api/sessions/${session.id}/snapshots`,
   };
 }
@@ -615,8 +853,28 @@ function generateSessionId() {
   return id;
 }
 
+async function generateUniqueSessionId() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const id = generateSessionId();
+    if (!await sessionExists(id)) return id;
+  }
+  throw httpError(500, "Could not allocate a project id.");
+}
+
 function generateClientId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function snapshotIdForNumber(value) {
+  return String(value).padStart(6, "0");
+}
+
+function defaultProjectName() {
+  return "Untitled Project";
+}
+
+function projectName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 80);
 }
 
 function semanticComment(value) {

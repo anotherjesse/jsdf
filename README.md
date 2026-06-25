@@ -57,13 +57,15 @@ curl -s http://127.0.0.1:5173/api/sessions/<session-id>/connect.md
 
 ## Browser Sessions
 
-Every app URL under `/s/<session-id>` has a matching local API under `/api/sessions/<session-id>`. The browser tab remains the renderer; the API sends commands to that active tab and records snapshots under `.sessions/`.
+Every app URL under `/s/<session-id>` has a matching local API under `/api/sessions/<session-id>`. The browser tab remains the renderer; the API sends commands to that active tab and records snapshots under `.sessions/`. In the UI, these persisted local workspaces are called projects; the project id is currently the same value as the session id.
 
 Common commands:
 
 ```sh
 BASE="http://127.0.0.1:5173/api/sessions/<session-id>"
+PROJECTS="http://127.0.0.1:5173/api/projects"
 
+curl -s "$PROJECTS"
 curl -s "$BASE/status"
 curl -s "$BASE/code" > current-sdf.js
 curl -s "$BASE/screenshot.png?comment=Checking%20the%20shape" -o screenshot.png
@@ -89,6 +91,14 @@ Fetch the generated connection guide for the exact session:
 
 ```sh
 curl -s "$BASE/connect.md"
+```
+
+Restore a specific older snapshot as the current latest editor state:
+
+```sh
+curl -sS -X POST "$BASE/snapshots/000002/restore" \
+  -H 'content-type: application/json' \
+  -d '{"comment":"Restoring this version as the latest project state."}'
 ```
 
 ## Project Layout

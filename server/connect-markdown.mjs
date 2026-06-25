@@ -1,4 +1,4 @@
-export function renderConnectMarkdown({ base, sessionId }) {
+export function renderConnectMarkdown({ base, projectBase, sessionId }) {
   return `# sdf Browser Session ${sessionId}
 
 You are connected to a live local sdf browser session. The browser is the renderer; this API is a post office that asks the active tab to update code or capture the shader canvas.
@@ -9,6 +9,10 @@ Prefer comments that explain why you are taking an action, or what you are check
 
 \`\`\`sh
 BASE=${JSON.stringify(base)}
+PROJECTS=${JSON.stringify(projectBase)}
+
+# List local projects/sessions and their latest thumbnails.
+curl -s "$PROJECTS"
 
 # Inspect the live browser session.
 curl -s "$BASE/status"
@@ -32,6 +36,11 @@ curl -s "$BASE/screenshot.png?comment=Checking%20the%20current%20front%20silhoue
 
 # List saved session snapshots.
 curl -s "$BASE/snapshots"
+
+# Restore a specific snapshot as the latest live editor state.
+curl -sS -X POST "$BASE/snapshots/000002/restore" \\
+  -H 'content-type: application/json' \\
+  -d '{"comment":"Restoring snapshot 000002 as the new latest version."}'
 
 # Restore code from the most recent different code snapshot.
 curl -sS -X POST "$BASE/undo" \\
@@ -263,6 +272,22 @@ Returns the PNG saved for a snapshot.
 curl -s "$BASE/snapshots/000002/screenshot.png" -o snapshot-000002.png
 \`\`\`
 
+### POST /snapshots/:snapshotId/restore
+
+Restores code from one specific snapshot into the active browser tab, compiles it, captures a shader screenshot, and writes a new append-only \`restore\` snapshot. The original snapshot remains untouched.
+
+\`\`\`sh
+curl -sS -X POST "$BASE/snapshots/000002/restore" \\
+  -H 'content-type: application/json' \\
+  -d '{"comment":"Restoring the wider base as the latest version."}'
+\`\`\`
+
+Response fields include:
+
+- \`restoredSnapshot\`: the older snapshot that supplied the code
+- \`snapshot\`: the newly created latest snapshot
+- \`snapshot.restoredSnapshotId\`: the source snapshot id
+
 ### POST /undo
 
 Restores only the editor code from the most recent snapshot whose code differs from the current editor contents. It then compiles, captures a shader screenshot, and writes an \`undo\` snapshot.
@@ -288,6 +313,38 @@ Snapshots are stored on disk in this repo under:
 \`\`\`
 
 The \`.sessions/\` directory is local-only and ignored by git.
+
+## Project API
+
+Projects are the user-facing view of local browser sessions. A project id is currently the same value as its session id, so existing \`/s/${sessionId}\` links and \`/api/sessions/${sessionId}\` commands keep working.
+
+### GET /api/projects
+
+Lists local projects with names, app URLs, API URLs, connection state, snapshot counts, and latest screenshot URLs.
+
+\`\`\`sh
+curl -s "$PROJECTS"
+\`\`\`
+
+### POST /api/projects
+
+Creates a new local project/session and returns its app URL.
+
+\`\`\`sh
+curl -sS -X POST "$PROJECTS" \\
+  -H 'content-type: application/json' \\
+  -d '{"name":"Bracket study"}'
+\`\`\`
+
+### PATCH /api/projects/:projectId
+
+Renames a project without changing its session id or snapshots.
+
+\`\`\`sh
+curl -sS -X PATCH "$PROJECTS/${sessionId}" \\
+  -H 'content-type: application/json' \\
+  -d '{"name":"Bracket study v2"}'
+\`\`\`
 
 ## Internal Browser Transport
 
