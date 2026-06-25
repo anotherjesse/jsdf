@@ -1,7 +1,16 @@
 import type { Node, SDF3 } from "../core/nodes";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
-import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
+import {
+  effectiveVisibleGraphNodeIds,
+  findGraphNode,
+  graphNodeIdSetsEqual,
+  graphNodePath,
+  graphVisibilityMeta,
+  graphVisibilityStateForPath,
+  hiddenNodeIdsForIsolatedGraphNode,
+  renderEyeIcon,
+} from "./graph-visibility";
 import {
   formatParamPath,
   getParamAtPath,
@@ -214,7 +223,7 @@ export class GraphInspector {
       }
       return null;
     }
-    const node = findNode(this.sdf.node, id);
+    const node = findGraphNode(this.sdf.node, id);
     if (this.hovered?.id === node?.id) return node;
     this.hovered = node;
     this.render();
@@ -222,7 +231,7 @@ export class GraphInspector {
   }
 
   setFocusHoveredNodeById(id: number | null): void {
-    const nextId = id != null && this.sdf && findNode(this.sdf.node, id) ? id : null;
+    const nextId = id != null && this.sdf && findGraphNode(this.sdf.node, id) ? id : null;
     const previousId = this.focusHoverNodeId;
     if (previousId === nextId) return;
     this.focusHoverNodeId = nextId;
@@ -264,7 +273,7 @@ export class GraphInspector {
 
   selectNodeById(id: number): Node | null {
     if (!this.sdf) return null;
-    const node = findNode(this.sdf.node, id);
+    const node = findGraphNode(this.sdf.node, id);
     if (!node) return null;
     this.select(node);
     return node;
@@ -283,7 +292,7 @@ export class GraphInspector {
   }
 
   buildSoloPreviewForNodeId(id: number): SoloPreview | null {
-    return buildSoloPreview(this.pathToNode(id));
+    return buildSoloPreview(graphNodePath(this.sdf?.node ?? null, id));
   }
 
   getSelected(): Node | null {
@@ -292,13 +301,13 @@ export class GraphInspector {
 
   getParamValue(nodeId: number, path: ParamPath): ParamValue | undefined {
     if (!this.sdf) return undefined;
-    const node = findNode(this.sdf.node, nodeId);
+    const node = findGraphNode(this.sdf.node, nodeId);
     return node ? getParamAtPath(node.params, path) : undefined;
   }
 
   setParamValue(nodeId: number, path: ParamPath, value: ParamValue): Node | null {
     if (!this.sdf) return null;
-    const node = findNode(this.sdf.node, nodeId);
+    const node = findGraphNode(this.sdf.node, nodeId);
     if (!node) return null;
     this.clearLockedSoloIfDifferent(node);
     setParamAtPath(node.params, path, value);
@@ -381,7 +390,7 @@ export class GraphInspector {
     row.className = "graph-node-row";
     row.style.setProperty("--depth", String(depth));
 
-    const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
+    const { isRoot, directlyHidden, inheritedHidden } = graphVisibilityStateForPath(this.sdf?.node ?? null, this.hiddenNodeIds, node, path);
     const effectivelyHidden = directlyHidden || inheritedHidden;
     const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
     row.dataset.visibilityState = visibilityMeta.state;
@@ -532,7 +541,7 @@ export class GraphInspector {
     this.map.style.setProperty("--graph-map-height", `${height}px`);
     this.map.style.setProperty("--graph-map-width", `${width}px`);
 
-    const effectiveVisibleNodeIds = this.effectiveVisibleNodeIds();
+    const effectiveVisibleNodeIds = effectiveVisibleGraphNodeIds(this.sdf?.node ?? null, this.hiddenNodeIds);
 
     for (const edge of model.edges) {
       const from = positions.get(edge.from);
@@ -592,8 +601,8 @@ export class GraphInspector {
     text.setAttribute("y", String(y + 4));
     text.textContent = mapLabel(view.node.kind);
 
-    const path = this.pathToNode(view.node.id);
-    const { isRoot } = this.visibilityStateForPath(view.node, path);
+    const path = graphNodePath(this.sdf?.node ?? null, view.node.id);
+    const { isRoot } = graphVisibilityStateForPath(this.sdf?.node ?? null, this.hiddenNodeIds, view.node, path);
     const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
     group.append(rect, this.renderMapEye(view.node, x - 34, y, visibilityMeta), text);
     group.addEventListener("click", () => this.select(view.node));
@@ -690,8 +699,8 @@ export class GraphInspector {
   }
 
   private toggleIsolatedVisibility(node: Node, options: { focus?: boolean } = {}): void {
-    const isolatedHiddenNodeIds = this.hiddenNodeIdsForIsolatedNode(node);
-    if (setsEqual(this.hiddenNodeIds, isolatedHiddenNodeIds)) {
+    const isolatedHiddenNodeIds = hiddenNodeIdsForIsolatedGraphNode(this.sdf?.node ?? null, node);
+    if (graphNodeIdSetsEqual(this.hiddenNodeIds, isolatedHiddenNodeIds)) {
       this.showAllNodes(options);
       return;
     }
@@ -707,26 +716,6 @@ export class GraphInspector {
     this.options.onVisibilityChange([...this.hiddenNodeIds]);
   }
 
-  private hiddenNodeIdsForIsolatedNode(node: Node): Set<number> {
-    const hidden = new Set<number>();
-    if (!this.sdf || this.sdf.node.id === node.id) return hidden;
-
-    const allowed = new Set<number>();
-    for (const pathNode of this.pathToNode(node.id)) allowed.add(pathNode.id);
-    collectSubtreeNodeIds(node, allowed);
-
-    const visit = (candidate: Node) => {
-      if (candidate.id !== this.sdf?.node.id && !allowed.has(candidate.id)) {
-        hidden.add(candidate.id);
-        return;
-      }
-      for (const child of candidate.children) visit(child.node);
-    };
-
-    visit(this.sdf.node);
-    return hidden;
-  }
-
   private showAllNodes(options: { focus?: boolean } = {}): void {
     if (this.hiddenNodeIds.size === 0) return;
     this.hiddenNodeIds.clear();
@@ -736,19 +725,6 @@ export class GraphInspector {
     }
     this.render();
     this.options.onVisibilityChange([]);
-  }
-
-  private effectiveVisibleNodeIds(): Set<number> {
-    const out = new Set<number>();
-    if (!this.sdf) return out;
-
-    const visit = (node: Node) => {
-      if (this.hiddenNodeIds.has(node.id)) return;
-      out.add(node.id);
-      for (const child of node.children) visit(child.node);
-    };
-    visit(this.sdf.node);
-    return out;
   }
 
   private select(node: Node, options: { focus?: boolean } = {}): void {
@@ -875,7 +851,7 @@ export class GraphInspector {
   }
 
   private parentNode(node: Node): Node | null {
-    const path = this.pathToNode(node.id);
+    const path = graphNodePath(this.sdf?.node ?? null, node.id);
     return path.length > 1 ? path[path.length - 2] : null;
   }
 
@@ -1001,23 +977,7 @@ export class GraphInspector {
   }
 
   private soloPreviewForNode(node: Node): SoloPreview | null {
-    return buildSoloPreview(this.pathToNode(node.id));
-  }
-
-  private pathToNode(id: number): Node[] {
-    if (!this.sdf) return [];
-    const path: Node[] = [];
-    const visit = (node: Node): boolean => {
-      path.push(node);
-      if (node.id === id) return true;
-      for (const child of node.children) {
-        if (visit(child.node)) return true;
-      }
-      path.pop();
-      return false;
-    };
-    visit(this.sdf.node);
-    return path;
+    return buildSoloPreview(graphNodePath(this.sdf?.node ?? null, node.id));
   }
 
   private renderParams(): void {
@@ -1048,8 +1008,8 @@ export class GraphInspector {
     const actions = document.createElement("div");
     actions.className = "param-title-actions";
 
-    const path = this.pathToNode(node.id);
-    const { isRoot, directlyHidden, inheritedHidden } = this.visibilityStateForPath(node, path);
+    const path = graphNodePath(this.sdf?.node ?? null, node.id);
+    const { isRoot, directlyHidden, inheritedHidden } = graphVisibilityStateForPath(this.sdf?.node ?? null, this.hiddenNodeIds, node, path);
     const visibilityMeta = graphVisibilityMeta(isRoot, directlyHidden, inheritedHidden);
     const visibility = document.createElement("button");
     visibility.type = "button";
@@ -1118,7 +1078,7 @@ export class GraphInspector {
   }
 
   private renderBreadcrumb(node: Node): HTMLElement | null {
-    const path = this.pathToNode(node.id);
+    const path = graphNodePath(this.sdf?.node ?? null, node.id);
     if (path.length <= 1) return null;
 
     const trail = document.createElement("div");
@@ -1153,13 +1113,6 @@ export class GraphInspector {
     });
 
     return trail;
-  }
-
-  private visibilityStateForPath(node: Node, path: readonly Node[]): { isRoot: boolean; directlyHidden: boolean; inheritedHidden: boolean } {
-    const isRoot = this.sdf?.node.id === node.id;
-    const directlyHidden = this.hiddenNodeIds.has(node.id);
-    const inheritedHidden = path.slice(0, -1).some((ancestor) => this.hiddenNodeIds.has(ancestor.id));
-    return { isRoot, directlyHidden, inheritedHidden };
   }
 
   private renderOrientationControl(node: Node): HTMLElement | null {
@@ -1549,17 +1502,6 @@ function filterTerms(filter: string): string[] {
   return filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
-function findNode(root: Node, id: number, visited = new Set<number>()): Node | null {
-  if (root.id === id) return root;
-  if (visited.has(root.id)) return null;
-  visited.add(root.id);
-  for (const child of root.children) {
-    const match = findNode(child.node, id, visited);
-    if (match) return match;
-  }
-  return null;
-}
-
 function formatNodeLabel(node: Node): string {
   return `${node.kind} #${node.id}`;
 }
@@ -1637,19 +1579,6 @@ function containsEventTarget(parent: Element, target: EventTarget | null): boole
 
 function relatedEventTarget(event: Event): EventTarget | null {
   return event instanceof MouseEvent || event instanceof FocusEvent ? event.relatedTarget : null;
-}
-
-function collectSubtreeNodeIds(node: Node, out: Set<number>): void {
-  out.add(node.id);
-  for (const child of node.children) collectSubtreeNodeIds(child.node, out);
-}
-
-function setsEqual(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
-  if (a.size !== b.size) return false;
-  for (const value of a) {
-    if (!b.has(value)) return false;
-  }
-  return true;
 }
 
 function visibilityShortcutTitle(title: string): string {
