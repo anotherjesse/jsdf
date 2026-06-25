@@ -1,6 +1,6 @@
 # sdf browser
 
-Browser-native TypeScript port of the Python `sdf` API surface, excluding the intentionally native/Python-heavy APIs:
+Browser-native TypeScript implementation inspired by the original Python `sdf` API surface. The active public API is JavaScript; see the visual reference in [`../docs/API.md`](../docs/API.md). The browser implementation intentionally excludes native/Python-heavy APIs:
 
 - `text`, `image`, `measure_text`, `measure_image`
 - mesh loading and mesh-as-SDF (`Mesh.from_file`, `Mesh.sdf`)
@@ -15,7 +15,7 @@ The browser package is split by responsibility:
 - `src/glsl`: GLSL code generation for shader previews
 - `src/mesh`: bounds, polygonization, and STL export
 - `src/preview`: WebGL raymarch and mesh preview renderers
-- `src/workflow.ts`: Python-style `generate`, `save`, `sample_slice`, and `show_slice` helpers for browser workflows
+- `src/workflow.ts`: `generate`, `save`, `sample_slice`, and `show_slice` helpers for browser workflows
 
 ## Run
 

@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the active browser-native architecture for `sdf browser`. The original Python package remains in the repository for attribution and compatibility context, but the product architecture described here is the TypeScript app in `web/`.
+This document describes the active browser-native architecture for `sdf browser`. The repository is derived from Michael Fogleman's original Python [`sdf`](https://github.com/fogleman/sdf) project, but the legacy Python package has been removed from this tree. The product architecture described here is the TypeScript app in `web/`.
 
 ## System Shape
 
@@ -197,7 +197,8 @@ When adding a new SDF operation or primitive, update the graph-centered pipeline
 4. Add GLSL compilation support in `web/src/glsl/compiler.ts`.
 5. Add WGSL compilation support in `web/src/wgsl/compiler.ts` when mesh/WebGPU paths need it.
 6. Add API reference/completion data in `web/src/editor/api-reference-data.ts`.
-7. Add focused examples or verifier coverage.
+7. Add user-facing docs in `docs/API.md`.
+8. Add focused examples or verifier coverage.
 
 When adding session behavior, keep the same relay model: the server should request state from the active browser tab, and the tab should remain responsible for compiling, rendering, and screenshot capture.
 

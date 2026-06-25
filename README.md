@@ -11,7 +11,7 @@ The project is centered on the app in [`web/`](web/):
 - STL export from the generated mesh
 - A local browser-session API so agents or scripts can update code, capture screenshots, and save snapshots through the live tab
 
-For a deeper system map, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+For a visual JavaScript API reference, see [`docs/API.md`](docs/API.md). For a deeper system map, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Quick Start
 
@@ -50,7 +50,7 @@ Useful globals include:
 - 2D to 3D: `extrude`, `extrude_to`, `revolve`
 - Math helpers and constants: `PI`, `X`, `Y`, `Z`, `UP`, `radians`, `degrees`, `add`, `sub`, `mul`, `normalize`
 
-The live session connection guide includes a fuller API summary:
+The full browser API guide in [`docs/API.md`](docs/API.md) follows the original Python documentation style, with rendered thumbnails, signatures, and JavaScript snippets. The live session connection guide also includes a compact API summary:
 
 ```sh
 curl -s http://127.0.0.1:5173/api/sessions/<session-id>/connect.md
@@ -94,6 +94,7 @@ curl -s "$BASE/connect.md"
 
 ## Project Layout
 
+- [`docs/API.md`](docs/API.md) is the visual JavaScript API reference.
 - [`web/src/api/`](web/src/api/) defines the browser SDF API surface.
 - [`web/src/core/`](web/src/core/) contains graph nodes, math helpers, and easing utilities.
 - [`web/src/glsl/`](web/src/glsl/) compiles SDF graphs for the raymarch preview.
@@ -123,4 +124,4 @@ Verifier pages are available while the dev server is running:
 
 ## Attribution
 
-This repository is derived from Michael Fogleman's original [`sdf`](https://github.com/fogleman/sdf) project and keeps the same MIT License. See [`NOTICE.md`](NOTICE.md) and [`LICENSE.md`](LICENSE.md). The current project direction is the browser-native JavaScript editor and session workflow described above.
+This repository is derived from Michael Fogleman's original [`sdf`](https://github.com/fogleman/sdf) project and keeps the same MIT License. See [`NOTICE.md`](NOTICE.md) and [`LICENSE.md`](LICENSE.md). The original Python implementation is no longer vendored here; this repository now focuses on the browser-native JavaScript editor and session workflow described above.
