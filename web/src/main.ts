@@ -26,8 +26,7 @@ import {
 import { createBrowserSessionController } from "./editor/browser-session-controller";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import { sourceForExample } from "./editor/example-source";
-import { renderGraphChangeJournal as renderGraphChangeJournalView } from "./editor/graph-change-journal";
-import { formatGraphChangeValue, GraphEditHistory, type GraphHistoryEntry } from "./editor/graph-history";
+import { createGraphHistoryController, type GraphHistoryEntry } from "./editor/graph-history-controls";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
 import { prettifySource } from "./editor/prettify-source";
 import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
@@ -164,7 +163,6 @@ let cleanPreviewSnapshot = "";
 let hasUnsavedChanges = false;
 let draftPersistenceEnabled = false;
 let editorSourceValid = true;
-const graphHistory = new GraphEditHistory();
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
 const activeBrowserSessionId = sessionIdFromLocation();
@@ -199,11 +197,32 @@ const browserSessionController = createBrowserSessionController({
   captureScreenshot: captureBrowserSessionState,
   captureSnapshotState: captureBrowserSessionState,
 });
+const graphHistoryController = createGraphHistoryController({
+  elements: {
+    undoButton: undoGraphButton,
+    redoButton: redoGraphButton,
+    resetButton: resetGraphButton,
+    journal: graphChangeJournal,
+  },
+  applyEditValue: (entry, value) => Boolean(graphInspector?.setParamValue(entry.nodeId, entry.path, value)),
+  syncResetEdit: (entry, value) => {
+    syncCodeFromGraphEdit(entry, value);
+  },
+  onMutationStatus: applyGraphMutationStatus,
+  onDirtyEntriesChange: (entries) => graphInspector?.setDirtyParams(entries),
+  onBeforeRenderJournal: () => {
+    graphHistoryHoverKey = null;
+  },
+  sourceLinkForEntry: (entry) => sourceLinkForGraphEdit(currentSourceLinks, entry),
+  selectedEntry: (entry) => sourceLinksEqual(sourceLinkForGraphEdit(currentSourceLinks, entry), selectedSourceLink),
+  onSelectEntry: selectGraphHistoryEntry,
+  onHoverEntry: hoverGraphHistoryEntry,
+  onClearEntryHover: clearGraphHistoryEntryHover,
+});
 
 browserSessionController.configure();
 configureEditorModeShortcutButtons(codeModeButton, graphModeButton);
 configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
-updateGraphHistoryButtonLabels();
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
 stepsOutput.value = stepsInput.value;
 gridOutput.value = gridInput.value;
@@ -267,9 +286,6 @@ sourceDialog.addEventListener("close", () => {
 codeModeButton.addEventListener("click", () => setEditorView("code"));
 graphModeButton.addEventListener("click", () => setEditorView("graph"));
 selectionFocusButton.addEventListener("click", revealSelectedTarget);
-undoGraphButton.addEventListener("click", undoGraphEdit);
-redoGraphButton.addEventListener("click", redoGraphEdit);
-resetGraphButton.addEventListener("click", resetGraphEdits);
 window.addEventListener("resize", () => {
   activeRenderer()?.redraw();
   renderViewLabels();
@@ -284,10 +300,10 @@ installAppKeyboardShortcuts(window, {
   prettifySource: prettifyCurrentSource,
   openSourceDialog,
   saveSource: saveCurrentSourceFromShortcut,
-  canUndoGraph: () => graphHistory.canUndo,
-  canRedoGraph: () => graphHistory.canRedo,
-  undoGraphEdit,
-  redoGraphEdit,
+  canUndoGraph: () => graphHistoryController.canUndo,
+  canRedoGraph: () => graphHistoryController.canRedo,
+  undoGraphEdit: () => graphHistoryController.undo(),
+  redoGraphEdit: () => graphHistoryController.redo(),
 });
 window.addEventListener("beforeunload", handleBeforeUnload);
 
@@ -628,7 +644,7 @@ function compileEditorSource(
     codeEditor?.setError(null);
     refreshSourceLinks(source, sdf, sourceLinks);
     restoreSelectedGraphSelection(previousSelectedSourceIdentity, previousSelectedIdentity, sourceLinks);
-    clearGraphHistory();
+    graphHistoryController.clear();
     setEditorStatus(options.status, options.statusState ?? "ok");
     if (options.invalidateMesh !== false) invalidateMeshForActiveSdf();
     updateSaveState();
@@ -841,7 +857,7 @@ function handleGraphEdit(edit: GraphParamEdit): void {
   if (!activeSdf) return;
   focusPreview = null;
   soloPreview = null;
-  recordGraphEdit(edit);
+  graphHistoryController.record(edit);
   applyGraphMutationStatus(`Edited ${edit.nodeKind} ${edit.label}`, edit, edit.nextValue);
 }
 
@@ -883,51 +899,10 @@ function invalidateMeshForActiveSdf(): void {
   clearMesh();
 }
 
-function recordGraphEdit(edit: GraphParamEdit): void {
-  graphHistory.record(edit);
-  updateGraphHistoryControls();
-}
-
-function undoGraphEdit(): void {
-  const entry = graphHistory.undo((candidate) => {
-    return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.previousValue));
-  });
-  updateGraphHistoryControls();
-  if (!entry) return;
-  applyGraphMutationStatus(`Undid ${entry.nodeKind} ${entry.label}`, entry, entry.previousValue);
-}
-
-function redoGraphEdit(): void {
-  const entry = graphHistory.redo((candidate) => {
-    return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.nextValue));
-  });
-  updateGraphHistoryControls();
-  if (!entry) return;
-  applyGraphMutationStatus(`Redid ${entry.nodeKind} ${entry.label}`, entry, entry.nextValue);
-}
-
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
   if (!hasUnsavedChanges) return;
   event.preventDefault();
   event.returnValue = "";
-}
-
-function resetGraphEdits(): void {
-  if (!graphHistory.canUndo) return;
-  let didReset = false;
-  while (graphHistory.canUndo) {
-    const entry = graphHistory.undo((candidate) => {
-      return Boolean(graphInspector?.setParamValue(candidate.nodeId, candidate.path, candidate.previousValue));
-    });
-    if (!entry) break;
-    syncCodeFromGraphEdit(entry, entry.previousValue);
-    didReset = true;
-  }
-  graphHistory.clear();
-  updateGraphHistoryControls();
-  if (didReset) {
-    applyGraphMutationStatus("Reset graph");
-  }
 }
 
 function applyGraphMutationStatus(message: string, edit?: GraphSourceEdit, value?: unknown): void {
@@ -974,7 +949,7 @@ function setSelectedSourceLink(
   graphInspector?.setSelectedSourceLink(link);
   if (options.markCode !== false) codeEditor?.markSelectedSourceLink(link);
   updateSelectionFocusButton();
-  renderGraphChangeJournal();
+  graphHistoryController.refresh();
 }
 
 function revealSelectedTarget(): void {
@@ -1069,57 +1044,6 @@ function sourceLinksEqual(a: GraphSourceLink | null, b: GraphSourceLink | null):
     && a.start === b.start
     && a.end === b.end
     && paramPathsEqual(a.path, b.path);
-}
-
-function clearGraphHistory(): void {
-  graphHistory.clear();
-  updateGraphHistoryControls();
-}
-
-function updateGraphHistoryControls(): void {
-  undoGraphButton.disabled = !graphHistory.canUndo;
-  redoGraphButton.disabled = !graphHistory.canRedo;
-  resetGraphButton.disabled = !graphHistory.canUndo;
-  updateGraphHistoryButtonLabels();
-  graphInspector?.setDirtyParams(graphHistory.current());
-  renderGraphChangeJournal();
-}
-
-function updateGraphHistoryButtonLabels(): void {
-  const undoEntry = graphHistory.peekUndo();
-  const redoEntry = graphHistory.peekRedo();
-  const dirtyCount = graphHistory.dirtyCount;
-
-  const undoLabel = undoEntry ? `Undo ${graphChangeSummary(undoEntry)}` : "Undo graph edit";
-  undoGraphButton.title = undoEntry ? `${undoLabel} (Cmd/Ctrl+Z)` : "Undo graph edit (Cmd/Ctrl+Z)";
-  undoGraphButton.setAttribute("aria-label", undoLabel);
-
-  const redoLabel = redoEntry ? `Redo ${graphChangeSummary(redoEntry)}` : "Redo graph edit";
-  redoGraphButton.title = redoEntry ? `${redoLabel} (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)` : "Redo graph edit (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y)";
-  redoGraphButton.setAttribute("aria-label", redoLabel);
-
-  const resetLabel = dirtyCount > 0
-    ? `Reset ${dirtyCount} graph ${dirtyCount === 1 ? "edit" : "edits"}`
-    : "Reset graph edits";
-  resetGraphButton.title = resetLabel;
-  resetGraphButton.setAttribute("aria-label", resetLabel);
-}
-
-function graphChangeSummary(entry: GraphHistoryEntry): string {
-  return `${entry.nodeKind} #${entry.nodeId} ${formatGraphChangeValue(entry)}`;
-}
-
-function renderGraphChangeJournal(): void {
-  const entries = graphHistory.current();
-  graphHistoryHoverKey = null;
-  renderGraphChangeJournalView(graphChangeJournal, {
-    entries,
-    sourceLinkForEntry: (entry) => sourceLinkForGraphEdit(currentSourceLinks, entry),
-    selectedEntry: (entry) => sourceLinksEqual(sourceLinkForGraphEdit(currentSourceLinks, entry), selectedSourceLink),
-    onSelect: selectGraphHistoryEntry,
-    onHover: hoverGraphHistoryEntry,
-    onClearHover: clearGraphHistoryEntryHover,
-  });
 }
 
 function hoverGraphHistoryEntry(entry: GraphHistoryEntry, options: { shiftKey: boolean }): void {

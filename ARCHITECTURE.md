@@ -59,6 +59,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
+- `web/src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
 - `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 
 ## Source Links And Graph Editing
@@ -69,6 +70,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/code-editor.ts` renders those links in Monaco and reports selections or value edits.
 - `editor/graph-inspector.ts` shows the graph and allows node selection, visibility changes, solo/focus preview, and numeric param edits.
 - `editor/graph-history.ts` records graph edit undo/redo entries.
+- `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.
 - `editor/graph-source-identity.ts` helps restore selection across recompiles when node ids change.
 
 Graph edits patch source instead of mutating long-lived graph objects. The source remains the durable user artifact, and recompilation rebuilds the graph.
