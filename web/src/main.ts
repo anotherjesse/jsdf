@@ -14,6 +14,7 @@ import {
   installAppKeyboardShortcuts,
   SOURCE_PRETTIFY_SHORTCUT,
 } from "./editor/app-shortcuts";
+import { queryAppElements } from "./editor/app-elements";
 import {
   sessionIdFromLocation,
   type BrowserSessionCommandResult,
@@ -54,52 +55,7 @@ import {
   type PreviewViewportState,
 } from "./preview/preview-viewport-controller";
 
-const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!;
-const viewLabels = document.querySelector<HTMLElement>("#viewLabels")!;
-const documentNameInput = document.querySelector<HTMLInputElement>("#documentNameInput")!;
-const dirtyIndicator = document.querySelector<HTMLElement>("#dirtyIndicator")!;
-const loadSourceButton = document.querySelector<HTMLButtonElement>("#loadSourceButton")!;
-const saveSourceButton = document.querySelector<HTMLButtonElement>("#saveSourceButton")!;
-const prettifySourceButton = document.querySelector<HTMLButtonElement>("#prettifySourceButton")!;
-const sourceHintsButton = document.querySelector<HTMLButtonElement>("#sourceHintsButton")!;
-const sourceDialog = document.querySelector<HTMLDialogElement>("#sourceDialog")!;
-const sourceDialogList = document.querySelector<HTMLElement>("#sourceDialogList")!;
-const closeSourceDialogButton = document.querySelector<HTMLButtonElement>("#closeSourceDialogButton")!;
-const gpuBadge = document.querySelector<HTMLElement>("#gpuBadge")!;
-const shaderViewButton = document.querySelector<HTMLButtonElement>("#shaderViewButton")!;
-const meshViewButton = document.querySelector<HTMLButtonElement>("#meshViewButton")!;
-const layoutViewButton = document.querySelector<HTMLButtonElement>("#layoutViewButton")!;
-const downloadButton = document.querySelector<HTMLButtonElement>("#downloadButton")!;
-const surfaceNetButton = document.querySelector<HTMLButtonElement>("#surfaceNetButton")!;
-const tetraMeshButton = document.querySelector<HTMLButtonElement>("#tetraMeshButton")!;
-const fitBoundsButton = document.querySelector<HTMLButtonElement>("#fitBoundsButton")!;
-const codeModeButton = document.querySelector<HTMLButtonElement>("#codeModeButton")!;
-const graphModeButton = document.querySelector<HTMLButtonElement>("#graphModeButton")!;
-const selectionFocusButton = document.querySelector<HTMLButtonElement>("#selectionFocusButton")!;
-const codePanel = document.querySelector<HTMLElement>("#codePanel")!;
-const graphPanel = document.querySelector<HTMLElement>("#graphPanel")!;
-const codeEditorElement = document.querySelector<HTMLElement>("#codeEditor")!;
-const graphInspectorElement = document.querySelector<HTMLElement>("#graphInspector")!;
-const editorStatus = document.querySelector<HTMLElement>("#editorStatus")!;
-const undoGraphButton = document.querySelector<HTMLButtonElement>("#undoGraphButton")!;
-const redoGraphButton = document.querySelector<HTMLButtonElement>("#redoGraphButton")!;
-const resetGraphButton = document.querySelector<HTMLButtonElement>("#resetGraphButton")!;
-const graphChangeJournal = document.querySelector<HTMLElement>("#graphChangeJournal")!;
-const stepsInput = document.querySelector<HTMLInputElement>("#stepsInput")!;
-const stepsOutput = document.querySelector<HTMLOutputElement>("#stepsOutput")!;
-const gridInput = document.querySelector<HTMLInputElement>("#gridInput")!;
-const gridOutput = document.querySelector<HTMLOutputElement>("#gridOutput")!;
-const boundsEditorElement = document.querySelector<HTMLElement>("#boundsEditor")!;
-const previewStat = document.querySelector<HTMLElement>("#previewStat")!;
-const meshStat = document.querySelector<HTMLElement>("#meshStat")!;
-const triangleStat = document.querySelector<HTMLElement>("#triangleStat")!;
-const apiStat = document.querySelector<HTMLElement>("#apiStat")!;
-const sessionStrip = document.querySelector<HTMLElement>("#sessionStrip")!;
-const sessionIdLabel = document.querySelector<HTMLElement>("#sessionIdLabel")!;
-const copyAgentPromptButton = document.querySelector<HTMLButtonElement>("#copyAgentPromptButton")!;
-const sessionSnapshotButton = document.querySelector<HTMLButtonElement>("#sessionSnapshotButton")!;
-const sessionStatus = document.querySelector<HTMLElement>("#sessionStatus")!;
-const overlay = document.querySelector<HTMLElement>("#overlay")!;
+const elements = queryAppElements();
 
 let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
@@ -112,10 +68,7 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 const sourceEditorController = createSourceEditorController({
-  elements: {
-    prettifyButton: prettifySourceButton,
-    sourceHintsButton,
-  },
+  elements: elements.sourceEditor,
   initialGraphHintsEnabled: editorPreferences.graphHintsEnabled,
   codeEditor: () => codeEditor,
   sourceValid: () => editorSourceValid,
@@ -127,13 +80,7 @@ const sourceEditorController = createSourceEditorController({
   savePreferences: saveEditorPreferences,
 });
 const editorViewController = createEditorViewController({
-  elements: {
-    codeModeButton,
-    graphModeButton,
-    selectionFocusButton,
-    codePanel,
-    graphPanel,
-  },
+  elements: elements.editorView,
   codeEditor: () => codeEditor,
   graphInspector: () => graphInspector,
   readSelectedTarget: () => graphInteractionController?.readSelectedEditorTarget() ?? { label: "", sourceLink: null, graphNode: null },
@@ -143,33 +90,12 @@ const editorViewController = createEditorViewController({
   revealSourceLinkInGraph: (link) => graphInteractionController?.handleSourceLinkSelect(link, { revealGraph: true }),
 });
 const previewViewport = createPreviewViewportController({
-  elements: {
-    canvas,
-    viewLabels,
-    shaderViewButton,
-    meshViewButton,
-    layoutViewButton,
-    downloadButton,
-    surfaceNetButton,
-    tetraMeshButton,
-    stepsInput,
-    stepsOutput,
-    gridInput,
-    gridOutput,
-    previewStat,
-    meshStat,
-    triangleStat,
-    overlay,
-  },
+  elements: elements.previewViewport,
   readState: readPreviewViewportState,
   onPreviewSettingsChange: updateSaveState,
 });
 const previewBoundsController = createPreviewBoundsController({
-  elements: {
-    root: boundsEditorElement,
-    fitButton: fitBoundsButton,
-    overlay,
-  },
+  elements: elements.previewBounds,
   initialBounds: boundsForExample(activeExampleId),
   readActiveSdf: () => activeSdf,
   updateSaveState,
@@ -178,12 +104,7 @@ const previewBoundsController = createPreviewBoundsController({
 });
 const appHealthDiagnostics = createAppHealthDiagnosticsReader({
   monitor: appHealthMonitor,
-  elements: {
-    selectionFocusButton,
-    prettifySourceButton,
-    loadSourceButton,
-    saveSourceButton,
-  },
+  elements: elements.appHealth,
   shortcuts: {
     prettify: SOURCE_PRETTIFY_SHORTCUT,
     graphFilter: GRAPH_FILTER_SHORTCUTS,
@@ -192,13 +113,7 @@ const appHealthDiagnostics = createAppHealthDiagnosticsReader({
 });
 const browserSessionController = createBrowserSessionController({
   sessionId: activeBrowserSessionId,
-  elements: {
-    strip: sessionStrip,
-    idLabel: sessionIdLabel,
-    copyAgentPromptButton,
-    snapshotButton: sessionSnapshotButton,
-    status: sessionStatus,
-  },
+  elements: elements.browserSession,
   readStatus: readBrowserSessionStatus,
   readCode: currentSourceValue,
   setCode: applyBrowserSessionCode,
@@ -206,12 +121,7 @@ const browserSessionController = createBrowserSessionController({
   captureSnapshotState: captureBrowserSessionState,
 });
 const graphHistoryController = createGraphHistoryController({
-  elements: {
-    undoButton: undoGraphButton,
-    redoButton: redoGraphButton,
-    resetButton: resetGraphButton,
-    journal: graphChangeJournal,
-  },
+  elements: elements.graphHistory,
   applyEditValue: (entry, value) => Boolean(graphInspector?.setParamValue(entry.nodeId, entry.path, value)),
   syncResetEdit: (entry, value) => {
     graphInteractionController?.syncCodeFromGraphEdit(entry, value);
@@ -239,11 +149,7 @@ graphInteractionController = createGraphInteractionController({
   afterBrowserFrame,
 });
 const sourceWorkspace = createSourceWorkspaceSession({
-  elements: {
-    documentNameInput,
-    dirtyIndicator,
-    saveButton: saveSourceButton,
-  },
+  elements: elements.sourceWorkspace,
   initialName: currentExample(activeExampleId).name,
   initialSource: sourceForExample(activeExampleId),
   initialPreview: currentPreviewProfile(),
@@ -255,11 +161,7 @@ const sourceWorkspace = createSourceWorkspaceSession({
   confirm: (message) => window.confirm(message),
 });
 const sourceWorkspaceActions = createSourceWorkspaceActions({
-  elements: {
-    dialog: sourceDialog,
-    list: sourceDialogList,
-    loadButton: loadSourceButton,
-  },
+  elements: elements.sourceWorkspaceActions,
   session: sourceWorkspace,
   activeExampleId: () => activeExampleId,
   setActiveExampleId: (id) => {
@@ -282,19 +184,19 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
 });
 
 browserSessionController.configure();
-configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
-apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
+configureGraphHistoryShortcutButtons(elements.graphHistory.undoButton, elements.graphHistory.redoButton);
+elements.apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
 updateSaveState();
 sourceWorkspaceActions.renderDialog();
 exposeAppHealthDiagnostics(appHealthDiagnostics);
 
-loadSourceButton.addEventListener("click", sourceWorkspaceActions.openDialog);
-saveSourceButton.addEventListener("click", sourceWorkspaceActions.saveCurrentSource);
-closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
-sourceDialog.addEventListener("click", (event) => {
-  if (event.target === sourceDialog) sourceDialog.close();
+elements.loadSourceButton.addEventListener("click", sourceWorkspaceActions.openDialog);
+elements.saveSourceButton.addEventListener("click", sourceWorkspaceActions.saveCurrentSource);
+elements.closeSourceDialogButton.addEventListener("click", () => elements.sourceDialog.close());
+elements.sourceDialog.addEventListener("click", (event) => {
+  if (event.target === elements.sourceDialog) elements.sourceDialog.close();
 });
-sourceDialog.addEventListener("close", () => {
+elements.sourceDialog.addEventListener("close", () => {
   sourceWorkspaceActions.restoreDialogFocus();
   afterBrowserFrame(sourceWorkspaceActions.restoreDialogFocus);
 });
@@ -322,16 +224,16 @@ void boot();
 
 async function boot(): Promise<void> {
   if (!hasWebGPU()) {
-    gpuBadge.textContent = "WebGL preview";
-    gpuBadge.classList.add("warn");
+    elements.gpuBadge.textContent = "WebGL preview";
+    elements.gpuBadge.classList.add("warn");
   } else {
-    gpuBadge.textContent = "WebGL + WebGPU";
-    gpuBadge.classList.add("ok");
+    elements.gpuBadge.textContent = "WebGL + WebGPU";
+    elements.gpuBadge.classList.add("ok");
   }
 
   try {
     previewViewport.initialize();
-    graphInspector = new GraphInspector(graphInspectorElement, {
+    graphInspector = new GraphInspector(elements.graphInspectorRoot, {
       onSelect: (node) => graphInteractionController?.selectNode(node),
       onHover: (node, options) => graphInteractionController?.handleGraphHover(node, options),
       onEdit: (edit) => graphInteractionController?.handleGraphEdit(edit),
@@ -344,7 +246,7 @@ async function boot(): Promise<void> {
     await previewViewport.renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
     codeEditor = createCodeEditor(
-      codeEditorElement,
+      elements.codeEditorRoot,
       sourceForExample(activeExampleId),
       sourceEditorController.scheduleCompile,
       (link, options) => graphInteractionController?.handleSourceLinkSelect(link, options),
@@ -369,9 +271,9 @@ async function boot(): Promise<void> {
     updateSaveState();
     browserSessionController.connect();
   } catch (error) {
-    gpuBadge.textContent = "Preview error";
-    gpuBadge.classList.add("warn");
-    overlay.textContent = error instanceof Error ? error.message : String(error);
+    elements.gpuBadge.textContent = "Preview error";
+    elements.gpuBadge.classList.add("warn");
+    elements.overlay.textContent = error instanceof Error ? error.message : String(error);
   }
 }
 
@@ -397,10 +299,10 @@ async function captureBrowserSessionState(): Promise<BrowserSessionCommandResult
   return {
     code: currentSourceValue(),
     sourceValid: editorSourceValid,
-    status: editorStatus.textContent ?? "",
+    status: elements.editorStatus.textContent ?? "",
     viewMode: previewViewport.viewMode,
     previewLayout: previewViewport.previewLayout,
-    screenshotDataUrl: canvas.toDataURL("image/png"),
+    screenshotDataUrl: elements.canvas.toDataURL("image/png"),
   };
 }
 
@@ -439,7 +341,7 @@ function compileEditorSource(
     graphInteractionController?.handleCompileError();
     editorSourceValid = false;
     setEditorStatus(diagnostic.message, "error");
-    overlay.textContent = `Code error: ${diagnostic.message}`;
+    elements.overlay.textContent = `Code error: ${diagnostic.message}`;
     return false;
   }
 }
@@ -451,10 +353,10 @@ function handleBeforeUnload(event: BeforeUnloadEvent): void {
 }
 
 function setEditorStatus(message: string, state: EditorStatusState): void {
-  editorStatus.textContent = message;
-  if (state === "idle") editorStatus.removeAttribute("data-state");
-  else editorStatus.dataset.state = state;
-  editorStatus.title = message;
+  elements.editorStatus.textContent = message;
+  if (state === "idle") elements.editorStatus.removeAttribute("data-state");
+  else elements.editorStatus.dataset.state = state;
+  elements.editorStatus.title = message;
 }
 
 function afterBrowserFrame(callback: () => void): void {
@@ -483,7 +385,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     activeSdfReady: Boolean(activeSdf),
     healthCheckMode,
     dirty: sourceWorkspace.hasUnsavedChanges,
-    status: editorStatus.textContent ?? "",
+    status: elements.editorStatus.textContent ?? "",
     sourceCompilePending: sourceEditorController.sourceCompilePending,
     sourceValid: editorSourceValid,
     viewMode: previewViewport.viewMode,
@@ -543,8 +445,8 @@ function updateSaveState(): void {
 function applyPreviewProfile(profile: PreviewProfile): void {
   previewBoundsController.applyProfileBounds(profile.bounds);
   graphInteractionController?.applyPendingHiddenNodeKeys(profile.hiddenNodeKeys ?? []);
-  previewViewport.applyRange(stepsInput, stepsOutput, profile.raySteps);
-  previewViewport.applyRange(gridInput, gridOutput, profile.meshGrid);
+  previewViewport.applyRange(elements.stepsInput, elements.stepsOutput, profile.raySteps);
+  previewViewport.applyRange(elements.gridInput, elements.gridOutput, profile.meshGrid);
   previewViewport.setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
   previewViewport.setPreviewLayout(profile.layout ?? "single", { recordChange: false });
 }

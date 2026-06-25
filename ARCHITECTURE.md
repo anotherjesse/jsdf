@@ -41,7 +41,7 @@ Important data types live in `web/src/core/nodes.ts`:
 
 ## Browser App Responsibilities
 
-`web/src/main.ts` is the browser app coordinator. It wires DOM controls, Monaco, graph inspection, renderers, mesh building, document persistence, and session commands.
+`web/src/main.ts` is the browser app coordinator. It wires typed app element groups, Monaco, graph inspection, renderers, mesh building, document persistence, and session commands.
 
 The major state buckets are:
 
@@ -56,6 +56,7 @@ The app is intentionally client-heavy: after the page loads, source evaluation, 
 
 Common editor interaction policy lives outside the coordinator where possible:
 
+- `web/src/editor/app-elements.ts` owns required DOM selector lookup and groups elements by the controller that consumes them.
 - `web/src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
