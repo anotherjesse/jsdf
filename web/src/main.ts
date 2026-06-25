@@ -3,7 +3,12 @@ import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
-import { exposeAppHealthDiagnostics, installAppHealthMonitor } from "./editor/app-health";
+import {
+  createAppHealthDiagnosticsReader,
+  exposeAppHealthDiagnostics,
+  installAppHealthMonitor,
+  type AppHealthDiagnosticsState,
+} from "./editor/app-health";
 import {
   configureEditorModeShortcutButtons,
   configureGraphHistoryShortcutButtons,
@@ -161,6 +166,20 @@ const healthCheckMode = new URLSearchParams(window.location.search).has("app-hea
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 let graphHintsEnabled = editorPreferences.graphHintsEnabled;
+const appHealthDiagnostics = createAppHealthDiagnosticsReader({
+  monitor: appHealthMonitor,
+  elements: {
+    selectionFocusButton,
+    prettifySourceButton,
+    loadSourceButton,
+    saveSourceButton,
+  },
+  shortcuts: {
+    prettify: SOURCE_PRETTIFY_SHORTCUT,
+    graphFilter: GRAPH_FILTER_SHORTCUTS,
+  },
+  readState: readAppHealthDiagnosticsState,
+});
 const browserSessionController = createBrowserSessionController({
   sessionId: activeBrowserSessionId,
   elements: {
@@ -1462,7 +1481,7 @@ function restoreSourceDialogFocus(): void {
   loadSourceButton.focus({ preventScroll: true });
 }
 
-function appHealthDiagnostics() {
+function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
   return {
     ready: Boolean(codeEditor && graphInspector && activeSdf && rayRenderer && meshRenderer),
     editorReady: Boolean(codeEditor),
@@ -1482,51 +1501,11 @@ function appHealthDiagnostics() {
     selectedSourceLink: selectedSourceLink
       ? selectedSourceLinkLabel(selectedSourceLink)
       : null,
-    selectionFocusLabel: selectionFocusButton.textContent?.trim() ?? "",
-    selectionFocusShortcut: selectionFocusButton.getAttribute("aria-keyshortcuts") ?? "",
-    selectionFocusVisible: !selectionFocusButton.hidden,
     sourceRevealedDecorations: codeEditor?.sourceDecorationCount("revealed") ?? 0,
     hiddenNodes: hiddenNodeIds.size,
     meshTriangles: mesh ? mesh.triangles.length : null,
     meshBuildPending: Boolean(meshBuildPromise),
-    hasPrettifyButton: Boolean(prettifySourceButton),
-    hasLoadButton: Boolean(loadSourceButton),
-    hasSaveButton: Boolean(saveSourceButton),
-    workspaceButtons: workspaceButtonLabels(),
-    workspaceButtonShortcuts: workspaceButtonShortcuts(),
-    prettifyShortcut: SOURCE_PRETTIFY_SHORTCUT,
-    graphFilterShortcut: GRAPH_FILTER_SHORTCUTS,
-    editorModeShortcuts: editorModeButtonShortcuts(),
-    graphActionButtons: graphActionButtonLabels(),
-    graphActionShortcuts: graphActionButtonShortcuts(),
-    recursiveDecorationWarnings: appHealthMonitor.recursiveDecorationWarnings,
-    lastRecursiveDecorationMessage: appHealthMonitor.lastRecursiveDecorationMessage,
   };
-}
-
-function workspaceButtonLabels(): string[] {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
-    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
-}
-
-function workspaceButtonShortcuts(): string[] {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-bar button"))
-    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
-}
-
-function editorModeButtonShortcuts(): string[] {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-toggle button"))
-    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
-}
-
-function graphActionButtonLabels(): string[] {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-actions button"))
-    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
-}
-
-function graphActionButtonShortcuts(): string[] {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>(".editor-actions button"))
-    .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
 }
 
 function currentBounds(): Bounds3 {

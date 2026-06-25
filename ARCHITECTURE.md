@@ -56,6 +56,7 @@ The app is intentionally client-heavy: after the page loads, source evaluation, 
 
 Common editor interaction policy lives outside the coordinator where possible:
 
+- `web/src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 
@@ -193,7 +194,7 @@ The app has focused verifier pages plus TypeScript checks:
 - `preview-check.html` checks shader and mesh preview rendering
 - `examples-visual-check.html` renders all bundled examples and checks for nonblank visual output
 
-Health diagnostics are exposed from `web/src/editor/app-health.ts` and assembled in `main.ts`.
+Health diagnostics are exposed and assembled from `web/src/editor/app-health.ts`, with app state read from `main.ts`.
 
 ## Extension Points
 
