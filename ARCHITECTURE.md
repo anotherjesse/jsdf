@@ -64,6 +64,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/app-frame.ts` owns browser-frame deferral helpers shared by app wiring, source dialog focus restoration, and session screenshot capture.
 - `src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
+- `src/editor/app-state-model.ts` owns derived app read-models for health diagnostics, preview rendering state, preview profile persistence, dirty-state updates, and before-unload checks.
 - `src/editor/browser-session-bridge.ts` owns app-specific browser-session command handlers for status reads, agent code updates, screenshot capture, and manual snapshot state.
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
