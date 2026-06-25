@@ -7,12 +7,13 @@ This document describes the active browser-native architecture for `sdf browser`
 `sdf browser` has two cooperating runtimes:
 
 - A Node/Vite session server in `session-server.mjs`
+- Node-only server helpers in `server/`
 - Static HTML/CSS shells in `static/`
 - A browser app in `src/` that owns editing, graph state, rendering, mesh generation, local saves, and browser-session command handling
 
 The server deliberately does not render or evaluate SDFs. It serves the app, routes session API requests, relays commands to the active browser tab over Server-Sent Events, and persists session snapshots under `.sessions/`.
 
-Vite serves `static/` as the web root, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells separate from implementation code and keeps `.sessions/` outside the served static root.
+Vite serves `static/` as the web root through `server/static-app.mjs`, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells separate from implementation code and keeps `.sessions/` outside the served static root.
 
 ```mermaid
 flowchart LR
@@ -169,6 +170,8 @@ Server-side responsibilities in `session-server.mjs`:
 - Persist snapshots under `.sessions/<session-id>/snapshots/<number>/`
 - Serve snapshot source and screenshot files
 - Restore earlier code snapshots through `/undo`
+
+The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code.
 
 Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, and `main.ts`:
 

@@ -106,6 +106,7 @@ curl -s "$BASE/connect.md"
 - [`src/editor/`](src/editor/) owns the editor, graph integration, diagnostics, and browser-session client.
 - [`src/workflow.ts`](src/workflow.ts) exposes `generate`, `save`, `sample_slice`, and `show_slice` helpers for browser workflows.
 - [`session-server.mjs`](session-server.mjs) serves the app and exposes the local session API.
+- [`server/`](server/) contains Node-only helpers for Vite/static serving and the generated session connection guide.
 - [`vite.config.ts`](vite.config.ts) uses `static/` as the Vite root and aliases `/src` to the TypeScript source tree.
 
 ## Checks
