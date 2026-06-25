@@ -70,6 +70,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/app-state-model.ts` owns derived app read-models for health diagnostics, preview rendering state, preview profile persistence, dirty-state updates, and before-unload checks.
 - `src/editor/browser-session-bridge.ts` owns app-specific browser-session command handlers for status reads, agent code updates, screenshot capture, and manual snapshot state.
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
+- `src/editor/code-editor-actions.ts` owns Monaco command/action registration and source-link keyboard nudge handling for the code editor.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
 - `src/editor/graph-inspector-toolbar.ts` owns the graph inspector toolbar DOM, filter input keyboard handling, match navigation controls, map toggle, hidden-node count, and summary labels.
@@ -94,7 +95,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 The editor and graph inspector stay connected through source links:
 
 - `editor/clean-source-patch.ts` finds links between source ranges and graph node params and reuses `editor/graph-param-model.ts` for orientation matrix recognition; `editor/graph-source-patch-table.ts` owns the declarative node-field to source-call argument mapping used by that patcher.
-- `editor/code-editor.ts` wires Monaco source-link interaction and reports selections or value edits; `editor/code-editor-source-decorations.ts` owns Monaco source-link decoration ranges/classes, `editor/source-link-status-bar.ts` owns the selected-link chip, navigation buttons, and numeric step controls shown inside the editor, and `editor/source-scrub-readout.ts` owns the floating numeric scrub readout.
+- `editor/code-editor.ts` wires Monaco source-link interaction and reports selections or value edits; `editor/code-editor-actions.ts` owns Monaco actions/keybindings, `editor/code-editor-source-decorations.ts` owns Monaco source-link decoration ranges/classes, `editor/source-link-status-bar.ts` owns the selected-link chip, navigation buttons, and numeric step controls shown inside the editor, and `editor/source-scrub-readout.ts` owns the floating numeric scrub readout.
 - `editor/graph-edit-model.ts` provides the shared edit/path model so source patching, graph history, and graph inspector UI do not import each other for data shapes.
 - `editor/graph-map-renderer.ts` renders the inspector's SVG overview map from a graph model while the inspector keeps authoritative selection, hover, and visibility state.
 - `editor/graph-param-model.ts` provides pure numeric-param and orientation-matrix helpers so the graph inspector can stay focused on rendering controls and handling DOM interaction.

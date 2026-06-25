@@ -3,6 +3,7 @@ import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.
 import "monaco-editor/min/vs/editor/editor.main.css";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import type { GraphSourceLink } from "./clean-source-patch";
+import { installCodeEditorActions } from "./code-editor-actions";
 import {
   clearSourceLinkDecorations,
   rangeForSourceLink,
@@ -527,62 +528,21 @@ export function createCodeEditor(
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
     scheduleCursorSourceLinkSync(event.position);
   });
-  const sourceNudgeSubscription = editor.onKeyDown((event) => {
-    const browserEvent = event.browserEvent;
-    const direction = sourceNudgeDirectionForKey(browserEvent.key);
-    if (!direction || !browserEvent.altKey || browserEvent.metaKey || browserEvent.ctrlKey) return;
-    if (!nudgeCurrentSourceLink(direction, { altKey: browserEvent.shiftKey, shiftKey: false })) return;
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  const prettifyAction = editor.addAction({
-    id: "sdf.prettifySource",
-    label: "Prettify SDF Source",
-    keybindings: [monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF],
-    contextMenuGroupId: "sdf",
-    contextMenuOrder: 1,
-    run() {
+  const editorActions = installCodeEditorActions(editor, {
+    onPrettify() {
       onPrettify();
     },
-  });
-  const quickFixAction = editor.addAction({
-    id: "sdf.applyPreferredQuickFix",
-    label: "Apply SDF Quick Fix",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Period],
-    contextMenuGroupId: "sdf",
-    contextMenuOrder: 0,
-    run() {
+    onQuickFix() {
       applyPreferredQuickFix();
     },
-  });
-  const nextSourceLinkAction = editor.addAction({
-    id: "sdf.nextSourceLink",
-    label: "Next SDF Source Link",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.DownArrow],
-    contextMenuGroupId: "sdf",
-    contextMenuOrder: 2,
-    run() {
-      selectAdjacentSourceLink(1);
+    onSelectAdjacentSourceLink(direction) {
+      selectAdjacentSourceLink(direction);
     },
-  });
-  const previousSourceLinkAction = editor.addAction({
-    id: "sdf.previousSourceLink",
-    label: "Previous SDF Source Link",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.UpArrow],
-    contextMenuGroupId: "sdf",
-    contextMenuOrder: 3,
-    run() {
-      selectAdjacentSourceLink(-1);
-    },
-  });
-  const revealSourceLinkInGraphAction = editor.addAction({
-    id: "sdf.revealSourceLinkInGraph",
-    label: "Reveal SDF Source Link in Graph",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.Enter],
-    contextMenuGroupId: "sdf",
-    contextMenuOrder: 4,
-    run() {
+    onRevealSourceLinkInGraph() {
       revealCurrentSourceLinkInGraph();
+    },
+    onNudgeSourceLink(direction, modifiers) {
+      return nudgeCurrentSourceLink(direction, modifiers);
     },
   });
   const leaveSubscription = editor.onMouseLeave((event) => {
@@ -739,12 +699,7 @@ export function createCodeEditor(
       linkSubscription.dispose();
       hoverSubscription.dispose();
       cursorSubscription.dispose();
-      sourceNudgeSubscription.dispose();
-      prettifyAction.dispose();
-      quickFixAction.dispose();
-      nextSourceLinkAction.dispose();
-      previousSourceLinkAction.dispose();
-      revealSourceLinkInGraphAction.dispose();
+      editorActions.dispose();
       leaveSubscription.dispose();
       deleteSourceInlayHintState();
       editor.dispose();
@@ -771,12 +726,6 @@ interface ActiveSourceScrub {
 
 function isScrubbableSourceLink(link: GraphSourceLink): boolean {
   return link.scrubbable !== false;
-}
-
-function sourceNudgeDirectionForKey(key: string): -1 | 1 | null {
-  if (key === "ArrowDown") return -1;
-  if (key === "ArrowUp") return 1;
-  return null;
 }
 
 let nextSourceEditSession = 1;
