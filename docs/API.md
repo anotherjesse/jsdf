@@ -17,6 +17,29 @@ Use arrays for vectors, for example `[x, y, z]`. Scalar sizes expand to all axes
 
 Unlike the original Python API, JavaScript cannot overload `|`, `&`, or `-`, so use `union`, `intersection`, `difference`, or the matching shape methods.
 
+## Reference Conventions
+
+The editor exposes the modeling API as globals, along with `Math`. You do not need imports inside the app. TypeScript code in this repository imports the same surface from [web/src/api](../web/src/api/index.ts), while package-style consumers can import from [web/src/index.ts](../web/src/index.ts).
+
+Most operations are available in both named and method form:
+
+```js
+const a = box([3, 3, 0.5]);
+const b = sphere();
+
+const byFunction = difference(a, b);
+const byMethod = a.difference(b);
+return byFunction;
+```
+
+When the Python API used keyword arguments, the JavaScript API usually uses an options object. For example, smooth CSG uses a trailing `{ k }` object:
+
+```js
+return union(box([3, 3, 0.5]), sphere(), { k: 0.25 });
+```
+
+The API keeps Python-style snake_case names for familiarity. Common multiword methods also have camelCase aliases, such as `rotateTo`, `circularArray`, `bendLinear`, `transitionRadial`, and `wrapAround`.
+
 ## Examples
 
 The app includes browser examples in [web/src/examples.ts](../web/src/examples.ts). These examples are also available from the example picker in the editor.
@@ -40,6 +63,59 @@ return shape;
 
 Editor snippets are evaluated synchronously, so return the `SDF3` immediately. Use promise callbacks for workflow helpers from editor code, or use `await` from a browser console or your own async JavaScript.
 
+### Bounds
+
+Bounds are estimated automatically and padded before sampling. Infinite primitives such as `plane`, `slab`, and `cylinder` need to be combined with finite shapes, or supplied explicit bounds for mesh generation.
+
+```js
+const f = intersection(sphere(), slab({ z0: -0.5, z1: 0.5 }));
+void save("slice.stl", f, {
+  bounds: [[-1.2, -1.2, -0.6], [1.2, 1.2, 0.6]],
+  grid: 96,
+  download: true,
+});
+return f;
+```
+
+### Resolution
+
+There are four ways to control sampling resolution. `grid` is the simplest, `dims` is explicit per axis, `step` follows physical spacing, and `samples` asks for an approximate total sample count.
+
+```js
+const f = rounded_box([1.8, 0.8, 0.35], 0.12);
+void generate(f, { grid: 80 });
+void generate(f, { dims: [96, 48, 32] });
+void generate(f, { step: [0.025, 0.025, 0.02] });
+void generate(f, { samples: 250000 });
+return f;
+```
+
+Use lower resolution while modeling, then increase it for final STL export.
+
+### Without Saving
+
+Generate a mesh directly when you want to inspect triangles, write your own exporter, or delay STL creation.
+
+```js
+const f = sphere();
+void generate(f, { grid: 72 }).then((mesh) => {
+  console.log(mesh.triangles.length);
+  console.log(mesh.bounds, mesh.dims);
+});
+return f;
+```
+
+If you already have a `MeshResult` or triangle list, `write_binary_stl` creates a `Blob` and can optionally trigger a download.
+
+```js
+const f = sphere();
+void generate(f, { grid: 72 }).then((mesh) => {
+  const blob = write_binary_stl("sphere.stl", mesh, { download: false });
+  console.log(blob.size);
+});
+return f;
+```
+
 Mesh options include:
 
 - `grid`: uniform grid resolution, defaulting to the app's mesh setting
@@ -50,6 +126,9 @@ Mesh options include:
 - `algorithm`: `"surface-net"` or `"tetra"`
 - `preferGPU`: use WebGPU sampling when available
 - `preferWorker`: polygonize in a Web Worker when available
+- `workers`: set to `1` to force main-thread polygonization
+
+The browser mesh path accepts `batch_size`, `batchSize`, `sparse`, and `verbose` for Python-option compatibility, but they do not currently change browser sampling behavior.
 
 ## Slices
 
@@ -89,6 +168,28 @@ return lid;
 ```
 
 <br clear="right">
+
+## How It Works
+
+`SDF2` and `SDF3` values are lightweight graph objects. A primitive such as `sphere()` creates a node; chaining methods such as `.translate(...)` or `.difference(...)` creates new nodes that point at earlier nodes. The preview, graph inspector, GLSL compiler, WGSL compiler, evaluator, and mesh generator all walk that graph.
+
+```js
+const base = rounded_box([2, 1, 0.25], 0.08);
+const holes = cylinder(0.12)
+  .orient(X)
+  .repeat([0, 0.55, 0], [0, 2, 0]);
+return base.difference(holes);
+```
+
+Most methods return a new `SDF2` or `SDF3`, so it is safe to keep intermediate variables. The exception is `.k(value)`, which marks an operand with a smoothing hint for the next CSG operation, matching the original Python idiom:
+
+```js
+const a = box([3, 3, 0.5]);
+const b = sphere().k(0.25);
+return a.union(b);
+```
+
+The browser API does not currently accept arbitrary JavaScript distance functions as custom primitives. Compose supported nodes instead so the renderer, graph inspector, source links, and mesh generator can all understand the model. The core graph objects live in [web/src/core/nodes.ts](../web/src/core/nodes.ts), and the exported modeling functions live in [web/src/api](../web/src/api/index.ts).
 
 # Function Reference
 
@@ -761,6 +862,21 @@ return f;
 ```
 
 `shape.generate(options)` and `shape.save(filename, options)` are method aliases.
+
+### write_binary_stl
+
+`write_binary_stl(filename, mesh, options = {}): Blob`
+
+`mesh` can be either a `MeshResult` from `generate` or a raw triangle array. By default this triggers a browser download; pass `{ download: false }` when you only want the `Blob`.
+
+```js
+const f = sphere();
+void generate(f, { grid: 72 }).then((mesh) => {
+  const blob = write_binary_stl("sphere.stl", mesh, { download: false });
+  console.log(blob.type, blob.size);
+});
+return f;
+```
 
 ### sample_slice
 
