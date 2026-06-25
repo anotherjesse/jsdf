@@ -59,6 +59,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `web/src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
+- `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 
 ## Source Links And Graph Editing
 
@@ -167,7 +168,7 @@ There are two persistence layers:
 - Browser workspace persistence in `localStorage`
 - Session snapshots on disk under `.sessions/`
 
-Workspace persistence is implemented in `web/src/editor/workspace-storage.ts`. It stores saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys.
+Workspace persistence is implemented in `web/src/editor/workspace-storage.ts`. It stores saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `web/src/editor/preview-profile.ts` prepares those preview settings for save/load and restores hidden graph nodes through stable source identities.
 
 Session snapshot persistence is implemented in `web/session-server.mjs`. Snapshot folders can contain:
 

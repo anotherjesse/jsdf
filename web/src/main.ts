@@ -32,15 +32,22 @@ import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./e
 import { prettifySource } from "./editor/prettify-source";
 import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
 import {
-  graphNodeIdentityKeyForNode,
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
-  sourceLinkForGraphNodeIdentityKey,
   sourceLinkForGraphNodeIdentity,
   sourceLinkForGraphSourceLinkIdentity,
   type GraphNodeSourceIdentity,
   type GraphSourceLinkIdentity,
 } from "./editor/graph-source-identity";
+import {
+  boundsForExample,
+  cloneBounds,
+  createPreviewProfile,
+  hiddenNodeIdsFromKeys,
+  hiddenNodeKeysForGraph,
+  previewProfileSnapshot,
+  type PreviewProfile,
+} from "./editor/preview-profile";
 import type { SoloPreview } from "./editor/solo-preview";
 import { renderSourceDialog } from "./editor/source-dialog";
 import { buildVisibleSdf } from "./editor/visible-sdf";
@@ -55,7 +62,6 @@ import {
   saveSourceDraft,
   saveSourceVersion,
   type SavedSourceDocument,
-  type SavedSourcePreview,
 } from "./editor/workspace-storage";
 import { currentExample, examples, supportedSummary, unsupportedPythonApi } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
@@ -116,9 +122,6 @@ const overlay = document.querySelector<HTMLElement>("#overlay")!;
 type RenderView = "shader" | "mesh";
 type EditorView = AppShortcutEditorView;
 type EditorStatusState = "idle" | "ok" | "pending" | "error";
-type PreviewProfile = SavedSourcePreview;
-
-const FALLBACK_BOUNDS: Bounds3 = [[-4, -4, -4], [4, 4, 4]];
 
 let rayRenderer: WebGLRaymarchRenderer | null = null;
 let meshRenderer: WebGLMeshRenderer | null = null;
@@ -208,7 +211,7 @@ boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
   onChange: handleBoundsChange,
   onInvalid: handleBoundsInvalid,
 });
-cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
+cleanPreviewSnapshot = previewProfileSnapshot(currentPreviewProfile());
 updateSourceHintsButton();
 updateSaveState();
 renderLoadDialog();
@@ -435,7 +438,7 @@ function loadSavedSourceById(documentId: string, versionId: string): void {
   loadSavedSource(loaded.document, loaded.version.id, loaded.version.source, loaded.version.preview);
 }
 
-function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string, preview?: SavedSourcePreview): void {
+function loadSavedSource(document: SavedSourceDocument, versionId: string, source: string, preview?: PreviewProfile): void {
   clearPendingSourceCompile();
   activeDocumentId = document.id;
   activeSourceVersionId = versionId;
@@ -1561,7 +1564,7 @@ function currentSourceValue(): string {
 function markSourceClean(source: string, name: string): void {
   cleanSourceSnapshot = source;
   cleanNameSnapshot = name;
-  cleanPreviewSnapshot = previewSnapshot(currentPreviewProfile());
+  cleanPreviewSnapshot = previewProfileSnapshot(currentPreviewProfile());
   updateSaveState();
 }
 
@@ -1577,7 +1580,7 @@ function detachDeletedSource(): void {
 function updateSaveState(): void {
   const nextDirty = currentSourceValue() !== cleanSourceSnapshot
     || currentDocumentName() !== cleanNameSnapshot
-    || previewSnapshot(currentPreviewProfile()) !== cleanPreviewSnapshot;
+    || previewProfileSnapshot(currentPreviewProfile()) !== cleanPreviewSnapshot;
   hasUnsavedChanges = nextDirty;
   saveSourceButton.disabled = !nextDirty || !boundsAreValid;
   dirtyIndicator.hidden = !nextDirty;
@@ -1656,53 +1659,18 @@ function handleBoundsInvalid(message: string): void {
 }
 
 function currentPreviewProfile(): PreviewProfile {
-  const hiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
-  return {
-    bounds: cloneBounds(activeBounds) as PreviewProfile["bounds"],
+  return createPreviewProfile({
+    bounds: activeBounds,
     meshGrid: Number(gridInput.value),
     raySteps: Number(stepsInput.value),
     meshAlgorithm,
     layout: previewLayout,
-    ...(hiddenNodeKeys.length > 0 ? { hiddenNodeKeys } : {}),
-  };
+    hiddenNodeKeys: hiddenNodeKeysForCurrentGraph(),
+  });
 }
 
 function hiddenNodeKeysForCurrentGraph(): string[] {
-  if (hiddenNodeIds.size === 0) return [...pendingHiddenNodeKeys].sort();
-  const keys = [...hiddenNodeIds]
-    .map((nodeId) => graphNodeIdentityKeyForNode(currentSourceLinks, nodeId))
-    .filter((key): key is string => key != null);
-  return [...new Set(keys)].sort();
-}
-
-function hiddenNodeIdsFromKeys(
-  keys: readonly string[],
-  links: readonly GraphSourceLink[],
-  sdf: SDF3,
-): number[] {
-  if (keys.length === 0) return [];
-  const wanted = new Set(keys);
-  const ids: number[] = [];
-  for (const key of wanted) {
-    const link = sourceLinkForGraphNodeIdentityKey(links, key);
-    if (link && link.nodeId !== sdf.node.id) ids.push(link.nodeId);
-  }
-  return [...new Set(ids)];
-}
-
-function previewSnapshot(profile: PreviewProfile): string {
-  return JSON.stringify(profile);
-}
-
-function boundsForExample(id: string): Bounds3 {
-  return cloneBounds((currentExample(id).bounds ?? FALLBACK_BOUNDS) as Bounds3);
-}
-
-function cloneBounds(bounds: Bounds3): Bounds3 {
-  return [
-    [bounds[0][0], bounds[0][1], bounds[0][2]],
-    [bounds[1][0], bounds[1][1], bounds[1][2]],
-  ];
+  return hiddenNodeKeysForGraph(hiddenNodeIds, pendingHiddenNodeKeys, currentSourceLinks);
 }
 
 function setRangeControl(input: HTMLInputElement, output: HTMLOutputElement, value: number): void {
