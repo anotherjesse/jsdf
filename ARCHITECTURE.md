@@ -66,6 +66,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
+- `src/editor/graph-param-model.ts` owns numeric param discovery, orientation matrix helpers, matrix cell paths, slider bounds, step sizing, and numeric formatting used by the graph inspector.
 - `src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
 - `src/editor/graph-interaction-controller.ts` owns graph/source-link selection, hover/focus/solo preview state, hidden-node state, source-link refresh, graph edit source sync, and graph-history interaction callbacks.
 - `src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
@@ -82,6 +83,7 @@ The editor and graph inspector stay connected through source links:
 - `editor/clean-source-patch.ts` finds links between source ranges and graph node params.
 - `editor/code-editor.ts` renders those links in Monaco and reports selections or value edits.
 - `editor/graph-edit-model.ts` provides the shared edit/path model so source patching, graph history, and graph inspector UI do not import each other for data shapes.
+- `editor/graph-param-model.ts` provides pure numeric-param and orientation-matrix helpers so the graph inspector can stay focused on rendering controls and handling DOM interaction.
 - `editor/graph-inspector.ts` shows the graph and allows node selection, visibility changes, solo/focus preview, and numeric param edits.
 - `editor/graph-history.ts` records graph edit undo/redo entries.
 - `editor/graph-history-controls.ts` connects that history model to toolbar controls, reset behavior, dirty graph highlights, and journal callbacks supplied by `main.ts`.

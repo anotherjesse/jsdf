@@ -1,5 +1,4 @@
 import type { Node, SDF3 } from "../core/nodes";
-import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
@@ -15,7 +14,22 @@ import {
   type ParamPath,
   type ParamValue,
 } from "./graph-edit-model";
-import { isCountParamLabel, isNonNegativeParamLabel, nudgeNumericParamValue, scrubNumericParamValue } from "./scrub-values";
+import {
+  ORIENTATION_AXES,
+  axisForMatrix,
+  cloneMatrix,
+  collectNumericParams,
+  formatParamNumber,
+  matricesClose,
+  matrixCellPaths,
+  matrixParam,
+  orientationMatrix,
+  rangeBoundsFor,
+  stepFor,
+  type NumericParam,
+  type OrientationAxis,
+} from "./graph-param-model";
+import { nudgeNumericParamValue, scrubNumericParamValue } from "./scrub-values";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 import { sourceLinksEqual } from "./source-link-matching";
 
@@ -1237,7 +1251,7 @@ export class GraphInspector {
         input.step = "0.01";
         input.min = "-1";
         input.max = "1";
-        input.value = formatValue(value);
+        input.value = formatParamNumber(value);
         input.setAttribute(
           "aria-label",
           `${formatNodeLabel(node)} orientation matrix row ${rowIndex + 1} column ${columnIndex + 1}`,
@@ -1348,7 +1362,7 @@ export class GraphInspector {
     const input = document.createElement("input");
     input.type = "number";
     input.step = String(stepFor(field));
-    input.value = formatValue(field.value);
+    input.value = formatParamNumber(field.value);
     input.setAttribute("aria-label", `${fieldLabel} value`);
 
     const range = document.createElement("input");
@@ -1372,9 +1386,9 @@ export class GraphInspector {
 
     const recenterRange = (value: number) => {
       const bounds = rangeBoundsFor(field, value);
-      range.min = formatValue(bounds.min);
-      range.max = formatValue(bounds.max);
-      range.value = formatValue(value);
+      range.min = formatParamNumber(bounds.min);
+      range.max = formatParamNumber(bounds.max);
+      range.value = formatParamNumber(value);
       minLabel.textContent = range.min;
       maxLabel.textContent = range.max;
     };
@@ -1400,11 +1414,11 @@ export class GraphInspector {
       if (typeof previousValue !== "number") return;
       if (previousValue === nextValue) return;
       setParamAtPath(node.params, field.path, nextValue);
-      input.value = formatValue(nextValue);
+      input.value = formatParamNumber(nextValue);
       if (options.recenterRange !== false) {
         recenterRange(nextValue);
       } else {
-        range.value = formatValue(nextValue);
+        range.value = formatParamNumber(nextValue);
       }
       this.options.onEdit({
         node,
@@ -1448,7 +1462,7 @@ export class GraphInspector {
       field,
       (value) => update(value, { clampToRange: true, recenterRange: false, editSessionId }),
       () => {
-        range.value = formatValue(Number(input.value));
+        range.value = formatParamNumber(Number(input.value));
         endEditSession();
       },
       beginEditSession,
@@ -1531,85 +1545,8 @@ export class GraphInspector {
   }
 }
 
-interface NumericParam {
-  label: string;
-  path: ParamPath;
-  value: number;
-}
-
-interface NumericRange {
-  min: number;
-  max: number;
-}
-
-type OrientationAxis = "x" | "y" | "z";
-
-const ORIENTATION_AXES: OrientationAxis[] = ["x", "y", "z"];
-const MATRIX_CELL_PATHS: ParamPath[] = [0, 1, 2].flatMap((row) => {
-  return [0, 1, 2].map((column) => ["matrix", row, column]);
-});
-
-function matrixCellPaths(): ParamPath[] {
-  return MATRIX_CELL_PATHS;
-}
-
-function collectNumericParams(params: Record<string, unknown>): NumericParam[] {
-  const out: NumericParam[] = [];
-  walkParams(params, [], out);
-  return out;
-}
-
 function filterTerms(filter: string): string[] {
   return filter.trim().toLowerCase().split(/\s+/).filter(Boolean);
-}
-
-function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void {
-  if (typeof value === "number") {
-    out.push({ label: formatParamPath(path), path: [...path], value });
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => walkParams(item, [...path, index], out));
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (key === "ease") continue;
-      walkParams(item, [...path, key], out);
-    }
-  }
-}
-
-function matrixParam(value: unknown): number[][] | null {
-  if (!Array.isArray(value) || value.length !== 3) return null;
-  const rows = value.map((row) => Array.isArray(row) ? row.map(Number) : []);
-  if (!rows.every((row) => row.length === 3 && row.every(Number.isFinite))) return null;
-  return rows;
-}
-
-function axisForMatrix(matrix: number[][] | null): OrientationAxis | "custom" {
-  if (!matrix) return "custom";
-  for (const axis of ORIENTATION_AXES) {
-    if (matricesClose(matrix, orientationMatrix(axis))) return axis;
-  }
-  return "custom";
-}
-
-function orientationMatrix(axis: OrientationAxis): number[][] {
-  const target = axis === "x" ? X : axis === "y" ? Y : Z;
-  return rotateToMatrix(UP, target);
-}
-
-function matricesClose(a: number[][], b: number[][]): boolean {
-  return a.length === b.length && a.every((row, rowIndex) => {
-    return row.length === b[rowIndex].length && row.every((value, columnIndex) => {
-      return Math.abs(value - b[rowIndex][columnIndex]) < 1e-9;
-    });
-  });
-}
-
-function cloneMatrix(matrix: number[][]): number[][] {
-  return matrix.map((row) => [...row]);
 }
 
 function findNode(root: Node, id: number, visited = new Set<number>()): Node | null {
@@ -1625,35 +1562,6 @@ function findNode(root: Node, id: number, visited = new Set<number>()): Node | n
 
 function formatNodeLabel(node: Node): string {
   return `${node.kind} #${node.id}`;
-}
-
-function formatValue(value: number): string {
-  return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(4).replace(/\.?0+$/, "");
-}
-
-function rangeBoundsFor(field: NumericParam, value: number): NumericRange {
-  const label = field.label.toLowerCase();
-  if (label.startsWith("matrix")) return { min: -1, max: 1 };
-
-  if (isCountParam(label)) {
-    const radius = Math.min(24, Math.max(4, Math.abs(value) * 0.5));
-    return {
-      min: Math.max(1, Math.floor(value - radius)),
-      max: Math.max(2, Math.ceil(value + radius)),
-    };
-  }
-
-  const radius = Math.min(4, Math.max(0.25, Math.abs(value) * 1.5));
-  const min = isNonNegativeParam(label) ? Math.max(0, value - radius) : value - radius;
-  return { min, max: value + radius };
-}
-
-function isCountParam(label: string): boolean {
-  return isCountParamLabel(label);
-}
-
-function isNonNegativeParam(label: string): boolean {
-  return isNonNegativeParamLabel(label);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1673,14 +1581,6 @@ function filterMatchDirectionForKey(event: KeyboardEvent): -1 | 1 | null {
   if (event.key === "ArrowDown") return 1;
   if (event.key === "ArrowUp") return -1;
   return null;
-}
-
-function stepFor(field: NumericParam): number {
-  if (isCountParam(field.label.toLowerCase())) return 1;
-  const size = Math.abs(field.value);
-  if (size >= 10) return 0.1;
-  if (size >= 1) return 0.01;
-  return 0.001;
 }
 
 function attachScrubber(
