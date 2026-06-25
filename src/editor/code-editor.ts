@@ -22,7 +22,8 @@ import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-
 import { sourcePathsEqual } from "./source-link-matching";
 import { adjacentSourceLink, navigableSourceLinks, sourceLinkNavigationKey } from "./source-link-navigation";
 import { nudgeSourceLinkValue, readSourceLinkNumber, scrubSourceLinkValue } from "./source-link-scrub";
-import { SourceLinkStatusBar, formatScrubReadoutValue, sourceLinkHoverMessage } from "./source-link-status-bar";
+import { SourceLinkStatusBar, sourceLinkHoverMessage } from "./source-link-status-bar";
+import { SourceScrubReadout } from "./source-scrub-readout";
 import type { ScrubModifiers } from "./scrub-values";
 
 export { sourceLinkHoverMessage, sourceLinkStatusText } from "./source-link-status-bar";
@@ -106,9 +107,7 @@ export function createCodeEditor(
     renderLineHighlight: "line",
     padding: { top: 10, bottom: 10 },
   });
-  const scrubReadout = document.createElement("div");
-  scrubReadout.className = "source-scrub-readout";
-  scrubReadout.setAttribute("aria-hidden", "true");
+  const scrubReadout = new SourceScrubReadout();
   const sourceLinkStatusBar = new SourceLinkStatusBar({
     onNavigate(direction) {
       selectAdjacentSourceLink(direction);
@@ -122,7 +121,7 @@ export function createCodeEditor(
       selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true });
     },
   });
-  editor.getDomNode()?.append(scrubReadout, sourceLinkStatusBar.element);
+  editor.getDomNode()?.append(scrubReadout.element, sourceLinkStatusBar.element);
 
   let suppress = false;
   let sourceLinks: readonly GraphSourceLink[] = [];
@@ -142,7 +141,6 @@ export function createCodeEditor(
   let keyboardNudgeSessionId: string | null = null;
   let keyboardNudgeLinkKey: string | null = null;
   let keyboardNudgeClearTimer = 0;
-  let scrubReadoutClearTimer = 0;
   let hoverClearTimer = 0;
   let cursorSyncFrame = 0;
   let cursorSyncFallbackTimer = 0;
@@ -155,8 +153,7 @@ export function createCodeEditor(
     if (!activeScrub) return;
     activeScrub = null;
     editor.getDomNode()?.classList.remove("source-scrubbing");
-    clearScrubReadoutTimer();
-    scrubReadout.removeAttribute("data-visible");
+    scrubReadout.hide();
     window.removeEventListener("mousemove", scrubMove);
     window.removeEventListener("mouseup", endScrub);
   };
@@ -198,32 +195,8 @@ export function createCodeEditor(
     }, SOURCE_HOVER_CLEAR_GRACE_MS);
   };
 
-  const clearScrubReadoutTimer = () => {
-    if (!scrubReadoutClearTimer) return;
-    window.clearTimeout(scrubReadoutClearTimer);
-    scrubReadoutClearTimer = 0;
-  };
-
-  const scheduleScrubReadoutClear = () => {
-    clearScrubReadoutTimer();
-    scrubReadoutClearTimer = window.setTimeout(() => {
-      scrubReadoutClearTimer = 0;
-      if (!activeScrub) scrubReadout.removeAttribute("data-visible");
-    }, 850);
-  };
-
-  const showScrubReadoutAt = (link: GraphSourceLink, value: number, left: number, top: number) => {
-    scrubReadout.textContent = `${link.label} ${formatScrubReadoutValue(value)}`;
-    scrubReadout.style.left = `${left}px`;
-    scrubReadout.style.top = `${top}px`;
-    scrubReadout.dataset.visible = "true";
-  };
-
   const updatePointerScrubReadout = (link: GraphSourceLink, value: number, event: MouseEvent) => {
-    const editorBounds = editor.getDomNode()?.getBoundingClientRect();
-    if (!editorBounds) return;
-    clearScrubReadoutTimer();
-    showScrubReadoutAt(link, value, event.clientX - editorBounds.left + 12, event.clientY - editorBounds.top - 28);
+    scrubReadout.showPointer(link, value, event, editor.getDomNode());
   };
 
   const updateKeyboardNudgeReadout = (link: GraphSourceLink, value: number) => {
@@ -235,15 +208,7 @@ export function createCodeEditor(
       column: range.startColumn,
     });
     if (!visiblePosition) return;
-    const maxLeft = Math.max(4, domNode.clientWidth - 110);
-    const maxTop = Math.max(4, domNode.clientHeight - 30);
-    showScrubReadoutAt(
-      link,
-      value,
-      clamp(visiblePosition.left + 12, 4, maxLeft),
-      clamp(visiblePosition.top - 28, 4, maxTop),
-    );
-    scheduleScrubReadoutClear();
+    scrubReadout.showKeyboard(link, value, visiblePosition, domNode, () => activeScrub != null);
   };
 
   const updateHover = (
@@ -911,7 +876,7 @@ export function createCodeEditor(
       endScrub();
       cancelCursorSourceLinkSync();
       clearKeyboardNudgeSession();
-      clearScrubReadoutTimer();
+      scrubReadout.hide();
       clearHoverTimer();
       cancelCursorSourceLinkSync();
       updateHover(null, false, { immediateClear: true });

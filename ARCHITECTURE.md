@@ -93,7 +93,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 The editor and graph inspector stay connected through source links:
 
 - `editor/clean-source-patch.ts` finds links between source ranges and graph node params.
-- `editor/code-editor.ts` renders those links in Monaco and reports selections or value edits; `editor/source-link-status-bar.ts` owns the selected-link chip, navigation buttons, and numeric step controls shown inside the editor.
+- `editor/code-editor.ts` renders those links in Monaco and reports selections or value edits; `editor/source-link-status-bar.ts` owns the selected-link chip, navigation buttons, and numeric step controls shown inside the editor, while `editor/source-scrub-readout.ts` owns the floating numeric scrub readout.
 - `editor/graph-edit-model.ts` provides the shared edit/path model so source patching, graph history, and graph inspector UI do not import each other for data shapes.
 - `editor/graph-map-renderer.ts` renders the inspector's SVG overview map from a graph model while the inspector keeps authoritative selection, hover, and visibility state.
 - `editor/graph-param-model.ts` provides pure numeric-param and orientation-matrix helpers so the graph inspector can stay focused on rendering controls and handling DOM interaction.
