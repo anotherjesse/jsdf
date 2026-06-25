@@ -35,7 +35,7 @@ The editor source is plain JavaScript executed with the SDF API and `Math` injec
 2. The source is executed with `new Function(...)`.
 3. The direct return value must be an `SDF3`. If no top-level return exists, `source-auto-return.ts` tries to return the final expression.
 4. API calls create an SDF graph of `Node` objects rather than immediately sampling geometry.
-5. `main.ts` stores the result as `activeSdf`; `graph-interaction-controller.ts` refreshes source links, updates the graph inspector, restores graph selection, and manages graph-visible state. The preview viewport then invalidates mesh state and schedules a shader preview.
+5. `source-compile-controller.ts` stores the current valid `activeSdf`; `graph-interaction-controller.ts` refreshes source links, updates the graph inspector, restores graph selection, and manages graph-visible state. The preview viewport then invalidates mesh state and schedules a shader preview.
 
 Important data types live in `src/core/nodes.ts`:
 
@@ -71,7 +71,8 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `src/editor/graph-interaction-controller.ts` owns graph/source-link selection, hover/focus/solo preview state, hidden-node state, source-link refresh, graph edit source sync, and graph-history interaction callbacks.
 - `src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
 - `src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
-- `src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; `main.ts` supplies the actual compile callback.
+- `src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; compile execution is delegated to `source-compile-controller.ts` through app wiring.
+- `src/editor/source-compile-controller.ts` owns source evaluation, source-link discovery for compiled graphs, active SDF validity, diagnostic failure handling, and preview invalidation after successful compiles.
 - `src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.
 - `src/editor/source-workspace-actions.ts` owns source load dialog rendering, example/saved-source load commands, save/delete commands, and draft restoration; `main.ts` supplies callbacks for graph, bounds, preview, and compilation side effects.
 - `src/preview/preview-viewport-controller.ts` owns preview renderers, shader/mesh mode controls, preview layout labels, step/grid controls, mesh job state, STL download state, and debounced render scheduling; `main.ts` supplies the current graph, bounds, document name, and highlight policy.

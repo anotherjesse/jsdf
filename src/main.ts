@@ -1,7 +1,4 @@
-import type { SDF3 } from "./core/nodes";
-import { findGraphSourceLinks } from "./editor/clean-source-patch";
 import type { CodeEditor } from "./editor/code-editor";
-import { evaluateSource } from "./editor/evaluate-source";
 import {
   createAppHealthDiagnosticsReader,
   exposeAppHealthDiagnostics,
@@ -31,11 +28,10 @@ import {
 } from "./editor/graph-interaction-controller";
 import { createGraphHistoryController } from "./editor/graph-history-controls";
 import { GraphInspector } from "./editor/graph-inspector";
-import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
+import { createSourceCompileController } from "./editor/source-compile-controller";
 import {
   createSourceEditorController,
   type EditorStatusState,
-  type SourceCompileOptions,
 } from "./editor/source-editor-controller";
 import {
   boundsForExample,
@@ -60,22 +56,34 @@ const elements = queryAppElements();
 let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
 let graphInteractionController: GraphInteractionController | null = null;
-let activeSdf: SDF3 | null = null;
 let activeExampleId = examples[0]?.id ?? "canonical";
-let editorSourceValid = true;
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
+const previewViewport = createPreviewViewportController({
+  elements: elements.previewViewport,
+  readState: readPreviewViewportState,
+  onPreviewSettingsChange: updateSaveState,
+});
+const sourceCompileController = createSourceCompileController({
+  overlay: elements.overlay,
+  codeEditor: () => codeEditor,
+  fallbackSource: () => sourceForExample(activeExampleId),
+  graphInteraction: () => graphInteractionController,
+  previewViewport,
+  updateSaveState,
+  setEditorStatus,
+});
 const sourceEditorController = createSourceEditorController({
   elements: elements.sourceEditor,
   initialGraphHintsEnabled: editorPreferences.graphHintsEnabled,
   codeEditor: () => codeEditor,
-  sourceValid: () => editorSourceValid,
+  sourceValid: () => sourceCompileController.sourceValid,
   preserveHiddenNodeKeys: () => graphInteractionController?.preserveHiddenNodeKeys(),
   clearSourceLinks: () => graphInteractionController?.clearSourceLinks(),
   updateSaveState,
-  compileSource: compileEditorSource,
+  compileSource: sourceCompileController.compile,
   setEditorStatus,
   savePreferences: saveEditorPreferences,
 });
@@ -89,15 +97,10 @@ const editorViewController = createEditorViewController({
   revealGraphSource: (link) => graphInteractionController?.revealGraphSource(link),
   revealSourceLinkInGraph: (link) => graphInteractionController?.handleSourceLinkSelect(link, { revealGraph: true }),
 });
-const previewViewport = createPreviewViewportController({
-  elements: elements.previewViewport,
-  readState: readPreviewViewportState,
-  onPreviewSettingsChange: updateSaveState,
-});
 const previewBoundsController = createPreviewBoundsController({
   elements: elements.previewBounds,
   initialBounds: boundsForExample(activeExampleId),
-  readActiveSdf: () => activeSdf,
+  readActiveSdf: () => sourceCompileController.activeSdf,
   updateSaveState,
   setEditorStatus,
   invalidatePreview: invalidatePreviewForBoundsChange,
@@ -140,7 +143,7 @@ const graphHistoryController = createGraphHistoryController({
 graphInteractionController = createGraphInteractionController({
   codeEditor: () => codeEditor,
   graphInspector: () => graphInspector,
-  activeSdf: () => activeSdf,
+  activeSdf: () => sourceCompileController.activeSdf,
   editorView: editorViewController,
   previewViewport,
   graphHistory: graphHistoryController,
@@ -173,7 +176,7 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
   clearPendingHiddenNodeKeys: () => graphInteractionController?.clearPendingHiddenNodeKeys(),
   resetLoadedSourceState: () => graphInteractionController?.resetLoadedSourceState(),
   clearPendingSourceCompile: sourceEditorController.clearPendingCompile,
-  compileSource: compileEditorSource,
+  compileSource: sourceCompileController.compile,
   currentSourceCompilesForSave: sourceEditorController.currentSourceCompilesForSave,
   currentDocumentName,
   currentPreviewProfile,
@@ -242,7 +245,7 @@ async function boot(): Promise<void> {
       onSourceHover: (link) => graphInteractionController?.handleGraphSourceHover(link),
       onVisibilityChange: (hiddenIds) => graphInteractionController?.handleGraphVisibilityChange(hiddenIds),
     });
-    compileEditorSource({ status: "Ready", statusState: "idle", invalidateMesh: false });
+    sourceCompileController.compile({ status: "Ready", statusState: "idle", invalidateMesh: false });
     await previewViewport.renderCurrent();
     const { createCodeEditor } = await import("./editor/code-editor");
     codeEditor = createCodeEditor(
@@ -257,15 +260,7 @@ async function boot(): Promise<void> {
     );
     sourceEditorController.applyGraphHintsToEditor();
     if (healthCheckMode || !sourceWorkspaceActions.restoreDraft()) {
-      const source = codeEditor.getValue();
-      if (activeSdf) {
-        graphInteractionController?.applyCompiledGraph({
-          source,
-          sdf: activeSdf,
-          sourceLinks: findGraphSourceLinks(source, activeSdf),
-          previousSelection: { source: null, node: null },
-        });
-      }
+      sourceCompileController.refreshCurrentGraph();
     }
     sourceWorkspace.setDraftPersistenceEnabled(!healthCheckMode);
     updateSaveState();
@@ -290,7 +285,7 @@ async function applyBrowserSessionCode(code: string, comment: string): Promise<B
   graphInteractionController?.preserveHiddenNodeKeys();
   codeEditor?.setValue(code);
   updateSaveState();
-  compileEditorSource({ status: comment ? "Agent update" : "Agent update" });
+  sourceCompileController.compile({ status: comment ? "Agent update" : "Agent update" });
   return captureBrowserSessionState();
 }
 
@@ -298,7 +293,7 @@ async function captureBrowserSessionState(): Promise<BrowserSessionCommandResult
   await renderShaderPreviewForSession();
   return {
     code: currentSourceValue(),
-    sourceValid: editorSourceValid,
+    sourceValid: sourceCompileController.sourceValid,
     status: elements.editorStatus.textContent ?? "",
     viewMode: previewViewport.viewMode,
     previewLayout: previewViewport.previewLayout,
@@ -307,43 +302,11 @@ async function captureBrowserSessionState(): Promise<BrowserSessionCommandResult
 }
 
 async function renderShaderPreviewForSession(): Promise<void> {
-  await previewViewport.renderShaderPreviewForSession(editorSourceValid, waitForBrowserFrame);
+  await previewViewport.renderShaderPreviewForSession(sourceCompileController.sourceValid, waitForBrowserFrame);
 }
 
 function waitForBrowserFrame(): Promise<void> {
   return new Promise((resolve) => afterBrowserFrame(resolve));
-}
-
-function compileEditorSource(
-  options: SourceCompileOptions = { status: "Compiled" },
-): boolean {
-  const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
-  const previousSelection = graphInteractionController?.captureSelectionIdentity() ?? { source: null, node: null };
-  try {
-    const { sdf } = evaluateSource(source);
-    const sourceLinks = findGraphSourceLinks(source, sdf);
-    editorSourceValid = true;
-    activeSdf = sdf;
-    graphInteractionController?.applyCompiledGraph({
-      source,
-      sdf,
-      sourceLinks,
-      previousSelection,
-    });
-    setEditorStatus(options.status, options.statusState ?? "ok");
-    if (options.invalidateMesh !== false) previewViewport.invalidateMeshForActiveSdf();
-    updateSaveState();
-    previewViewport.schedulePreview(0);
-    return true;
-  } catch (error) {
-    const diagnostic = sourceDiagnosticFromError(error, source);
-    codeEditor?.setError(diagnostic);
-    graphInteractionController?.handleCompileError();
-    editorSourceValid = false;
-    setEditorStatus(diagnostic.message, "error");
-    elements.overlay.textContent = `Code error: ${diagnostic.message}`;
-    return false;
-  }
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
@@ -379,15 +342,15 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     hiddenNodes: 0,
   };
   return {
-    ready: Boolean(codeEditor && graphInspector && activeSdf && previewViewport.ready),
+    ready: Boolean(codeEditor && graphInspector && sourceCompileController.activeSdf && previewViewport.ready),
     editorReady: Boolean(codeEditor),
     graphReady: Boolean(graphInspector),
-    activeSdfReady: Boolean(activeSdf),
+    activeSdfReady: Boolean(sourceCompileController.activeSdf),
     healthCheckMode,
     dirty: sourceWorkspace.hasUnsavedChanges,
     status: elements.editorStatus.textContent ?? "",
     sourceCompilePending: sourceEditorController.sourceCompilePending,
-    sourceValid: editorSourceValid,
+    sourceValid: sourceCompileController.sourceValid,
     viewMode: previewViewport.viewMode,
     editorView: editorViewController.view,
     previewLayout: previewViewport.previewLayout,
@@ -417,7 +380,7 @@ function readPreviewViewportState(): PreviewViewportState {
     hasSoloPreview: false,
   };
   return {
-    activeSdf,
+    activeSdf: sourceCompileController.activeSdf,
     visibleSdf: graphPreviewState.visibleSdf,
     renderSdf: graphPreviewState.renderSdf,
     bounds: currentBounds(),
@@ -435,7 +398,7 @@ function currentDocumentName(): string {
 }
 
 function currentSourceValue(): string {
-  return codeEditor?.getValue() ?? sourceForExample(activeExampleId);
+  return sourceCompileController.currentSource();
 }
 
 function updateSaveState(): void {
