@@ -61,6 +61,7 @@ Common editor interaction policy lives outside the coordinator where possible:
 - `web/src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `web/src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `web/src/editor/graph-history-controls.ts` owns graph history button state, undo/redo/reset orchestration, dirty-param publishing, and the graph change journal shell.
+- `web/src/editor/preview-bounds-controller.ts` owns preview bounds state, bounds editor validity, example/profile bounds application, and fit-to-SDF behavior.
 - `web/src/editor/preview-profile.ts` owns saved preview profile construction, snapshot comparison, bounds cloning, and hidden-node identity mapping.
 - `web/src/editor/source-editor-controller.ts` owns source-editor commands around graph hints, prettify, source-link clearing during edits, and debounced compile scheduling; `main.ts` supplies the actual compile callback.
 - `web/src/editor/source-workspace-session.ts` owns active source document identity, document-name UI state, dirty/save state, and draft persistence.

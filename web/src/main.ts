@@ -1,5 +1,4 @@
 import type { Node, SDF3 } from "./core/nodes";
-import { createBoundsEditor, type BoundsEditor } from "./editor/bounds-editor";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./editor/clean-source-patch";
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, SourceLinkValueChangeOptions } from "./editor/code-editor";
 import { evaluateSource } from "./editor/evaluate-source";
@@ -44,13 +43,13 @@ import {
 } from "./editor/graph-source-identity";
 import {
   boundsForExample,
-  cloneBounds,
   createPreviewProfile,
   hiddenNodeIdsFromKeys,
   hiddenNodeKeysForGraph,
   previewProfileSnapshot,
   type PreviewProfile,
 } from "./editor/preview-profile";
+import { createPreviewBoundsController } from "./editor/preview-bounds-controller";
 import type { SoloPreview } from "./editor/solo-preview";
 import {
   graphNodeLabel,
@@ -65,7 +64,7 @@ import { buildVisibleSdf } from "./editor/visible-sdf";
 import { supportedSummary, unsupportedOriginalApi } from "./api/completeness";
 import { currentExample, examples } from "./examples";
 import { hasWebGPU } from "./gpu/webgpu";
-import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
+import type { Bounds3 } from "./mesh/bounds";
 import {
   createPreviewViewportController,
   type RenderHighlight,
@@ -130,10 +129,7 @@ let hiddenNodeIds = new Set<number>();
 let currentSourceLinks: readonly GraphSourceLink[] = [];
 let selectedSourceLink: GraphSourceLink | null = null;
 let pendingHiddenNodeKeys: readonly string[] = [];
-let boundsEditor: BoundsEditor | null = null;
 let activeExampleId = examples[0]?.id ?? "canonical";
-let activeBounds = boundsForExample(activeExampleId);
-let boundsAreValid = true;
 let graphHistoryHoverKey: string | null = null;
 let editorSourceValid = true;
 const appHealthMonitor = installAppHealthMonitor();
@@ -197,6 +193,18 @@ const previewViewport = createPreviewViewportController({
   },
   readState: readPreviewViewportState,
   onPreviewSettingsChange: updateSaveState,
+});
+const previewBoundsController = createPreviewBoundsController({
+  elements: {
+    root: boundsEditorElement,
+    fitButton: fitBoundsButton,
+    overlay,
+  },
+  initialBounds: boundsForExample(activeExampleId),
+  readActiveSdf: () => activeSdf,
+  updateSaveState,
+  setEditorStatus,
+  invalidatePreview: invalidatePreviewForBoundsChange,
 });
 const appHealthDiagnostics = createAppHealthDiagnosticsReader({
   monitor: appHealthMonitor,
@@ -262,7 +270,7 @@ const sourceWorkspace = createSourceWorkspaceSession({
   currentPreview: currentPreviewProfile,
   previewSnapshot: previewProfileSnapshot,
   activeExampleId: () => activeExampleId,
-  canSave: () => boundsAreValid,
+  canSave: () => previewBoundsController.valid,
   confirm: (message) => window.confirm(message),
 });
 const sourceWorkspaceActions = createSourceWorkspaceActions({
@@ -277,7 +285,7 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
     activeExampleId = id;
   },
   codeEditor: () => codeEditor,
-  applyExampleBounds,
+  applyExampleBounds: (id) => previewBoundsController.applyExampleBounds(id),
   applyPreviewProfile,
   clearPendingHiddenNodeKeys: () => {
     pendingHiddenNodeKeys = [];
@@ -288,7 +296,7 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
   currentSourceCompilesForSave: sourceEditorController.currentSourceCompilesForSave,
   currentDocumentName,
   currentPreviewProfile,
-  boundsAreValid: () => boundsAreValid,
+  boundsAreValid: () => previewBoundsController.valid,
   setEditorStatus,
   afterBrowserFrame,
   confirm: (message) => window.confirm(message),
@@ -297,15 +305,10 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
 browserSessionController.configure();
 configureGraphHistoryShortcutButtons(undoGraphButton, redoGraphButton);
 apiStat.textContent = `${Object.values(supportedSummary).reduce((a, b) => a + b, 0)} supported; excludes ${unsupportedOriginalApi.length}`;
-boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
-  onChange: handleBoundsChange,
-  onInvalid: handleBoundsInvalid,
-});
 updateSaveState();
 sourceWorkspaceActions.renderDialog();
 exposeAppHealthDiagnostics(appHealthDiagnostics);
 
-fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
 loadSourceButton.addEventListener("click", sourceWorkspaceActions.openDialog);
 saveSourceButton.addEventListener("click", sourceWorkspaceActions.saveCurrentSource);
 closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
@@ -876,7 +879,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
 }
 
 function currentBounds(): Bounds3 {
-  return activeBounds;
+  return previewBoundsController.bounds;
 }
 
 function visibleActiveSdf(): SDF3 | null {
@@ -911,12 +914,6 @@ function updateSaveState(): void {
   sourceWorkspace.updateSaveState();
 }
 
-function applyExampleBounds(id: string): void {
-  activeBounds = boundsForExample(id);
-  boundsAreValid = true;
-  boundsEditor?.setBounds(activeBounds);
-}
-
 function resetLoadedSourceState(): void {
   selectedNode = null;
   selectedSourceLink = null;
@@ -925,60 +922,23 @@ function resetLoadedSourceState(): void {
   hiddenNodeIds = new Set();
 }
 
-function fitBoundsToCurrentSdf(): void {
-  if (!activeSdf) {
-    setEditorStatus("Fix code before fitting bounds", "error");
-    return;
-  }
-
-  fitBoundsButton.disabled = true;
-  boundsEditor?.setDisabled(true);
-  overlay.textContent = "Fitting bounds...";
-  try {
-    activeBounds = paddedBounds(estimateBounds(activeSdf));
-    boundsAreValid = true;
-    boundsEditor?.setBounds(activeBounds);
-    updateSaveState();
-    setEditorStatus("Fit bounds", "ok");
-    previewViewport.invalidateMeshForActiveSdf();
-    previewViewport.schedulePreview(0);
-  } catch (error) {
-    setEditorStatus(error instanceof Error ? error.message : String(error), "error");
-  } finally {
-    fitBoundsButton.disabled = false;
-    boundsEditor?.setDisabled(false);
-  }
-}
-
 function applyPreviewProfile(profile: PreviewProfile): void {
-  activeBounds = cloneBounds(profile.bounds);
-  boundsAreValid = true;
+  previewBoundsController.applyProfileBounds(profile.bounds);
   pendingHiddenNodeKeys = profile.hiddenNodeKeys ?? [];
-  boundsEditor?.setBounds(activeBounds);
   previewViewport.applyRange(stepsInput, stepsOutput, profile.raySteps);
   previewViewport.applyRange(gridInput, gridOutput, profile.meshGrid);
   previewViewport.setMeshAlgorithmMode(profile.meshAlgorithm, { rebuild: false });
   previewViewport.setPreviewLayout(profile.layout ?? "single", { recordChange: false });
 }
 
-function handleBoundsChange(bounds: Bounds3): void {
-  activeBounds = cloneBounds(bounds);
-  boundsAreValid = true;
-  updateSaveState();
-  setEditorStatus("Bounds updated", "ok");
+function invalidatePreviewForBoundsChange(): void {
   previewViewport.invalidateMeshForActiveSdf();
   previewViewport.schedulePreview(0);
 }
 
-function handleBoundsInvalid(message: string): void {
-  boundsAreValid = false;
-  updateSaveState();
-  setEditorStatus(message, "error");
-}
-
 function currentPreviewProfile(): PreviewProfile {
   return createPreviewProfile({
-    bounds: activeBounds,
+    bounds: previewBoundsController.bounds,
     meshGrid: previewViewport.meshGrid,
     raySteps: previewViewport.raySteps,
     meshAlgorithm: previewViewport.meshAlgorithm,
