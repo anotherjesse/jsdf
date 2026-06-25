@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderConnectMarkdown } from "./server/connect-markdown.mjs";
+import { handleMcpSessionRoute } from "./server/mcp-session.mjs";
 import { createStaticAppServer } from "./server/static-app.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,7 @@ const snapshotIdPattern = /^\d{6}$/;
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const commandTimeoutMs = 30000;
 const bodyLimitBytes = 50 * 1024 * 1024;
+const appVersion = "0.1.0";
 
 const sessions = new Map();
 
@@ -91,6 +93,23 @@ async function handleSessionRoute(req, res, url, route) {
   }
 
   const session = ensureSession(sessionId);
+
+  if (tail.length === 1 && tail[0] === "mcp") {
+    const targetClientId = url.searchParams.get("client") || null;
+    await handleMcpSessionRoute(req, res, {
+      sessionId,
+      version: appVersion,
+      origin: requestOrigin(req),
+      connectedClients: () => session.clients.size,
+      projectSummary: () => readProjectSummary(session.id, req),
+      sessionSummary: () => sessionSummary(session),
+      listSnapshots: () => listSnapshots(session.id, req),
+      sendCommand: (type, payload) => sendCommand(session, type, payload, { clientId: targetClientId }),
+      writeSnapshot: (data) => writeSnapshot(session, data, req),
+      restoreSnapshot: (snapshotId, comment) => restoreSnapshotState(session, snapshotId, comment, targetClientId, req),
+    });
+    return;
+  }
 
   if (req.method === "GET" && tail.length === 1 && tail[0] === "connect.md") {
     sendText(
@@ -396,14 +415,24 @@ async function createSnapshot(req, res, session) {
 }
 
 async function restoreSnapshot(req, res, session, snapshotId) {
+  const body = await readOptionalJson(req);
+  const clientId = typeof body?.clientId === "string" ? body.clientId : null;
+  await sendJson(res, await restoreSnapshotState(
+    session,
+    snapshotId,
+    body?.comment || `Restoring snapshot ${snapshotId} as latest.`,
+    clientId,
+    req,
+  ));
+}
+
+async function restoreSnapshotState(session, snapshotId, commentInput, clientId, req) {
   validateSnapshotId(snapshotId);
   const target = await readSnapshotMetadata(session.id, snapshotId, req);
   if (!target.codeUrl) throw httpError(409, "Snapshot has no source code to restore.");
 
-  const body = await readOptionalJson(req);
   const code = await readSnapshotCode(session.id, snapshotId);
-  const comment = semanticComment(body?.comment || `Restoring snapshot ${snapshotId} as latest.`);
-  const clientId = typeof body?.clientId === "string" ? body.clientId : null;
+  const comment = semanticComment(commentInput);
   const result = await sendCommand(session, "set-code", {
     code,
     comment,
@@ -419,13 +448,13 @@ async function restoreSnapshot(req, res, session, snapshotId) {
     restoredSnapshotId: snapshotId,
   }, req);
 
-  await sendJson(res, {
+  return {
     ok: true,
     restoredSnapshot: target,
     snapshot,
     sourceValid: Boolean(result?.sourceValid),
     status: String(result?.status ?? ""),
-  });
+  };
 }
 
 async function undoCode(req, res, session) {

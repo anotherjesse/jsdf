@@ -64,6 +64,7 @@ Common commands:
 ```sh
 BASE="http://127.0.0.1:5173/api/sessions/<session-id>"
 PROJECTS="http://127.0.0.1:5173/api/projects"
+MCP_URL="$BASE/mcp"
 
 curl -s "$PROJECTS"
 curl -s "$BASE/status"
@@ -92,6 +93,8 @@ Fetch the generated connection guide for the exact session:
 ```sh
 curl -s "$BASE/connect.md"
 ```
+
+You can also add the session to an MCP client with the Streamable HTTP URL in `MCP_URL`. The session id stays in the URL, so each MCP connection controls one project/session through the live browser tab.
 
 Restore a specific older snapshot as the current latest editor state:
 

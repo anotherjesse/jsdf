@@ -190,6 +190,7 @@ Server-side responsibilities in `session-server.mjs`:
 - List, create, and rename user-facing projects through `/api/projects`
 - Serve `/s/<session-id>` app pages
 - Expose `/api/sessions/<session-id>/connect.md`
+- Expose `/api/sessions/<session-id>/mcp` for Streamable HTTP MCP clients
 - Maintain connected browser clients through `GET /events`
 - Relay commands with timeout handling
 - Persist snapshots under `.sessions/<session-id>/snapshots/<number>/`
@@ -197,7 +198,7 @@ Server-side responsibilities in `session-server.mjs`:
 - Restore a chosen snapshot as the latest state through `/snapshots/:snapshot-id/restore`
 - Restore earlier code snapshots through `/undo`
 
-The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code.
+The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code. The MCP JSON-RPC adapter lives in `server/mcp-session.mjs`; it binds one MCP endpoint to one session id and reuses the same command relay and snapshot persistence paths as the REST API.
 
 Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, `src/editor/browser-session-bridge.ts`, snapshot helpers, and `main.ts`:
 

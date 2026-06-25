@@ -10,6 +10,7 @@ Prefer comments that explain why you are taking an action, or what you are check
 \`\`\`sh
 BASE=${JSON.stringify(base)}
 PROJECTS=${JSON.stringify(projectBase)}
+MCP_URL="$BASE/mcp"
 
 # List local projects/sessions and their latest thumbnails.
 curl -s "$PROJECTS"
@@ -47,6 +48,16 @@ curl -sS -X POST "$BASE/undo" \\
   -H 'content-type: application/json' \\
   -d '{"comment":"Backtracking to the last readable version before trying a smaller fillet."}'
 \`\`\`
+
+## MCP Connection
+
+This same session can be added to an MCP client using Streamable HTTP:
+
+\`\`\`text
+${base}/mcp
+\`\`\`
+
+The MCP URL is session-specific. It exposes tools for status, reading code, setting code, capturing screenshots, listing snapshots, and restoring a snapshot as latest. Keep the matching \`/s/${sessionId}\` browser tab open; the tab still compiles, renders, and reports screenshots.
 
 The session id is the local capability for this workspace. There is no separate secret in this first version.
 
