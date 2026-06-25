@@ -15,6 +15,7 @@ export interface AppKeyboardShortcutActions {
   revealSelectedTarget(): void;
   setEditorView(mode: AppShortcutEditorView): void;
   focusGraphFilter(): void;
+  sourceHintsAvailable(): boolean;
   toggleSourceHints(): void;
   prettifySource(): void;
   openSourceDialog(): void;
@@ -71,6 +72,7 @@ function handleAppKeyboardShortcut(event: KeyboardEvent, actions: AppKeyboardSho
   }
 
   if (isSourceHintsShortcut(event)) {
+    if (!actions.sourceHintsAvailable()) return;
     event.preventDefault();
     if (!event.repeat) actions.toggleSourceHints();
     return;

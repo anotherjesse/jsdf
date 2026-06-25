@@ -65,6 +65,7 @@ async function startApp(): Promise<void> {
   const appHealthMonitor = installAppHealthMonitor();
   const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
   const editorPreferences = loadEditorPreferences();
+  const editorAdvancedFeatures = editorPreferences.editorMode === "advanced";
   const browserSessionId = sessionIdFromLocation();
   const projectInitialState = await loadProjectInitialState(browserSessionId);
   const initialDocumentName = projectInitialState?.name ?? currentExample(activeExampleId).name;
@@ -85,6 +86,7 @@ async function startApp(): Promise<void> {
   });
   const sourceEditorController = createSourceEditorController({
     elements: elements.sourceEditor,
+    advancedEditorFeatures: editorAdvancedFeatures,
     initialGraphHintsEnabled: editorPreferences.graphHintsEnabled,
     codeEditor: () => codeEditor,
     sourceValid: () => sourceCompileController.sourceValid,
@@ -272,6 +274,7 @@ async function startApp(): Promise<void> {
     revealSelectedTarget: editorViewController.revealSelectedTarget,
     setEditorView: editorViewController.setView,
     focusGraphFilter: () => graphInspector?.focusFilter({ select: true }),
+    sourceHintsAvailable: () => sourceEditorController.sourceHintsAvailable,
     toggleSourceHints: sourceEditorController.toggleGraphHints,
     prettifySource: sourceEditorController.prettifyCurrentSource,
     openSourceDialog: sourceWorkspaceActions.openDialog,
@@ -291,6 +294,7 @@ async function startApp(): Promise<void> {
       codeEditorRoot: elements.codeEditorRoot,
     },
     healthCheckMode,
+    editorAdvancedFeatures,
     initialSource: () => initialSource,
     previewViewport,
     sourceCompile: sourceCompileController,

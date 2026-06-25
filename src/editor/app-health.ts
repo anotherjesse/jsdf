@@ -164,10 +164,12 @@ function captureRecursiveDecorationMessage(monitor: MutableAppHealthMonitor, arg
 
 function buttonLabels(selector: string): readonly string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(selector))
+    .filter((button) => !button.hidden)
     .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "");
 }
 
 function buttonShortcuts(selector: string): readonly string[] {
   return Array.from(document.querySelectorAll<HTMLButtonElement>(selector))
+    .filter((button) => !button.hidden)
     .map((button) => button.getAttribute("aria-keyshortcuts") ?? "");
 }

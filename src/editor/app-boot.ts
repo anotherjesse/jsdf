@@ -19,6 +19,7 @@ export interface AppBootElements {
 export interface AppBootOptions {
   elements: AppBootElements;
   healthCheckMode: boolean;
+  editorAdvancedFeatures: boolean;
   initialSource(): string;
   previewViewport: PreviewViewportController;
   sourceCompile: SourceCompileController;
@@ -66,6 +67,7 @@ export async function bootApp(options: AppBootOptions): Promise<void> {
       (link, hoverOptions) => options.graphInteraction()?.handleSourceLinkHover(link, hoverOptions),
       (link) => options.graphInteraction()?.handleSourceLinkCursor(link),
       options.sourceEditor.prettifyCurrentSource,
+      { advancedFeatures: options.editorAdvancedFeatures },
     ));
 
     options.sourceEditor.applyGraphHintsToEditor();

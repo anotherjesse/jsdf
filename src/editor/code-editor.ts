@@ -22,6 +22,7 @@ import {
   clearSourceInlayHintState as clearSourceInlayHintStateForModel,
   deleteSourceInlayHintState as deleteSourceInlayHintStateForModel,
   refreshSourceInlayHints,
+  setSourceLanguageFeaturesEnabled,
   setSourceInlayHintState,
 } from "./source-language-features";
 import { sourceLinkAtOffset, stickySourceLinkAtOffset } from "./source-link-hit-test";
@@ -71,6 +72,10 @@ export interface SourceLinkSelectOptions {
   revealGraph?: boolean;
 }
 
+export interface CodeEditorOptions {
+  advancedFeatures?: boolean;
+}
+
 export function createCodeEditor(
   element: HTMLElement,
   initialValue: string,
@@ -80,7 +85,9 @@ export function createCodeEditor(
   onSourceLinkHover: (link: GraphSourceLink | null, options: SourceLinkHoverOptions) => void = () => {},
   onSourceLinkCursor: (link: GraphSourceLink | null) => void = () => {},
   onPrettify: () => void = () => {},
+  options: CodeEditorOptions = {},
 ): CodeEditor {
+  const advancedFeatures = options.advancedFeatures === true;
   const editor = monaco.editor.create(element, {
     value: initialValue,
     language: "javascript",
@@ -91,26 +98,43 @@ export function createCodeEditor(
     scrollBeyondLastLine: false,
     tabSize: 2,
     wordWrap: "on",
-    quickSuggestions: {
-      other: true,
-      comments: false,
-      strings: false,
-    },
-    suggestOnTriggerCharacters: true,
-    acceptSuggestionOnEnter: "smart",
+    quickSuggestions: advancedFeatures
+      ? {
+          other: true,
+          comments: false,
+          strings: false,
+        }
+      : false,
+    suggestOnTriggerCharacters: advancedFeatures,
+    acceptSuggestionOnEnter: advancedFeatures ? "smart" : "off",
     wordBasedSuggestions: "off",
-    snippetSuggestions: "top",
-    inlayHints: {
-      enabled: "on",
-      padding: true,
-      maximumLength: 18,
+    snippetSuggestions: advancedFeatures ? "top" : "none",
+    parameterHints: {
+      enabled: advancedFeatures,
     },
+    hover: {
+      enabled: advancedFeatures,
+    },
+    lightbulb: {
+      enabled: advancedFeatures ? monaco.editor.ShowLightbulbIconMode.OnCode : monaco.editor.ShowLightbulbIconMode.Off,
+    },
+    inlayHints: advancedFeatures
+      ? {
+          enabled: "on",
+          padding: true,
+          maximumLength: 18,
+        }
+      : {
+          enabled: "off",
+        },
     lineNumbersMinChars: 3,
     glyphMargin: false,
-    folding: true,
+    folding: advancedFeatures,
     renderLineHighlight: "line",
     padding: { top: 10, bottom: 10 },
   });
+  const editorModel = editor.getModel();
+  if (editorModel) setSourceLanguageFeaturesEnabled(editorModel, advancedFeatures);
   const scrubReadout = new SourceScrubReadout();
   const sourceLinkStatusBar = new SourceLinkStatusBar({
     onNavigate(direction) {
@@ -232,6 +256,7 @@ export function createCodeEditor(
     position: monaco.Position | null | undefined,
     options: { sticky?: boolean } = {},
   ): GraphSourceLink | null => {
+    if (!advancedFeatures) return null;
     const model = editor.getModel();
     if (!model || !position) return null;
     const offset = model.getOffsetAt(position);
@@ -252,6 +277,12 @@ export function createCodeEditor(
   };
 
   const markSelectedSourceLink = (link: GraphSourceLink | null, options: { reveal?: boolean } = {}) => {
+    if (!advancedFeatures) {
+      selectedSourceLink = null;
+      updateSourceLinkStatus(null);
+      selectedSourceDecorations = clearSourceLinkDecorations(editor, selectedSourceDecorations);
+      return;
+    }
     selectedSourceLink = link;
     updateSourceLinkStatus(link);
     const range = link ? rangeForSourceLink(editor, link) : null;
@@ -269,6 +300,7 @@ export function createCodeEditor(
   };
 
   const updateSourceInlayHintState = (links: readonly GraphSourceLink[]) => {
+    if (!advancedFeatures) return;
     const model = editor.getModel();
     if (!model) return;
     setSourceInlayHintState(model, links, selectSourceLinkFromInlayHint);
@@ -287,10 +319,12 @@ export function createCodeEditor(
   };
 
   const markLocalHoveredSourceLink = (link: GraphSourceLink | null) => {
+    if (!advancedFeatures) return;
     localHoveredSourceDecorations = updateSourceLinkDecoration(editor, localHoveredSourceDecorations, link, "hovered");
   };
 
   const markHoveredSourceLink = (link: GraphSourceLink | null) => {
+    if (!advancedFeatures) return;
     hoveredSourceDecorations = updateSourceLinkDecoration(editor, hoveredSourceDecorations, link, "hovered");
   };
 
@@ -347,6 +381,7 @@ export function createCodeEditor(
     modifiers: ScrubModifiers = { altKey: false, shiftKey: false },
     options: { editSessionId?: string } = {},
   ): boolean => {
+    if (!advancedFeatures) return false;
     const link = currentSourceLinkForNudge();
     if (!link) return false;
     return nudgeSourceLink(link, direction, modifiers, {
@@ -360,6 +395,7 @@ export function createCodeEditor(
     modifiers: ScrubModifiers,
     options: { editSessionId?: string } = {},
   ): boolean => {
+    if (!advancedFeatures) return false;
     if (!link || !isScrubbableSourceLink(link)) return false;
     const startValue = readSourceLinkNumber(editor.getValue(), link);
     if (startValue == null) return false;
@@ -435,11 +471,13 @@ export function createCodeEditor(
   };
 
   const selectAdjacentSourceLink = (direction: -1 | 1): boolean => {
+    if (!advancedFeatures) return false;
     const nextLink = adjacentSourceLink(sourceLinks, currentSourceLinkForNavigation(), direction);
     return nextLink ? selectSourceLink(nextLink, { reveal: true, selectRange: true }) : false;
   };
 
   const revealCurrentSourceLinkInGraph = (): boolean => {
+    if (!advancedFeatures) return false;
     const link = currentSourceLinkForNavigation();
     return link ? selectSourceLink(link, { reveal: true, selectRange: true, revealGraph: true }) : false;
   };
@@ -478,6 +516,10 @@ export function createCodeEditor(
   };
 
   const applyFocusedNodeDecorations = (reveal: boolean) => {
+    if (!advancedFeatures) {
+      focusedNodeDecorations = clearSourceLinkDecorations(editor, focusedNodeDecorations);
+      return;
+    }
     const model = editor.getModel();
     if (!model || focusedNodeId == null) {
       focusedNodeDecorations = editor.deltaDecorations(focusedNodeDecorations, []);
@@ -528,23 +570,25 @@ export function createCodeEditor(
   const cursorSubscription = editor.onDidChangeCursorPosition((event) => {
     scheduleCursorSourceLinkSync(event.position);
   });
-  const editorActions = installCodeEditorActions(editor, {
-    onPrettify() {
-      onPrettify();
-    },
-    onQuickFix() {
-      applyPreferredQuickFix();
-    },
-    onSelectAdjacentSourceLink(direction) {
-      selectAdjacentSourceLink(direction);
-    },
-    onRevealSourceLinkInGraph() {
-      revealCurrentSourceLinkInGraph();
-    },
-    onNudgeSourceLink(direction, modifiers) {
-      return nudgeCurrentSourceLink(direction, modifiers);
-    },
-  });
+  const editorActions = advancedFeatures
+    ? installCodeEditorActions(editor, {
+        onPrettify() {
+          onPrettify();
+        },
+        onQuickFix() {
+          applyPreferredQuickFix();
+        },
+        onSelectAdjacentSourceLink(direction) {
+          selectAdjacentSourceLink(direction);
+        },
+        onRevealSourceLinkInGraph() {
+          revealCurrentSourceLinkInGraph();
+        },
+        onNudgeSourceLink(direction, modifiers) {
+          return nudgeCurrentSourceLink(direction, modifiers);
+        },
+      })
+    : { dispose() {} };
   const leaveSubscription = editor.onMouseLeave((event) => {
     pointerInside = false;
     pointerLink = null;
@@ -591,6 +635,20 @@ export function createCodeEditor(
     setSourceLinks(links: readonly GraphSourceLink[]) {
       updateHover(null, false, { immediateClear: true });
       pointerLink = null;
+      if (!advancedFeatures) {
+        sourceLinks = [];
+        selectedSourceLink = null;
+        clearSourceInlayHintState();
+        sourceLinkStatusBar.update(null);
+        focusedNodeDecorations = clearSourceLinkDecorations(editor, focusedNodeDecorations);
+        revealedSourceDecorations = clearSourceLinkDecorations(editor, revealedSourceDecorations);
+        selectedSourceDecorations = clearSourceLinkDecorations(editor, selectedSourceDecorations);
+        localHoveredSourceDecorations = clearSourceLinkDecorations(editor, localHoveredSourceDecorations);
+        hoveredSourceDecorations = clearSourceLinkDecorations(editor, hoveredSourceDecorations);
+        editedSourceDecorations = clearSourceLinkDecorations(editor, editedSourceDecorations);
+        sourceLinkDecorations = clearSourceLinkDecorations(editor, sourceLinkDecorations);
+        return;
+      }
       sourceLinks = [...links];
       const model = editor.getModel();
       if (!model) return;
@@ -611,7 +669,7 @@ export function createCodeEditor(
     setGraphHintsEnabled(enabled: boolean) {
       editor.updateOptions({
         inlayHints: {
-          enabled: enabled ? "on" : "off",
+          enabled: advancedFeatures && enabled ? "on" : "off",
           padding: true,
           maximumLength: 18,
         },
@@ -619,18 +677,22 @@ export function createCodeEditor(
       refreshSourceInlayHints();
     },
     setFocusedNode(nodeId: number | null, options: { reveal?: boolean } = {}) {
+      if (!advancedFeatures) return;
       focusedNodeId = nodeId;
       applyFocusedNodeDecorations(Boolean(options.reveal));
     },
     markSelectedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
+      if (!advancedFeatures) return;
       cancelCursorSourceLinkSync();
       cursorLinkKey = sourceLinkKey(link);
       markSelectedSourceLink(link, options);
     },
     markHoveredSourceLink(link: GraphSourceLink | null) {
+      if (!advancedFeatures) return;
       markHoveredSourceLink(link);
     },
     markEditedSourceLink(link: GraphSourceLink | null, options: { reveal?: boolean } = {}) {
+      if (!advancedFeatures) return;
       const range = link ? rangeForSourceLink(editor, link) : null;
       editedSourceDecorations = updateSourceLinkDecoration(editor, editedSourceDecorations, link, "edited");
       if (options.reveal && range) {
@@ -640,6 +702,13 @@ export function createCodeEditor(
     revealSourceLink(link: GraphSourceLink) {
       const range = rangeForSourceLink(editor, link);
       if (!range) return;
+      if (!advancedFeatures) {
+        revealedSourceDecorations = updateSourceLinkDecoration(editor, revealedSourceDecorations, link, "revealed");
+        editor.setSelection(range);
+        editor.revealRangeInCenterIfOutsideViewport(range);
+        editor.focus();
+        return;
+      }
       cancelCursorSourceLinkSync();
       selectedSourceLink = link;
       updateSourceLinkStatus(link);
@@ -701,6 +770,8 @@ export function createCodeEditor(
       cursorSubscription.dispose();
       editorActions.dispose();
       leaveSubscription.dispose();
+      const model = editor.getModel();
+      if (model) setSourceLanguageFeaturesEnabled(model, false);
       deleteSourceInlayHintState();
       editor.dispose();
     },

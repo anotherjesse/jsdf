@@ -77,8 +77,11 @@ export interface EditorToolsVerification {
 }
 
 export interface EditorPreferencesVerification {
+  defaultEditorMode: string;
   defaultGraphHints: boolean;
+  savedEditorMode: string;
   savedGraphHints: boolean;
+  recoveredEditorMode: string;
   recoveredGraphHints: boolean;
 }
 
@@ -426,25 +429,37 @@ export function verifyCodeEditorQuickFix(
 export function verifyEditorPreferences(errors: string[]): EditorPreferencesVerification {
   const storage = new MemoryStorage();
   const defaults = loadEditorPreferences(storage);
-  if (defaults.graphHintsEnabled !== true) {
-    errors.push("editor preferences did not default graph hints on");
+  if (defaults.editorMode !== "simple") {
+    errors.push(`editor preferences defaulted to ${defaults.editorMode} mode`);
+  }
+  if (defaults.graphHintsEnabled !== false) {
+    errors.push("editor preferences did not default graph hints off");
   }
 
-  saveEditorPreferences({ graphHintsEnabled: false }, storage);
+  saveEditorPreferences({ editorMode: "advanced", graphHintsEnabled: false }, storage);
   const saved = loadEditorPreferences(storage);
+  if (saved.editorMode !== "advanced") {
+    errors.push(`editor preferences did not persist advanced mode`);
+  }
   if (saved.graphHintsEnabled !== false) {
     errors.push("editor preferences did not persist disabled graph hints");
   }
 
   storage.setItem("sdf-browser-editor-preferences-v1", "{");
   const recovered = loadEditorPreferences(storage);
-  if (recovered.graphHintsEnabled !== true) {
+  if (recovered.editorMode !== "simple") {
+    errors.push(`editor preferences recovered to ${recovered.editorMode} mode`);
+  }
+  if (recovered.graphHintsEnabled !== false) {
     errors.push("editor preferences did not recover from invalid storage");
   }
 
   return {
+    defaultEditorMode: defaults.editorMode,
     defaultGraphHints: defaults.graphHintsEnabled,
+    savedEditorMode: saved.editorMode,
     savedGraphHints: saved.graphHintsEnabled,
+    recoveredEditorMode: recovered.editorMode,
     recoveredGraphHints: recovered.graphHintsEnabled,
   };
 }

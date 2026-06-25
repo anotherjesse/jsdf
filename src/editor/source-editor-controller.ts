@@ -18,6 +18,7 @@ export interface SourceEditorElements {
 
 export interface SourceEditorControllerOptions {
   elements: SourceEditorElements;
+  advancedEditorFeatures: boolean;
   initialGraphHintsEnabled: boolean;
   codeEditor(): CodeEditor | null;
   sourceValid(): boolean;
@@ -30,6 +31,7 @@ export interface SourceEditorControllerOptions {
 }
 
 export interface SourceEditorController {
+  readonly sourceHintsAvailable: boolean;
   readonly graphHintsEnabled: boolean;
   readonly sourceCompilePending: boolean;
   applyGraphHintsToEditor(): void;
@@ -43,31 +45,45 @@ export interface SourceEditorController {
 }
 
 export function createSourceEditorController(options: SourceEditorControllerOptions): SourceEditorController {
-  let graphHintsEnabled = options.initialGraphHintsEnabled;
+  let graphHintsEnabled = options.advancedEditorFeatures && options.initialGraphHintsEnabled;
   let sourceCompileTimer = 0;
 
   options.elements.prettifyButton.addEventListener("click", prettifyCurrentSource);
-  options.elements.sourceHintsButton.addEventListener("click", toggleGraphHints);
+  if (options.advancedEditorFeatures) {
+    options.elements.sourceHintsButton.addEventListener("click", toggleGraphHints);
+  }
   updateSourceHintsButton();
 
   function applyGraphHintsToEditor(): void {
-    options.codeEditor()?.setGraphHintsEnabled(graphHintsEnabled);
+    options.codeEditor()?.setGraphHintsEnabled(options.advancedEditorFeatures && graphHintsEnabled);
   }
 
   function setGraphHintsEnabled(enabled: boolean): void {
-    graphHintsEnabled = enabled;
+    graphHintsEnabled = options.advancedEditorFeatures && enabled;
     applyGraphHintsToEditor();
     updateSourceHintsButton();
-    options.savePreferences({ graphHintsEnabled });
+    options.savePreferences({
+      editorMode: options.advancedEditorFeatures ? "advanced" : "simple",
+      graphHintsEnabled,
+    });
   }
 
   function toggleGraphHints(): void {
+    if (!options.advancedEditorFeatures) return;
     setGraphHintsEnabled(!graphHintsEnabled);
     options.setEditorStatus(graphHintsEnabled ? "Graph hints shown" : "Graph hints hidden", "idle");
   }
 
   function updateSourceHintsButton(): void {
     const { sourceHintsButton } = options.elements;
+    if (!options.advancedEditorFeatures) {
+      sourceHintsButton.hidden = true;
+      sourceHintsButton.disabled = true;
+      sourceHintsButton.removeAttribute("aria-keyshortcuts");
+      sourceHintsButton.setAttribute("aria-pressed", "false");
+      sourceHintsButton.title = "Graph hints are disabled in the simple editor";
+      return;
+    }
     sourceHintsButton.setAttribute("aria-pressed", String(graphHintsEnabled));
     sourceHintsButton.setAttribute("aria-keyshortcuts", SOURCE_HINTS_SHORTCUT);
     sourceHintsButton.title = `${graphHintsEnabled ? "Hide" : "Show"} graph hints (${SOURCE_HINTS_SHORTCUT})`;
@@ -121,6 +137,9 @@ export function createSourceEditorController(options: SourceEditorControllerOpti
   }
 
   return {
+    get sourceHintsAvailable() {
+      return options.advancedEditorFeatures;
+    },
     get graphHintsEnabled() {
       return graphHintsEnabled;
     },

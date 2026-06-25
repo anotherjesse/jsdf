@@ -1,10 +1,14 @@
+export type EditorFeatureMode = "simple" | "advanced";
+
 export interface EditorPreferences {
+  editorMode: EditorFeatureMode;
   graphHintsEnabled: boolean;
 }
 
 const STORAGE_KEY = "sdf-browser-editor-preferences-v1";
 const DEFAULT_PREFERENCES: EditorPreferences = {
-  graphHintsEnabled: true,
+  editorMode: "simple",
+  graphHintsEnabled: false,
 };
 
 export function loadEditorPreferences(storage = globalThis.localStorage): EditorPreferences {
@@ -27,8 +31,10 @@ export function saveEditorPreferences(
 function normalizePreferences(value: unknown): EditorPreferences {
   if (!value || typeof value !== "object") return { ...DEFAULT_PREFERENCES };
   const candidate = value as Partial<EditorPreferences>;
+  const editorMode = candidate.editorMode === "advanced" ? "advanced" : DEFAULT_PREFERENCES.editorMode;
   return {
-    graphHintsEnabled: typeof candidate.graphHintsEnabled === "boolean"
+    editorMode,
+    graphHintsEnabled: editorMode === "advanced" && typeof candidate.graphHintsEnabled === "boolean"
       ? candidate.graphHintsEnabled
       : DEFAULT_PREFERENCES.graphHintsEnabled,
   };

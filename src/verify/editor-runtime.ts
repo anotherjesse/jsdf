@@ -200,6 +200,8 @@ export async function runEditorRuntimeVerification(
       cursorEvents.push(`${link.nodeKind}:${link.label}`);
       selectFromSource(link);
     },
+    undefined,
+    { advancedFeatures: true },
   );
 
   try {

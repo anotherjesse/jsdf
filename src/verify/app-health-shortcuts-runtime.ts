@@ -134,6 +134,29 @@ export async function verifySourceHintsShortcutSwitch(
   const shortcut = hintsButton.getAttribute("aria-keyshortcuts") ?? "";
   const beforePressed = hintsButton.getAttribute("aria-pressed") ?? "";
   const KeyboardEventCtor = (frameWindow as AppHealthWindow & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
+  if (hintsButton.hidden || hintsButton.disabled) {
+    const preventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
+      key: "h",
+      code: "KeyH",
+      altKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await nextFrame(frameWindow);
+    const statusText = status.textContent ?? "";
+    if (shortcut) errors.push(`simple editor graph hints advertised shortcut as ${shortcut}`);
+    if (preventedDefault) errors.push("simple editor graph hints shortcut prevented the browser default");
+    return {
+      shortcut,
+      beforePressed,
+      afterPressed: hintsButton.getAttribute("aria-pressed") ?? "",
+      restoredPressed: beforePressed,
+      preventedDefault,
+      restoredDefault: false,
+      status: statusText,
+    };
+  }
   const preventedDefault = !frameWindow.dispatchEvent(new KeyboardEventCtor("keydown", {
     key: "h",
     code: "KeyH",

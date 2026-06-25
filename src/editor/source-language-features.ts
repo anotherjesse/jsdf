@@ -27,6 +27,7 @@ import { sourceInlayHintKeyForLink, sourceInlayHintsForOffsetRange } from "./sou
 export const SDF_RUNTIME_MARKER_OWNER = "sdf-runtime";
 
 const SOURCE_INLAY_HINT_SELECT_COMMAND = "sdf.selectGraphSourceLink";
+const advancedSourceFeatureUris = new Set<string>();
 const sourceInlayHintStateByUri = new Map<string, SourceInlayHintModelState>();
 const sourceInlayHintsChanged = new monaco.Emitter<void>();
 
@@ -38,6 +39,7 @@ interface SourceInlayHintModelState {
 monaco.languages.registerCompletionItemProvider("javascript", {
   triggerCharacters: [...SOURCE_COMPLETION_TRIGGER_CHARACTERS],
   provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
+    if (!sourceLanguageFeaturesEnabled(model)) return { suggestions: [] };
     const word = model.getWordUntilPosition(position);
     const range = {
       startLineNumber: position.lineNumber,
@@ -67,6 +69,7 @@ monaco.languages.registerCompletionItemProvider("javascript", {
 
 monaco.languages.registerDocumentFormattingEditProvider("javascript", {
   provideDocumentFormattingEdits(model) {
+    if (!sourceLanguageFeaturesEnabled(model)) return [];
     const source = model.getValue();
     const pretty = prettifySource(source);
     if (pretty === source) return [];
@@ -79,6 +82,7 @@ monaco.languages.registerDocumentFormattingEditProvider("javascript", {
 
 monaco.languages.registerHoverProvider("javascript", {
   provideHover(model: monaco.editor.ITextModel, position: monaco.Position) {
+    if (!sourceLanguageFeaturesEnabled(model)) return null;
     const word = model.getWordAtPosition(position);
     if (!word) return null;
     const entry = apiReferenceForWord(word.word);
@@ -101,6 +105,7 @@ monaco.languages.registerSignatureHelpProvider("javascript", {
   signatureHelpTriggerCharacters: ["(", ","],
   signatureHelpRetriggerCharacters: [","],
   provideSignatureHelp(model: monaco.editor.ITextModel, position: monaco.Position) {
+    if (!sourceLanguageFeaturesEnabled(model)) return null;
     const help = apiSignatureHelpAt(model.getLineContent(position.lineNumber), position.column);
     if (!help) return null;
     return {
@@ -122,6 +127,12 @@ monaco.languages.registerSignatureHelpProvider("javascript", {
 
 monaco.languages.registerCodeActionProvider("javascript", {
   provideCodeActions(model, range, context) {
+    if (!sourceLanguageFeaturesEnabled(model)) {
+      return {
+        actions: [],
+        dispose() {},
+      };
+    }
     const actions: monaco.languages.CodeAction[] = [];
     for (const marker of context.markers) {
       const markerRange = new monaco.Range(
@@ -188,6 +199,12 @@ monaco.languages.registerInlayHintsProvider("javascript", {
   displayName: "SDF graph source links",
   onDidChangeInlayHints: sourceInlayHintsChanged.event,
   provideInlayHints(model, range) {
+    if (!sourceLanguageFeaturesEnabled(model)) {
+      return {
+        hints: [],
+        dispose() {},
+      };
+    }
     const uri = model.uri.toString();
     const links = sourceInlayHintStateByUri.get(uri)?.links ?? [];
     const startOffset = model.getOffsetAt({
@@ -219,6 +236,19 @@ monaco.languages.registerInlayHintsProvider("javascript", {
     };
   },
 });
+
+export function setSourceLanguageFeaturesEnabled(
+  model: monaco.editor.ITextModel,
+  enabled: boolean,
+): void {
+  const uri = model.uri.toString();
+  if (enabled) {
+    advancedSourceFeatureUris.add(uri);
+  } else {
+    advancedSourceFeatureUris.delete(uri);
+  }
+  refreshSourceInlayHints();
+}
 
 monaco.editor.addCommand({
   id: SOURCE_INLAY_HINT_SELECT_COMMAND,
@@ -256,6 +286,10 @@ export function deleteSourceInlayHintState(model: monaco.editor.ITextModel): voi
 
 export function refreshSourceInlayHints(): void {
   sourceInlayHintsChanged.fire();
+}
+
+function sourceLanguageFeaturesEnabled(model: monaco.editor.ITextModel): boolean {
+  return advancedSourceFeatureUris.has(model.uri.toString());
 }
 
 function completionKindForApiEntry(

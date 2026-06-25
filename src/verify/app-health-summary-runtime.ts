@@ -34,7 +34,6 @@ export function verifyHealth(health: AppHealthDiagnostics, errors: string[]): vo
   if (!health.workspaceButtons.includes("Load")) errors.push("workspace health missing Load button");
   if (!health.workspaceButtons.includes("Save")) errors.push("workspace health missing Save button");
   if (!health.workspaceButtons.includes("Prettify code")) errors.push("workspace health missing Prettify button");
-  if (!health.workspaceButtons.includes("Toggle graph hints")) errors.push("workspace health missing Hints button");
   verifyWorkspaceButtonShortcuts("health", health.workspaceButtonShortcuts, errors);
   if (health.prettifyShortcut !== "Alt+Shift+F") errors.push(`health prettify shortcut rendered ${health.prettifyShortcut || "nothing"}`);
   if (health.graphFilterShortcut !== "Control+F Meta+F /") {
@@ -67,7 +66,6 @@ export function verifyDom(dom: AppHealthDomSummary, errors: string[]): void {
   }
   if (dom.canvasMode !== "glsl-raymarch") errors.push(`app frame canvas mode was ${dom.canvasMode || "missing"}`);
   if (!dom.workspaceButtons.includes("Prettify code")) errors.push("app frame DOM missing Prettify button");
-  if (!dom.workspaceButtons.includes("Toggle graph hints")) errors.push("app frame DOM missing Hints button");
   verifyWorkspaceButtonShortcuts("DOM", dom.workspaceButtonShortcuts, errors);
   verifyEditorModeShortcuts("DOM", dom.editorModeShortcuts, errors);
   if (!dom.selectionFocusVisible) errors.push("app frame DOM selection focus button was hidden");
@@ -90,8 +88,10 @@ export function summarizeFrameDom(frame: HTMLIFrameElement): AppHealthDomSummary
     title: frameDocument?.title ?? "",
     canvasMode: frameDocument?.querySelector<HTMLCanvasElement>("#canvas")?.dataset.previewMode ?? "",
     workspaceButtons: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
+      .filter((button) => !button.hidden)
       .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? ""),
     workspaceButtonShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".workspace-bar button") ?? [])
+      .filter((button) => !button.hidden)
       .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
     editorModeShortcuts: Array.from(frameDocument?.querySelectorAll<HTMLButtonElement>(".editor-toggle button") ?? [])
       .map((button) => button.getAttribute("aria-keyshortcuts") ?? ""),
@@ -129,9 +129,6 @@ function verifyWorkspaceButtonShortcuts(label: string, shortcuts: readonly strin
   }
   if (!shortcuts.includes("Alt+Shift+F")) {
     errors.push(`${label} workspace shortcuts missing Prettify binding`);
-  }
-  if (!shortcuts.includes("Alt+Shift+H")) {
-    errors.push(`${label} workspace shortcuts missing Hints binding`);
   }
 }
 
