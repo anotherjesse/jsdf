@@ -179,11 +179,15 @@ The app has focused verifier pages plus TypeScript checks:
 
 - `npm test` runs `tsc --noEmit`
 - `npm run build` type-checks and builds the Vite app
-- `checks.html` links the browser verifier dashboard
+- `npm run verify:live` runs on Node 22 or newer, starts a temporary Vite server, launches headless Chrome or Chromium through the DevTools Protocol, and runs the full browser verifier suite
+- `checks.html` links the manual browser verifier dashboard
 - `api-check.html` checks API fixtures, CPU evaluation, GLSL/WGSL compilation, and workflow helpers
 - `app-health-check.html` checks editor readiness and non-destructive app health diagnostics
+- `editor-check.html` checks Monaco/source-link/editor integration behavior
+- `graph-check.html` checks graph inspector controls, graph editing, storage, dialogs, and history behavior
 - `mesh-check.html` checks worker mesh generation and STL output
 - `preview-check.html` checks shader and mesh preview rendering
+- `examples-visual-check.html` renders all bundled examples and checks for nonblank visual output
 
 Health diagnostics are exposed from `web/src/editor/app-health.ts` and assembled in `main.ts`.
 

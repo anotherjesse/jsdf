@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node session-server.mjs",
     "start": "node session-server.mjs",
     "vite": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
+    "verify:live": "node scripts/run-live-verifiers.mjs",
     "test": "tsc --noEmit"
   },
   "devDependencies": {

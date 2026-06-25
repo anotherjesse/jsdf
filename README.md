@@ -112,15 +112,21 @@ The web package includes TypeScript checking and browser verifier pages.
 cd web
 npm test
 npm run build
+npm run verify:live
 ```
 
-Verifier pages are available while the dev server is running:
+`npm run verify:live` requires Node 22 or newer. It starts a temporary Vite server, launches headless Chrome or Chromium, visits every focused verifier page, and fails if any page reports an error. Set `CHROME_PATH=/path/to/chrome` if Chrome is not installed in a standard location.
+
+Verifier pages are also available manually while the dev server is running:
 
 - `http://127.0.0.1:5173/checks.html`
 - `http://127.0.0.1:5173/api-check.html`
 - `http://127.0.0.1:5173/app-health-check.html`
+- `http://127.0.0.1:5173/editor-check.html`
+- `http://127.0.0.1:5173/graph-check.html`
 - `http://127.0.0.1:5173/mesh-check.html`
 - `http://127.0.0.1:5173/preview-check.html`
+- `http://127.0.0.1:5173/examples-visual-check.html`
 
 ## Attribution
 
