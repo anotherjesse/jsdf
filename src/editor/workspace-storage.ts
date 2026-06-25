@@ -42,6 +42,10 @@ interface SavedWorkspaceState {
 const STORAGE_KEY = "sdf-browser-workspace-v1";
 const DRAFT_STORAGE_KEY = "sdf-browser-draft-v1";
 
+export function draftStorageKey(scope: string | null): string {
+  return scope ? `${DRAFT_STORAGE_KEY}:${scope}` : DRAFT_STORAGE_KEY;
+}
+
 export function listSavedSourceDocuments(storage = globalThis.localStorage): SavedSourceDocument[] {
   return readState(storage).documents
     .map(normalizeDocument)
@@ -131,9 +135,9 @@ export function deleteSavedSourceVersion(
   return normalizeDocument(document);
 }
 
-export function loadSourceDraft(storage = globalThis.localStorage): SavedSourceDraft | null {
+export function loadSourceDraft(storage = globalThis.localStorage, key = DRAFT_STORAGE_KEY): SavedSourceDraft | null {
   try {
-    const raw = storage.getItem(DRAFT_STORAGE_KEY);
+    const raw = storage.getItem(key);
     if (!raw) return null;
     return normalizeDraft(JSON.parse(raw));
   } catch {
@@ -144,17 +148,18 @@ export function loadSourceDraft(storage = globalThis.localStorage): SavedSourceD
 export function saveSourceDraft(
   draft: Omit<SavedSourceDraft, "updatedAt">,
   storage = globalThis.localStorage,
+  key = DRAFT_STORAGE_KEY,
 ): SavedSourceDraft {
   const next: SavedSourceDraft = {
     ...draft,
     updatedAt: new Date().toISOString(),
   };
-  storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(next));
+  storage.setItem(key, JSON.stringify(next));
   return next;
 }
 
-export function clearSourceDraft(storage = globalThis.localStorage): void {
-  storage.removeItem(DRAFT_STORAGE_KEY);
+export function clearSourceDraft(storage = globalThis.localStorage, key = DRAFT_STORAGE_KEY): void {
+  storage.removeItem(key);
 }
 
 function readState(storage: Storage): SavedWorkspaceState {

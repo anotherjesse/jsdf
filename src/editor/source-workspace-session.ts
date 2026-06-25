@@ -17,6 +17,7 @@ export interface SourceWorkspaceSessionOptions {
   initialName: string;
   initialSource: string;
   initialPreview: SavedSourcePreview;
+  draftStorageKey?: string;
   currentSource(): string;
   currentPreview(): SavedSourcePreview;
   previewSnapshot(profile: SavedSourcePreview): string;
@@ -98,7 +99,7 @@ class SourceWorkspaceSessionController implements SourceWorkspaceSession {
   }
 
   readDraft(): SavedSourceDraft | null {
-    return loadSourceDraft();
+    return loadSourceDraft(globalThis.localStorage, this.options.draftStorageKey);
   }
 
   loadExample(name: string): void {
@@ -163,7 +164,7 @@ class SourceWorkspaceSessionController implements SourceWorkspaceSession {
     if (!this.draftPersistenceEnabledValue) return;
     try {
       if (!this.hasUnsavedChangesValue) {
-        clearSourceDraft();
+        clearSourceDraft(globalThis.localStorage, this.options.draftStorageKey);
         return;
       }
       saveSourceDraft({
@@ -173,7 +174,7 @@ class SourceWorkspaceSessionController implements SourceWorkspaceSession {
         activeDocumentId: this.activeDocumentIdValue,
         activeVersionId: this.activeVersionIdValue,
         activeExampleId: this.options.activeExampleId(),
-      });
+      }, globalThis.localStorage, this.options.draftStorageKey);
     } catch {
       // Draft persistence is a fallback; the visible save/error flow stays authoritative.
     }

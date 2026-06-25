@@ -61,6 +61,16 @@ export interface AppElements {
     snapshotButton: HTMLButtonElement;
     status: HTMLElement;
   };
+  projectSwitcher: {
+    button: HTMLButtonElement;
+    nameLabel: HTMLElement;
+    dialog: HTMLDialogElement;
+    list: HTMLElement;
+    closeButton: HTMLButtonElement;
+    newButton: HTMLButtonElement;
+    newNameInput: HTMLInputElement;
+    searchInput: HTMLInputElement;
+  };
   graphHistory: {
     undoButton: HTMLButtonElement;
     redoButton: HTMLButtonElement;
@@ -122,9 +132,17 @@ export function queryAppElements(root: ParentNode = document): AppElements {
   const apiStat = query<HTMLElement>(root, "#apiStat");
   const sessionStrip = query<HTMLElement>(root, "#sessionStrip");
   const sessionIdLabel = query<HTMLElement>(root, "#sessionIdLabel");
+  const projectSwitcherButton = query<HTMLButtonElement>(root, "#projectSwitcherButton");
+  const projectNameLabel = query<HTMLElement>(root, "#projectNameLabel");
   const copyAgentPromptButton = query<HTMLButtonElement>(root, "#copyAgentPromptButton");
   const sessionSnapshotButton = query<HTMLButtonElement>(root, "#sessionSnapshotButton");
   const sessionStatus = query<HTMLElement>(root, "#sessionStatus");
+  const projectDialog = query<HTMLDialogElement>(root, "#projectDialog");
+  const projectDialogList = query<HTMLElement>(root, "#projectDialogList");
+  const closeProjectDialogButton = query<HTMLButtonElement>(root, "#closeProjectDialogButton");
+  const newProjectButton = query<HTMLButtonElement>(root, "#newProjectButton");
+  const newProjectNameInput = query<HTMLInputElement>(root, "#newProjectNameInput");
+  const projectSearchInput = query<HTMLInputElement>(root, "#projectSearchInput");
   const overlay = query<HTMLElement>(root, "#overlay");
 
   return {
@@ -189,6 +207,16 @@ export function queryAppElements(root: ParentNode = document): AppElements {
       copyAgentPromptButton,
       snapshotButton: sessionSnapshotButton,
       status: sessionStatus,
+    },
+    projectSwitcher: {
+      button: projectSwitcherButton,
+      nameLabel: projectNameLabel,
+      dialog: projectDialog,
+      list: projectDialogList,
+      closeButton: closeProjectDialogButton,
+      newButton: newProjectButton,
+      newNameInput: newProjectNameInput,
+      searchInput: projectSearchInput,
     },
     graphHistory: {
       undoButton,

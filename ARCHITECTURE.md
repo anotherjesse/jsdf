@@ -203,6 +203,8 @@ Browser-side responsibilities are split between `src/editor/browser-session.ts`,
 
 - `browser-session.ts` derives the session id from the current `/s/<session-id>` route, connects to the server with `EventSource`, executes `get-status`, `get-code`, `set-code`, and `capture-screenshot`, and posts command results back to the server.
 - `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot POSTs.
+- `project-initial-state.ts` loads a project's latest saved source snapshot before the editor is constructed, so `/s/<session-id>` boots into that project's state before the browser session connects.
+- `project-switcher.ts` owns the user-facing project picker, current project label, project search, new project creation, and navigation between `/s/<session-id>` workspaces through `/api/projects`.
 - `browser-session-bridge.ts` adapts those generic session commands to the live browser app by reading health/source state, applying agent code updates, rendering shader screenshots, and returning snapshot payloads.
 - `main.ts` wires the bridge to the app controllers without owning the session command protocol.
 
@@ -215,7 +217,7 @@ There are two persistence layers:
 - Browser workspace persistence in `localStorage`
 - Session snapshots on disk under `.sessions/`
 
-Workspace persistence is stored by `src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. `src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `src/editor/source-workspace-actions.ts` coordinates the source load/save/delete commands around that session state and delegates app-specific graph, bounds, preview, and compilation updates back to `main.ts`. `src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
+Workspace persistence is stored by `src/editor/workspace-storage.ts`. It writes and reads saved source documents, versions, draft source, preview bounds, mesh grid, ray steps, mesh algorithm, layout, and hidden graph node keys. Draft keys can be scoped by project/session id so switching `/s/<session-id>` pages does not restore another project's unsaved source. `src/editor/source-workspace-session.ts` coordinates the active document/version identity, clean snapshots, document-name input, dirty indicator, save button state, and draft synchronization. `src/editor/source-workspace-actions.ts` coordinates the source load/save/delete commands around that session state and delegates app-specific graph, bounds, preview, and compilation updates back to `main.ts`. `src/editor/preview-profile.ts` prepares preview settings for save/load and restores hidden graph nodes through stable source identities.
 
 Session snapshot persistence is implemented in `session-server.mjs`. Snapshot folders can contain:
 

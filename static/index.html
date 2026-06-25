@@ -134,6 +134,10 @@
         </dl>
         <div class="footer-status">
           <div id="sessionStrip" class="session-strip" hidden>
+            <button id="projectSwitcherButton" class="project-switcher-button" type="button" title="Switch project" aria-label="Switch project">
+              <span>Project</span>
+              <strong id="projectNameLabel">Loading</strong>
+            </button>
             <span class="session-id">Session <code id="sessionIdLabel"></code></span>
             <button id="copyAgentPromptButton" type="button">Copy agent prompt</button>
             <button id="sessionSnapshotButton" type="button">Snapshot</button>
@@ -157,6 +161,30 @@
           </button>
         </header>
         <div id="sourceDialogList" class="source-list"></div>
+      </div>
+    </dialog>
+
+    <dialog id="projectDialog" class="source-dialog project-dialog" aria-labelledby="projectDialogTitle">
+      <div class="source-dialog-card project-dialog-card">
+        <header class="source-dialog-header">
+          <div>
+            <h2 id="projectDialogTitle">Projects</h2>
+          </div>
+          <div class="project-dialog-actions">
+            <label class="sr-only" for="newProjectNameInput">New project name</label>
+            <input id="newProjectNameInput" class="project-name-input" type="text" placeholder="New project name" aria-label="New project name">
+            <button id="newProjectButton" type="button">New Project</button>
+            <button id="closeProjectDialogButton" class="icon-button dialog-close" type="button" title="Close" aria-label="Close">
+              <span class="close-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </header>
+        <div class="source-list project-dialog-body">
+          <div class="source-search-bar">
+            <input id="projectSearchInput" class="source-search-input" type="search" placeholder="Find a project" aria-label="Find projects">
+          </div>
+          <div id="projectDialogList" class="project-list"></div>
+        </div>
       </div>
     </dialog>
 

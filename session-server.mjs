@@ -79,6 +79,17 @@ async function handleRequest(req, res) {
 async function handleSessionRoute(req, res, url, route) {
   const { sessionId, tail } = route;
   validateSessionId(sessionId);
+
+  if (req.method === "GET" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "screenshot.png") {
+    await sendSnapshotFile(res, sessionId, tail[1], "screenshot.png", "image/png");
+    return;
+  }
+
+  if (req.method === "GET" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "code.js") {
+    await sendSnapshotFile(res, sessionId, tail[1], "code.js", "text/javascript; charset=utf-8");
+    return;
+  }
+
   const session = ensureSession(sessionId);
 
   if (req.method === "GET" && tail.length === 1 && tail[0] === "connect.md") {
@@ -136,16 +147,6 @@ async function handleSessionRoute(req, res, url, route) {
 
   if (req.method === "POST" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "restore") {
     await restoreSnapshot(req, res, session, tail[1]);
-    return;
-  }
-
-  if (req.method === "GET" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "screenshot.png") {
-    await sendSnapshotFile(res, session.id, tail[1], "screenshot.png", "image/png");
-    return;
-  }
-
-  if (req.method === "GET" && tail.length === 3 && tail[0] === "snapshots" && tail[2] === "code.js") {
-    await sendSnapshotFile(res, session.id, tail[1], "code.js", "text/javascript; charset=utf-8");
     return;
   }
 
@@ -575,9 +576,9 @@ async function readProjectSummary(sessionId, req) {
   const live = sessions.get(sessionId) ?? null;
   if (live) await ensureSessionReady(live);
   const metadata = await readSessionMetadata(sessionId);
-  if (!live && !metadata && !await sessionExists(sessionId)) return null;
-
   const snapshots = await listSnapshots(sessionId, req);
+  if (!live && !metadata && snapshots.length === 0) return null;
+
   const latestSnapshot = snapshots.at(-1) ?? null;
   const latestScreenshotSnapshot = [...snapshots].reverse().find((snapshot) => snapshot.screenshotUrl) ?? null;
   const createdAt = live?.createdAt ?? metadata?.createdAt ?? null;

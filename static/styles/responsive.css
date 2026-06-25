@@ -86,6 +86,25 @@
     width: 100%;
   }
 
+  .project-switcher-button {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .project-dialog-actions {
+    justify-content: stretch;
+  }
+
+  .project-name-input {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .project-card {
+    grid-template-columns: 82px minmax(0, 1fr);
+    min-height: 78px;
+  }
+
   .session-status {
     flex-basis: 100%;
   }
