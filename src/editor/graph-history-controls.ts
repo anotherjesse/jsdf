@@ -1,7 +1,7 @@
 import type { GraphSourceLink } from "./clean-source-patch";
+import type { GraphParamEdit, ParamValue } from "./graph-edit-model";
 import { renderGraphChangeJournal } from "./graph-change-journal";
 import { formatGraphChangeValue, GraphEditHistory, type GraphHistoryEntry } from "./graph-history";
-import type { GraphParamEdit, ParamValue } from "./graph-inspector";
 
 export type { GraphHistoryEntry } from "./graph-history";
 

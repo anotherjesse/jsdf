@@ -1,4 +1,4 @@
-import type { GraphParamEdit, ParamPath, ParamValue } from "./graph-inspector";
+import { paramPathsEqual, type GraphParamEdit, type ParamPath, type ParamValue } from "./graph-edit-model";
 
 export interface GraphHistoryEntry {
   id: number;
@@ -98,7 +98,7 @@ function shouldMergeEdits(last: GraphHistoryEntry, edit: GraphParamEdit, now: nu
 }
 
 export function samePath(a: ParamPath, b: ParamPath): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
+  return paramPathsEqual(a, b);
 }
 
 export function formatGraphValue(value: ParamValue): string {

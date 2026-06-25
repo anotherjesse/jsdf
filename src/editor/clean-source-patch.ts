@@ -1,6 +1,6 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
-import type { ParamPath, ParamValue } from "./graph-inspector";
+import type { ParamPath, ParamValue } from "./graph-edit-model";
 import {
   findCalls,
   findMatchingParen,

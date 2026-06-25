@@ -3,28 +3,21 @@ import { UP, X, Y, Z, rotateToMatrix } from "../core/math";
 import type { GraphSourceLink } from "./clean-source-patch";
 import { buildGraphModel, childMatchesFilter, type GraphModel, type GraphNodeView } from "./graph-model";
 import { graphVisibilityMeta, renderEyeIcon } from "./graph-visibility";
+import {
+  formatParamPath,
+  getParamAtPath,
+  graphParamKey,
+  paramPathStartsWith,
+  paramPathsEqual,
+  setParamAtPath,
+  type GraphDirtyParam,
+  type GraphParamEdit,
+  type ParamPath,
+  type ParamValue,
+} from "./graph-edit-model";
 import { isCountParamLabel, isNonNegativeParamLabel, nudgeNumericParamValue, scrubNumericParamValue } from "./scrub-values";
 import { buildSoloPreview, type SoloPreview } from "./solo-preview";
 import { sourceLinksEqual } from "./source-link-matching";
-
-export type ParamPath = Array<string | number>;
-export type ParamValue = unknown;
-
-export interface GraphParamEdit {
-  node: Node;
-  nodeId: number;
-  nodeKind: string;
-  path: ParamPath;
-  label: string;
-  previousValue: ParamValue;
-  nextValue: ParamValue;
-  editSessionId?: string;
-}
-
-export interface GraphDirtyParam {
-  nodeId: number;
-  path: ParamPath;
-}
 
 export interface GraphInspectorOptions {
   onSelect(node: Node | null): void;
@@ -250,7 +243,7 @@ export class GraphInspector {
     this.dirtyParamKeys.clear();
     for (const param of params) {
       this.dirtyNodeIds.add(param.nodeId);
-      this.dirtyParamKeys.add(paramKey(param.nodeId, param.path));
+      this.dirtyParamKeys.add(graphParamKey(param.nodeId, param.path));
     }
     this.render();
   }
@@ -286,7 +279,7 @@ export class GraphInspector {
   getParamValue(nodeId: number, path: ParamPath): ParamValue | undefined {
     if (!this.sdf) return undefined;
     const node = findNode(this.sdf.node, nodeId);
-    return node ? getAtPath(node.params, path) : undefined;
+    return node ? getParamAtPath(node.params, path) : undefined;
   }
 
   setParamValue(nodeId: number, path: ParamPath, value: ParamValue): Node | null {
@@ -294,7 +287,7 @@ export class GraphInspector {
     const node = findNode(this.sdf.node, nodeId);
     if (!node) return null;
     this.clearLockedSoloIfDifferent(node);
-    setAtPath(node.params, path, value);
+    setParamAtPath(node.params, path, value);
     this.selected = node;
     this.revealSelectedAfterRender = true;
     this.render();
@@ -1165,7 +1158,7 @@ export class GraphInspector {
     const group = document.createElement("div");
     group.className = "axis-control";
     if (this.matchesFilterText("orient", "axis", "matrix", activeAxis)) group.classList.add("matched");
-    if (this.dirtyParamKeys.has(paramKey(node.id, ["matrix"]))) group.classList.add("edited");
+    if (this.dirtyParamKeys.has(graphParamKey(node.id, ["matrix"]))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
     this.attachSourceHover(group, this.sourceLinkForParam(node.id, ["matrix"]));
@@ -1212,7 +1205,7 @@ export class GraphInspector {
     const group = document.createElement("div");
     group.className = "matrix-control";
     if (this.matrixMatchesFilter(matrix)) group.classList.add("matched");
-    if (matrixCellPaths().some((path) => this.dirtyParamKeys.has(paramKey(node.id, path)))) group.classList.add("edited");
+    if (matrixCellPaths().some((path) => this.dirtyParamKeys.has(graphParamKey(node.id, path)))) group.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, ["matrix"])) group.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, ["matrix"])) group.classList.add("source-selected");
     this.attachSourceHover(group, sourceLink);
@@ -1276,7 +1269,7 @@ export class GraphInspector {
       return;
     }
 
-    setAtPath(node.params, ["matrix"], cloneMatrix(nextValue));
+    setParamAtPath(node.params, ["matrix"], cloneMatrix(nextValue));
     this.customMatrixNodeIds.delete(node.id);
     this.render();
     this.options.onEdit({
@@ -1299,16 +1292,16 @@ export class GraphInspector {
   ): void {
     if (!Number.isFinite(value)) return;
     const path: ParamPath = ["matrix", rowIndex, columnIndex];
-    const previousValue = getAtPath(node.params, path);
+    const previousValue = getParamAtPath(node.params, path);
     if (typeof previousValue !== "number" || previousValue === value) return;
-    setAtPath(node.params, path, value);
+    setParamAtPath(node.params, path, value);
     this.customMatrixNodeIds.add(node.id);
     this.options.onEdit({
       node,
       nodeId: node.id,
       nodeKind: node.kind,
       path,
-      label: formatPath(path),
+      label: formatParamPath(path),
       previousValue,
       nextValue: value,
       ...(editSessionId ? { editSessionId } : {}),
@@ -1323,7 +1316,7 @@ export class GraphInspector {
     const row = document.createElement("div");
     row.className = "param-row";
     if (this.numericParamMatchesFilter(field)) row.classList.add("matched");
-    if (this.dirtyParamKeys.has(paramKey(node.id, field.path))) row.classList.add("edited");
+    if (this.dirtyParamKeys.has(graphParamKey(node.id, field.path))) row.classList.add("edited");
     if (this.sourceLinkMatchesParam(this.hoveredSourceLink, node.id, field.path)) row.classList.add("source-hovered");
     if (this.sourceLinkMatchesParam(this.selectedSourceLink, node.id, field.path)) row.classList.add("source-selected");
 
@@ -1403,10 +1396,10 @@ export class GraphInspector {
       const nextValue = options.clampToRange
         ? clamp(value, Number(range.min), Number(range.max))
         : value;
-      const previousValue = getAtPath(node.params, field.path);
+      const previousValue = getParamAtPath(node.params, field.path);
       if (typeof previousValue !== "number") return;
       if (previousValue === nextValue) return;
-      setAtPath(node.params, field.path, nextValue);
+      setParamAtPath(node.params, field.path, nextValue);
       input.value = formatValue(nextValue);
       if (options.recenterRange !== false) {
         recenterRange(nextValue);
@@ -1467,14 +1460,14 @@ export class GraphInspector {
 
   private sourceLinkForParam(nodeId: number, path: ParamPath): GraphSourceLink | null {
     const exact = this.sourceLinks.find((link) => {
-      return link.nodeId === nodeId && link.end > link.start && pathsEqual(link.path, path);
+      return link.nodeId === nodeId && link.end > link.start && paramPathsEqual(link.path, path);
     });
     if (exact) return exact;
     return this.sourceLinks.find((link) => {
       return link.nodeId === nodeId
         && link.end > link.start
         && link.scrubbable === false
-        && pathStartsWith(path, link.path);
+        && paramPathStartsWith(path, link.path);
     }) ?? null;
   }
 
@@ -1501,7 +1494,7 @@ export class GraphInspector {
 
   private sourceLinkMatchesParam(link: GraphSourceLink | null, nodeId: number, path: ParamPath): boolean {
     if (!link || link.nodeId !== nodeId || link.end <= link.start) return false;
-    return pathsEqual(link.path, path) || (link.scrubbable === false && pathStartsWith(path, link.path));
+    return paramPathsEqual(link.path, path) || (link.scrubbable === false && paramPathStartsWith(path, link.path));
   }
 
   private sourceLinkMatchesNode(link: GraphSourceLink | null, nodeId: number): boolean {
@@ -1572,7 +1565,7 @@ function filterTerms(filter: string): string[] {
 
 function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void {
   if (typeof value === "number") {
-    out.push({ label: formatPath(path), path: [...path], value });
+    out.push({ label: formatParamPath(path), path: [...path], value });
     return;
   }
   if (Array.isArray(value)) {
@@ -1585,44 +1578,6 @@ function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void 
       walkParams(item, [...path, key], out);
     }
   }
-}
-
-function setAtPath(root: Record<string, unknown>, path: ParamPath, value: ParamValue): void {
-  let target: Record<string, unknown> | unknown[] = root;
-  for (let i = 0; i < path.length - 1; i += 1) {
-    const part = path[i];
-    target = Array.isArray(target)
-      ? target[part as number] as Record<string, unknown> | unknown[]
-      : target[part as string] as Record<string, unknown> | unknown[];
-  }
-  const key = path[path.length - 1];
-  if (Array.isArray(target)) {
-    target[key as number] = value;
-  } else {
-    target[key as string] = value;
-  }
-}
-
-function getAtPath(root: Record<string, unknown>, path: ParamPath): ParamValue {
-  let target: unknown = root;
-  for (const part of path) {
-    target = Array.isArray(target)
-      ? target[part as number]
-      : (target as Record<string, unknown>)[part as string];
-  }
-  return target;
-}
-
-function pathsEqual(a: ParamPath, b: ParamPath): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
-}
-
-function paramKey(nodeId: number, path: ParamPath): string {
-  return `${nodeId}:${path.map(String).join("/")}`;
-}
-
-function pathStartsWith(path: ParamPath, prefix: ParamPath): boolean {
-  return prefix.length > 0 && prefix.length < path.length && prefix.every((part, index) => part === path[index]);
 }
 
 function matrixParam(value: unknown): number[][] | null {
@@ -1670,13 +1625,6 @@ function findNode(root: Node, id: number, visited = new Set<number>()): Node | n
 
 function formatNodeLabel(node: Node): string {
   return `${node.kind} #${node.id}`;
-}
-
-function formatPath(path: ParamPath): string {
-  return path.map((part, index) => {
-    if (typeof part === "number") return `[${part}]`;
-    return index === 0 ? part : `.${part}`;
-  }).join("");
 }
 
 function formatValue(value: number): string {

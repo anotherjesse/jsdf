@@ -1,9 +1,10 @@
 import type { Node, SDF3 } from "../core/nodes";
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceLink } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
+import type { GraphParamEdit } from "../editor/graph-edit-model";
 import { renderGraphChangeJournal } from "../editor/graph-change-journal";
 import { GraphEditHistory, formatGraphChangeValue } from "../editor/graph-history";
-import { GraphInspector, type GraphParamEdit } from "../editor/graph-inspector";
+import { GraphInspector } from "../editor/graph-inspector";
 import { graphNodeIdentityKeyForNode, sourceLinkForGraphNodeIdentityKey } from "../editor/graph-source-identity";
 import { scrubNumericParamValue } from "../editor/scrub-values";
 import { renderSourceDialog } from "../editor/source-dialog";

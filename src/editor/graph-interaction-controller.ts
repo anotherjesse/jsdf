@@ -3,8 +3,9 @@ import type { RenderHighlight, PreviewViewportController } from "../preview/prev
 import { findGraphSourceLinks, patchGraphEditSource, type GraphSourceEdit, type GraphSourceLink } from "./clean-source-patch";
 import type { CodeEditor, SourceLinkHoverOptions, SourceLinkSelectOptions, SourceLinkValueChangeOptions } from "./code-editor";
 import type { EditorViewController, EditorViewSelectedTarget } from "./editor-view-controller";
+import type { GraphParamEdit } from "./graph-edit-model";
 import type { GraphHistoryController, GraphHistoryEntry } from "./graph-history-controls";
-import type { GraphHoverOptions, GraphInspector, GraphParamEdit } from "./graph-inspector";
+import type { GraphHoverOptions, GraphInspector } from "./graph-inspector";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
