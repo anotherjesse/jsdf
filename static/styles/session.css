@@ -1,0 +1,71 @@
+.session-strip {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.session-strip[hidden] {
+  display: none;
+}
+
+.session-id {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-id code {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-strip button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.session-status {
+  flex: 0 1 190px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-status[data-state="ok"] {
+  color: var(--accent);
+}
+
+.session-status[data-state="pending"] {
+  color: var(--accent-2);
+}
+
+.session-status[data-state="error"] {
+  color: var(--danger);
+}
+
+.footer-link {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--accent);
+}
+

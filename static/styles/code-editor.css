@@ -1,0 +1,187 @@
+.code-editor {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-top: 1px solid var(--line);
+}
+
+.source-graph-link {
+  border-bottom: 1px dotted color-mix(in srgb, var(--accent) 76%, transparent);
+  color: color-mix(in srgb, var(--text) 82%, var(--accent)) !important;
+  cursor: pointer;
+}
+
+.source-number-link {
+  cursor: ew-resize;
+}
+
+.source-scrubbing .source-number-link {
+  border-bottom-color: var(--accent-2);
+  color: var(--accent-2) !important;
+}
+
+.source-scrub-readout {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 58%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 92%, black);
+  color: var(--accent-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 7px;
+  transform: translateY(3px);
+  transition: opacity 80ms ease, transform 80ms ease;
+  white-space: nowrap;
+}
+
+.source-scrub-readout[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.source-link-status {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 12;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  max-width: calc(100% - 20px);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 92%, black);
+  color: color-mix(in srgb, var(--text) 86%, var(--accent));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 4px 3px 7px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.source-link-status[hidden] {
+  display: none;
+}
+
+.source-link-status-target {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  padding: 3px 2px;
+  text-align: left;
+}
+
+.source-link-status-target:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.source-link-status-target:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.source-link-status-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-link-status-navigation,
+.source-link-status-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.source-link-status-controls[hidden] {
+  display: none;
+}
+
+.source-link-status-nav,
+.source-link-status-step {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel-2) 92%, black);
+  color: color-mix(in srgb, var(--text) 90%, var(--accent));
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0;
+}
+
+.source-link-status-nav {
+  font-size: 15px;
+}
+
+.source-link-status-index {
+  min-width: 34px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+}
+
+.source-link-status-nav:hover,
+.source-link-status-step:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.source-link-status-nav:focus-visible,
+.source-link-status-step:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 1px;
+}
+
+.source-focused-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-2) 24%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 48%, transparent);
+}
+
+.source-selected-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent);
+}
+
+.source-revealed-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 64%, transparent);
+}
+
+.source-hovered-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
+}
+
+.source-edited-link {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-2) 34%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 62%, transparent);
+}
+

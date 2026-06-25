@@ -15,6 +15,8 @@ The server deliberately does not render or evaluate SDFs. It serves the app, rou
 
 Vite serves `static/` as the web root through `server/static-app.mjs`, so URLs like `/checks.html` stay flat while source entrypoints resolve through a `/src` alias to the root TypeScript tree. That keeps static page shells separate from implementation code and keeps `.sessions/` outside the served static root.
 
+The browser-facing stylesheet is `static/styles.css`. It is intentionally only an import manifest; implementation CSS is split under `static/styles/` by UI surface (`base`, `editor-shell`, `code-editor`, `graph-inspector`, `preview`, `session`, `source-dialog`, and `responsive`) so the static shell stays conventional without hiding all app styling in one huge file.
+
 ```mermaid
 flowchart LR
   User["User in browser"] --> App["Browser app"]
