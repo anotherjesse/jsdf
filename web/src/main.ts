@@ -13,7 +13,6 @@ import {
   configureGraphHistoryShortcutButtons,
   GRAPH_FILTER_SHORTCUTS,
   installAppKeyboardShortcuts,
-  SOURCE_HINTS_SHORTCUT,
   SOURCE_PRETTIFY_SHORTCUT,
 } from "./editor/app-shortcuts";
 import {
@@ -29,8 +28,12 @@ import {
 import { sourceForExample } from "./editor/example-source";
 import { createGraphHistoryController, type GraphHistoryEntry } from "./editor/graph-history-controls";
 import { GraphInspector, type GraphHoverOptions, type GraphParamEdit } from "./editor/graph-inspector";
-import { prettifySource } from "./editor/prettify-source";
 import { sourceDiagnosticFromError } from "./editor/source-diagnostics";
+import {
+  createSourceEditorController,
+  type EditorStatusState,
+  type SourceCompileOptions,
+} from "./editor/source-editor-controller";
 import {
   graphNodeSourceIdentityForNode,
   graphSourceLinkIdentityForLink,
@@ -116,8 +119,6 @@ const sessionSnapshotButton = document.querySelector<HTMLButtonElement>("#sessio
 const sessionStatus = document.querySelector<HTMLElement>("#sessionStatus")!;
 const overlay = document.querySelector<HTMLElement>("#overlay")!;
 
-type EditorStatusState = "idle" | "ok" | "pending" | "error";
-
 let codeEditor: CodeEditor | null = null;
 let graphInspector: GraphInspector | null = null;
 let activeSdf: SDF3 | null = null;
@@ -130,7 +131,6 @@ let currentSourceLinks: readonly GraphSourceLink[] = [];
 let selectedSourceLink: GraphSourceLink | null = null;
 let pendingHiddenNodeKeys: readonly string[] = [];
 let boundsEditor: BoundsEditor | null = null;
-let sourceCompileTimer = 0;
 let activeExampleId = examples[0]?.id ?? "canonical";
 let activeBounds = boundsForExample(activeExampleId);
 let boundsAreValid = true;
@@ -140,7 +140,26 @@ const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
 const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
-let graphHintsEnabled = editorPreferences.graphHintsEnabled;
+const sourceEditorController = createSourceEditorController({
+  elements: {
+    prettifyButton: prettifySourceButton,
+    sourceHintsButton,
+  },
+  initialGraphHintsEnabled: editorPreferences.graphHintsEnabled,
+  codeEditor: () => codeEditor,
+  sourceValid: () => editorSourceValid,
+  preserveHiddenNodeKeys: () => {
+    pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
+  },
+  clearSourceLinks: () => {
+    codeEditor?.setSourceLinks([]);
+    graphInspector?.setSourceLinks([]);
+  },
+  updateSaveState,
+  compileSource: compileEditorSource,
+  setEditorStatus,
+  savePreferences: saveEditorPreferences,
+});
 const editorViewController = createEditorViewController({
   elements: {
     codeModeButton,
@@ -152,7 +171,7 @@ const editorViewController = createEditorViewController({
   codeEditor: () => codeEditor,
   graphInspector: () => graphInspector,
   readSelectedTarget: readSelectedEditorTarget,
-  flushPendingSourceCompile,
+  flushPendingSourceCompile: sourceEditorController.flushPendingCompile,
   afterBrowserFrame,
   revealGraphSource,
   revealSourceLinkInGraph: (link) => handleSourceLinkSelect(link, { revealGraph: true }),
@@ -264,9 +283,9 @@ const sourceWorkspaceActions = createSourceWorkspaceActions({
     pendingHiddenNodeKeys = [];
   },
   resetLoadedSourceState,
-  clearPendingSourceCompile,
+  clearPendingSourceCompile: sourceEditorController.clearPendingCompile,
   compileSource: compileEditorSource,
-  currentSourceCompilesForSave,
+  currentSourceCompilesForSave: sourceEditorController.currentSourceCompilesForSave,
   currentDocumentName,
   currentPreviewProfile,
   boundsAreValid: () => boundsAreValid,
@@ -282,7 +301,6 @@ boundsEditor = createBoundsEditor(boundsEditorElement, activeBounds, {
   onChange: handleBoundsChange,
   onInvalid: handleBoundsInvalid,
 });
-updateSourceHintsButton();
 updateSaveState();
 sourceWorkspaceActions.renderDialog();
 exposeAppHealthDiagnostics(appHealthDiagnostics);
@@ -290,8 +308,6 @@ exposeAppHealthDiagnostics(appHealthDiagnostics);
 fitBoundsButton.addEventListener("click", fitBoundsToCurrentSdf);
 loadSourceButton.addEventListener("click", sourceWorkspaceActions.openDialog);
 saveSourceButton.addEventListener("click", sourceWorkspaceActions.saveCurrentSource);
-prettifySourceButton.addEventListener("click", prettifyCurrentSource);
-sourceHintsButton.addEventListener("click", toggleGraphHints);
 closeSourceDialogButton.addEventListener("click", () => sourceDialog.close());
 sourceDialog.addEventListener("click", (event) => {
   if (event.target === sourceDialog) sourceDialog.close();
@@ -309,8 +325,8 @@ installAppKeyboardShortcuts(window, {
   revealSelectedTarget: editorViewController.revealSelectedTarget,
   setEditorView: editorViewController.setView,
   focusGraphFilter: () => graphInspector?.focusFilter({ select: true }),
-  toggleSourceHints: toggleGraphHints,
-  prettifySource: prettifyCurrentSource,
+  toggleSourceHints: sourceEditorController.toggleGraphHints,
+  prettifySource: sourceEditorController.prettifyCurrentSource,
   openSourceDialog: sourceWorkspaceActions.openDialog,
   saveSource: sourceWorkspaceActions.saveCurrentSourceFromShortcut,
   canUndoGraph: () => graphHistoryController.canUndo,
@@ -348,14 +364,14 @@ async function boot(): Promise<void> {
     codeEditor = createCodeEditor(
       codeEditorElement,
       sourceForExample(activeExampleId),
-      scheduleSourceCompile,
+      sourceEditorController.scheduleCompile,
       handleSourceLinkSelect,
       handleSourceLinkValueChange,
       handleSourceLinkHover,
       handleSourceLinkCursor,
-      prettifyCurrentSource,
+      sourceEditorController.prettifyCurrentSource,
     );
-    codeEditor.setGraphHintsEnabled(graphHintsEnabled);
+    sourceEditorController.applyGraphHintsToEditor();
     if (healthCheckMode || !sourceWorkspaceActions.restoreDraft()) refreshSourceLinks();
     sourceWorkspace.setDraftPersistenceEnabled(!healthCheckMode);
     updateSaveState();
@@ -376,7 +392,7 @@ function readBrowserSessionStatus(): BrowserSessionCommandResult {
 }
 
 async function applyBrowserSessionCode(code: string, comment: string): Promise<BrowserSessionCommandResult> {
-  clearPendingSourceCompile();
+  sourceEditorController.clearPendingCompile();
   pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
   codeEditor?.setValue(code);
   updateSaveState();
@@ -404,73 +420,8 @@ function waitForBrowserFrame(): Promise<void> {
   return new Promise((resolve) => afterBrowserFrame(resolve));
 }
 
-function setGraphHintsEnabled(enabled: boolean): void {
-  graphHintsEnabled = enabled;
-  codeEditor?.setGraphHintsEnabled(enabled);
-  updateSourceHintsButton();
-  saveEditorPreferences({ graphHintsEnabled });
-}
-
-function toggleGraphHints(): void {
-  setGraphHintsEnabled(!graphHintsEnabled);
-  setEditorStatus(graphHintsEnabled ? "Graph hints shown" : "Graph hints hidden", "idle");
-}
-
-function updateSourceHintsButton(): void {
-  sourceHintsButton.setAttribute("aria-pressed", String(graphHintsEnabled));
-  sourceHintsButton.setAttribute("aria-keyshortcuts", SOURCE_HINTS_SHORTCUT);
-  sourceHintsButton.title = `${graphHintsEnabled ? "Hide" : "Show"} graph hints (${SOURCE_HINTS_SHORTCUT})`;
-}
-
-function currentSourceCompilesForSave(): boolean {
-  if (sourceCompileTimer) return flushPendingSourceCompile();
-  if (editorSourceValid) return true;
-  setEditorStatus("Fix code before saving", "error");
-  return false;
-}
-
-function prettifyCurrentSource(): void {
-  if (!codeEditor) return;
-  const source = codeEditor.getValue();
-  const nextSource = prettifySource(source);
-  if (nextSource === source) {
-    setEditorStatus("Already pretty", "idle");
-    return;
-  }
-  clearPendingSourceCompile();
-  pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
-  codeEditor.setValue(nextSource);
-  updateSaveState();
-  compileEditorSource({ status: "Prettified" });
-}
-
-function scheduleSourceCompile(): void {
-  clearPendingSourceCompile();
-  pendingHiddenNodeKeys = hiddenNodeKeysForCurrentGraph();
-  updateSaveState();
-  setEditorStatus("Editing...", "pending");
-  codeEditor?.setSourceLinks([]);
-  graphInspector?.setSourceLinks([]);
-  sourceCompileTimer = window.setTimeout(() => {
-    sourceCompileTimer = 0;
-    compileEditorSource({ status: "Compiled" });
-  }, 350);
-}
-
-function clearPendingSourceCompile(): void {
-  if (!sourceCompileTimer) return;
-  window.clearTimeout(sourceCompileTimer);
-  sourceCompileTimer = 0;
-}
-
-function flushPendingSourceCompile(): boolean {
-  if (!sourceCompileTimer) return editorSourceValid;
-  clearPendingSourceCompile();
-  return compileEditorSource({ status: "Compiled" });
-}
-
 function compileEditorSource(
-  options: { status: string; statusState?: EditorStatusState; invalidateMesh?: boolean } = { status: "Compiled" },
+  options: SourceCompileOptions = { status: "Compiled" },
 ): boolean {
   const source = codeEditor?.getValue() ?? sourceForExample(activeExampleId);
   const previousSelectedSourceIdentity = selectedSourceLink
@@ -906,7 +857,7 @@ function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {
     healthCheckMode,
     dirty: sourceWorkspace.hasUnsavedChanges,
     status: editorStatus.textContent ?? "",
-    sourceCompilePending: Boolean(sourceCompileTimer),
+    sourceCompilePending: sourceEditorController.sourceCompilePending,
     sourceValid: editorSourceValid,
     viewMode: previewViewport.viewMode,
     editorView: editorViewController.view,
