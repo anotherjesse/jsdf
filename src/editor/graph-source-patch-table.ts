@@ -211,9 +211,11 @@ export const CALL_PATCHES: Record<string, Record<string, CallPatch>> = {
 
 export const EXTRA_NODE_CALLS: Record<string, string[]> = {
   blend: ["blend"],
+  color: ["color"],
   difference: ["difference", "subtract"],
   equilateralTriangle: ["equilateral_triangle", "equilateralTriangle"],
   intersection: ["intersection"],
+  name: ["name"],
   negate: ["negate"],
   polygon: ["polygon"],
   rotate2: ["rotate"],

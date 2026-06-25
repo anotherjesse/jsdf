@@ -1,4 +1,5 @@
 import { ease, easeName, type EaseFn, type EaseName } from "./ease";
+import { asColor, type ColorInput } from "./color";
 import {
   X,
   Z,
@@ -26,6 +27,7 @@ export type NodeKind =
   | "circle" | "line" | "rectangle" | "roundedRectangle" | "equilateralTriangle" | "hexagon" | "roundedX" | "polygon" | "vesica"
   | "sphere" | "plane" | "box" | "roundedBox" | "wireframeBox" | "torus" | "capsule" | "cylinder" | "cappedCylinder" | "roundedCylinder"
   | "cappedCone" | "roundedCone" | "ellipsoid" | "pyramid" | "tetrahedron" | "octahedron" | "dodecahedron" | "icosahedron"
+  | "name" | "color"
   | "union" | "difference" | "intersection" | "blend" | "negate" | "dilate" | "erode" | "shell" | "repeat"
   | "translate" | "scale" | "rotate2" | "rotate3" | "circularArray2" | "circularArray3" | "elongate2" | "elongate3"
   | "twist" | "bend" | "bendLinear" | "bendRadial" | "transitionLinear" | "transitionRadial" | "wrapAround"
@@ -42,6 +44,7 @@ export interface Node {
 export type SDF = SDF2 | SDF3;
 export type SDF3Input = SDF3;
 export type SDF2Input = SDF2;
+export type { ColorInput } from "./color";
 
 let nextNodeId = 1;
 
@@ -70,6 +73,8 @@ export class SDF3 {
   }
 
   union(...args: SDF3OrOptions[]): SDF3 { return union(this, ...args) as SDF3; }
+  name(value: string): SDF3 { return name(this, value) as SDF3; }
+  color(value: ColorInput): SDF3 { return color(this, value) as SDF3; }
   difference(...args: SDF3OrOptions[]): SDF3 { return difference(this, ...args) as SDF3; }
   subtract(...args: SDF3OrOptions[]): SDF3 { return difference(this, ...args) as SDF3; }
   intersection(...args: SDF3OrOptions[]): SDF3 { return intersection(this, ...args) as SDF3; }
@@ -157,6 +162,8 @@ export class SDF2 {
   }
 
   union(...args: SDF2OrOptions[]): SDF2 { return union(this, ...args) as SDF2; }
+  name(value: string): SDF2 { return name(this, value) as SDF2; }
+  color(value: ColorInput): SDF2 { return color(this, value) as SDF2; }
   difference(...args: SDF2OrOptions[]): SDF2 { return difference(this, ...args) as SDF2; }
   subtract(...args: SDF2OrOptions[]): SDF2 { return difference(this, ...args) as SDF2; }
   intersection(...args: SDF2OrOptions[]): SDF2 { return intersection(this, ...args) as SDF2; }
@@ -218,6 +225,16 @@ function common(kind: NodeKind, first: SDF, rest: (SDF | OpOptions)[], fallback:
 
 export function union(first: SDF, ...rest: (SDF | OpOptions)[]): SDF {
   return common("union", first, rest, null);
+}
+
+export function name(other: SDF, value: string): SDF {
+  const label = String(value);
+  return other.dim === 2 ? op2("name", { name: label }, [other]) : op3("name", { name: label }, [other]);
+}
+
+export function color(other: SDF, value: ColorInput): SDF {
+  const parsed = asColor(value);
+  return other.dim === 2 ? op2("color", { color: parsed }, [other]) : op3("color", { color: parsed }, [other]);
 }
 
 export function difference(first: SDF, ...rest: (SDF | OpOptions)[]): SDF {

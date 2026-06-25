@@ -42,7 +42,7 @@ function walkParams(value: unknown, path: ParamPath, out: NumericParam[]): void 
   }
   if (value && typeof value === "object") {
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (key === "ease") continue;
+      if (key === "ease" || key === "name" || key === "color") continue;
       walkParams(item, [...path, key], out);
     }
   }

@@ -62,6 +62,7 @@ const expectedExports = [
   "circle", "line", "slab2", "rectangle", "rounded_rectangle", "equilateral_triangle", "hexagon", "rounded_x", "polygon", "vesica",
   "sphere", "plane", "slab", "box", "rounded_box", "wireframe_box", "torus", "capsule", "cylinder", "capped_cylinder",
   "rounded_cylinder", "capped_cone", "rounded_cone", "ellipsoid", "pyramid", "tetrahedron", "octahedron", "dodecahedron", "icosahedron",
+  "name", "color",
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
   "transition_linear", "transition_radial", "extrude_to", "ease",
   "generate", "save", "sample_slice", "show_slice", "write_binary_stl",
@@ -69,11 +70,13 @@ const expectedExports = [
 
 const expected2Methods = [
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
+  "name", "color",
   "translate", "scale", "rotate", "circular_array", "elongate", "extrude", "extrude_to", "revolve",
 ];
 
 const expected3Methods = [
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
+  "name", "color",
   "translate", "scale", "rotate", "rotate_to", "orient", "circular_array", "elongate", "twist", "bend",
   "bend_linear", "bend_radial", "transition_linear", "transition_radial", "wrap_around", "slice",
   "generate", "save", "sample_slice", "show_slice",
@@ -83,6 +86,7 @@ const expectedNodeKinds = [
   "circle", "line", "rectangle", "roundedRectangle", "equilateralTriangle", "hexagon", "roundedX", "polygon", "vesica",
   "sphere", "plane", "box", "roundedBox", "wireframeBox", "torus", "capsule", "cylinder", "cappedCylinder", "roundedCylinder",
   "cappedCone", "roundedCone", "ellipsoid", "pyramid", "tetrahedron", "octahedron", "dodecahedron", "icosahedron",
+  "name", "color",
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
   "translate", "scale", "rotate2", "rotate3", "circularArray2", "circularArray3", "elongate2", "elongate3",
   "twist", "bend", "bendLinear", "bendRadial", "transitionLinear", "transitionRadial", "wrapAround",

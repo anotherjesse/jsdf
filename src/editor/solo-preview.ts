@@ -2,6 +2,8 @@ import { SDF2, SDF3, type Node, type NodeKind, type SDF } from "../core/nodes";
 
 const CONTEXT_WRAPPERS = new Set<NodeKind>([
   "negate",
+  "name",
+  "color",
   "dilate",
   "erode",
   "shell",

@@ -316,7 +316,9 @@ void main() {
 `;
 
 function fragmentShader(sdf: SDF3 | null): string {
-  const sceneSource = sdf ? compileGLSLScene(sdf).source : "";
+  const sceneSource = sdf
+    ? compileGLSLScene(sdf).source
+    : "vec3 sceneColor(vec3 p) { return vec3(0.16, 0.72, 0.66); }";
   const selectedScene = sdf
     ? selectedSceneFunction(sdf.node)
     : [
@@ -343,7 +345,7 @@ void main() {
   float diffuse = max(dot(n, light), 0.0);
   float fill = max(dot(n, normalize(vec3(-0.6, -0.3, 0.55))), 0.0);
   float rim = pow(1.0 - abs(n.z) * 0.55, 2.0) * 0.18;
-  vec3 base = vec3(0.16, 0.72, 0.66);
+  vec3 base = sceneColor(v_position);
   vec3 warm = vec3(0.95, 0.64, 0.16);
   vec3 color = base * (0.34 + diffuse * 0.75) + warm * fill * 0.16 + vec3(rim);
   float selectedBand = 1.0 - smoothstep(0.006, 0.055, abs(selectedScene(v_position)));

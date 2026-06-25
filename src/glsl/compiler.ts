@@ -7,6 +7,8 @@ import { GLSL_HELPERS } from "./helpers";
 
 type Dim = 2 | 3;
 
+const DEFAULT_PREVIEW_COLOR = [0.14, 0.70, 0.65] as const;
+
 export interface CompiledGLSLScene {
   source: string;
   sceneFunction: string;
@@ -15,8 +17,10 @@ export interface CompiledGLSLScene {
 export function compileGLSLScene(sdf: SDF3): CompiledGLSLScene {
   const compiler = new Compiler();
   compiler.emit(sdf.node);
+  const colorCompiler = new ColorCompiler();
+  colorCompiler.emit(sdf.node);
   return {
-    source: `${GLSL_HELPERS}\n${compiler.source()}\nfloat scene(vec3 p) { return ${fnName(sdf.node)}(p); }\n`,
+    source: `${GLSL_HELPERS}\n${compiler.source()}\n${colorCompiler.source()}\nfloat scene(vec3 p) { return ${fnName(sdf.node)}(p); }\nvec3 sceneColor(vec3 p) { return ${colorFnName(sdf.node)}(p); }\n`,
     sceneFunction: fnName(sdf.node),
   };
 }
@@ -54,6 +58,8 @@ class Compiler {
     const children = node.children.map((child) => child.node);
     const call = (child: Node, arg = "p") => `${fnName(child)}(${arg})`;
     const par = p<{ entries: Array<{ k: number | null }>; k?: number | null; r: number; thickness: number; spacing: number[]; count: number[] | null; padding: number[] }>(node);
+
+    if (node.kind === "name" || node.kind === "color") return `  return ${call(children[0])};`;
 
     if (node.kind === "union" || node.kind === "difference" || node.kind === "intersection" || node.kind === "blend") {
       const lines = [`  float d = ${call(children[0])};`];
@@ -236,6 +242,189 @@ class Compiler {
   }
 }
 
+class ColorCompiler {
+  private readonly emitted = new Set<number>();
+  private readonly chunks: string[] = [];
+
+  source(): string {
+    return this.chunks.join("\n");
+  }
+
+  emit(node: Node): void {
+    if (this.emitted.has(node.id)) return;
+    for (const child of node.children) this.emit(child.node);
+    this.emitted.add(node.id);
+    this.chunks.push(node.dim === 2 ? this.emit2(node) : this.emit3(node));
+  }
+
+  private emit2(node: Node): string {
+    return `vec3 ${colorFnName(node)}(vec2 p) {\n${this.body(node, 2)}\n}`;
+  }
+
+  private emit3(node: Node): string {
+    return `vec3 ${colorFnName(node)}(vec3 p) {\n${this.body(node, 3)}\n}`;
+  }
+
+  private body(node: Node, dim: Dim): string {
+    const common = this.commonBody(node, dim);
+    if (common) return common;
+    return dim === 2 ? this.body2(node) : this.body3(node);
+  }
+
+  private commonBody(node: Node, dim: Dim): string | null {
+    const children = node.children.map((child) => child.node);
+    const colorCall = (child: Node, arg = "p") => `${colorFnName(child)}(${arg})`;
+    const distanceCall = (child: Node, arg = "p") => `${fnName(child)}(${arg})`;
+    const par = p<{ entries: Array<{ k: number | null }>; k?: number | null; spacing: number[]; count: number[] | null; padding: number[]; color: number[] }>(node);
+
+    if (node.kind === "name") return `  return ${colorCall(children[0])};`;
+    if (node.kind === "color") return `  return ${v3(par.color)};`;
+    if (node.kind === "difference") return `  return ${colorCall(children[0])};`;
+
+    if (node.kind === "union" || node.kind === "intersection" || node.kind === "blend") {
+      const lines = [
+        `  float d = ${distanceCall(children[0])};`,
+        `  vec3 c = ${colorCall(children[0])};`,
+      ];
+      for (let i = 1; i < children.length; i += 1) {
+        const d2 = `d2_${i}`;
+        const c2 = `c2_${i}`;
+        lines.push(`  float ${d2} = ${distanceCall(children[i])};`);
+        lines.push(`  vec3 ${c2} = ${colorCall(children[i])};`);
+        const k = par.entries[i].k;
+        if (node.kind === "blend") {
+          lines.push(`  c = mix(c, ${c2}, ${f(k ?? par.k ?? 0.5)});`);
+          lines.push(`  d = mix(d, ${d2}, ${f(k ?? par.k ?? 0.5)});`);
+        } else if (k == null && node.kind === "union") {
+          lines.push(`  if (${d2} < d) { d = ${d2}; c = ${c2}; }`);
+        } else if (k == null) {
+          lines.push(`  if (${d2} > d) { d = ${d2}; c = ${c2}; }`);
+        } else if (node.kind === "union") {
+          lines.push(`  { float h = clamp(0.5 + 0.5 * (${d2} - d) / ${f(k)}, 0.0, 1.0); c = mix(${c2}, c, h); d = mix(${d2}, d, h) - ${f(k)} * h * (1.0 - h); }`);
+        } else {
+          lines.push(`  { float h = clamp(0.5 - 0.5 * (${d2} - d) / ${f(k)}, 0.0, 1.0); c = mix(${c2}, c, h); d = mix(${d2}, d, h) + ${f(k)} * h * (1.0 - h); }`);
+        }
+      }
+      lines.push("  return c;");
+      return lines.join("\n");
+    }
+
+    if (node.kind === "negate" || node.kind === "dilate" || node.kind === "erode" || node.kind === "shell") {
+      return `  return ${colorCall(children[0])};`;
+    }
+    if (node.kind === "repeat") return this.repeatBody(children[0], par, dim);
+    return null;
+  }
+
+  private repeatBody(child: Node, par: { spacing: number[]; count: number[] | null; padding: number[] }, dim: Dim): string {
+    const vec = dim === 2 ? "vec2" : "vec3";
+    const vv = dim === 2 ? v2 : v3;
+    const safe = dim === 2 ? "safe_div2" : "safe_div3";
+    const count = par.count ? `clamp(round(q), -${vv(par.count)}, ${vv(par.count)})` : "round(q)";
+    const lines = [
+      `  vec${dim} spacing = ${vv(par.spacing)};`,
+      `  vec${dim} q = ${safe}(p, spacing);`,
+      `  vec${dim} index = ${count};`,
+      "  float d = 1000000000.0;",
+      `  vec3 c = ${v3(DEFAULT_PREVIEW_COLOR)};`,
+    ];
+    for (const offset of repeatOffsets(par.padding)) {
+      const pp = `p - spacing * (index + ${vec}(${offset.map(f).join(", ")}))`;
+      lines.push(`  { vec${dim} rp = ${pp}; float rd = ${fnName(child)}(rp); if (rd < d) { d = rd; c = ${colorFnName(child)}(rp); } }`);
+    }
+    lines.push("  return c;");
+    return lines.join("\n");
+  }
+
+  private body2(node: Node): string {
+    const par = node.params as Record<string, unknown>;
+    const child = (i = 0, arg = "p") => `${colorFnName(node.children[i].node)}(${arg})`;
+
+    switch (node.kind) {
+      case "circle":
+      case "line":
+      case "rectangle":
+      case "roundedRectangle":
+      case "equilateralTriangle":
+      case "hexagon":
+      case "roundedX":
+      case "polygon":
+      case "vesica":
+        return `  return ${v3(DEFAULT_PREVIEW_COLOR)};`;
+      case "translate": return `  return ${child(0, `p - ${v2(par.offset as number[])}`)};`;
+      case "scale": return `  return ${child(0, `safe_div2(p, ${v2(par.factor as number[])})`)};`;
+      case "rotate2": return `  return ${child(0, mat2Mul(par.matrix as number[][], "p"))};`;
+      case "circularArray2": return `  float da = 2.0 * SDF_PI / ${f(par.count as number)};\n  float d = length(p);\n  float a = imod(atan(p.y, p.x), da);\n  vec2 p0 = vec2(cos(a - da) * d, sin(a - da) * d);\n  vec2 p1 = vec2(cos(a) * d, sin(a) * d);\n  return ${fnName(node.children[0].node)}(p0) <= ${fnName(node.children[0].node)}(p1) ? ${child(0, "p0")} : ${child(0, "p1")};`;
+      case "elongate2": return `  vec2 q = abs(p) - ${v2(par.size as number[])};\n  return ${child(0, "max(q, vec2(0.0))")};`;
+      case "slice": return `  return ${colorFnName(node.children[0].node)}(vec3(p, 0.0));`;
+      default: throw new Error(`unsupported GLSL color 2D node: ${node.kind}`);
+    }
+  }
+
+  private body3(node: Node): string {
+    const par = node.params as Record<string, unknown>;
+    const child = (i = 0, arg = "p") => `${colorFnName(node.children[i].node)}(${arg})`;
+
+    switch (node.kind) {
+      case "sphere":
+      case "plane":
+      case "box":
+      case "roundedBox":
+      case "wireframeBox":
+      case "torus":
+      case "capsule":
+      case "cylinder":
+      case "cappedCylinder":
+      case "roundedCylinder":
+      case "cappedCone":
+      case "roundedCone":
+      case "ellipsoid":
+      case "pyramid":
+      case "tetrahedron":
+      case "octahedron":
+      case "dodecahedron":
+      case "icosahedron":
+        return `  return ${v3(DEFAULT_PREVIEW_COLOR)};`;
+      case "translate": return `  return ${child(0, `p - ${v3(par.offset as number[])}`)};`;
+      case "scale": return `  return ${child(0, `safe_div3(p, ${v3(par.factor as number[])})`)};`;
+      case "rotate3": return `  return ${child(0, mat3Mul(par.matrix as number[][], "p"))};`;
+      case "circularArray3": return `  float da = 2.0 * SDF_PI / ${f(par.count as number)};\n  float d = length(p.xy);\n  float a = imod(atan(p.y, p.x), da);\n  float offset = ${f(par.offset as number)};\n  vec3 p0 = vec3(cos(a - da) * d - offset, sin(a - da) * d, p.z);\n  vec3 p1 = vec3(cos(a) * d - offset, sin(a) * d, p.z);\n  return ${fnName(node.children[0].node)}(p0) <= ${fnName(node.children[0].node)}(p1) ? ${child(0, "p0")} : ${child(0, "p1")};`;
+      case "elongate3": return `  vec3 q = abs(p) - ${v3(par.size as number[])};\n  return ${child(0, "max(q, vec3(0.0))")};`;
+      case "twist": return `  float c = cos(${f(par.k as number)} * p.z);\n  float s = sin(${f(par.k as number)} * p.z);\n  return ${child(0, "vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z)")};`;
+      case "bend": return `  float c = cos(${f(par.k as number)} * p.x);\n  float s = sin(${f(par.k as number)} * p.x);\n  return ${child(0, "vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z)")};`;
+      case "bendLinear": return this.bendLinearBody(par, child);
+      case "bendRadial": return this.bendRadialBody(par, child);
+      case "transitionLinear": return this.transitionLinearBody(par, child);
+      case "transitionRadial": return this.transitionRadialBody(par, child);
+      case "wrapAround": return `  float d = length(p.xy) - ${f(par.r as number)};\n  float a = atan(p.y, p.x);\n  float t = ${easeCall(par.ease as EaseName, "(a + SDF_PI) / (2.0 * SDF_PI)")};\n  return ${child(0, `vec3(mix(${f(par.x0 as number)}, ${f(par.x1 as number)}, t), -d, p.z)`)};`;
+      case "extrude": return `  return ${colorFnName(node.children[0].node)}(p.xy);`;
+      case "extrudeTo": return `  float t = ${easeCall(par.ease as EaseName, `clamp(p.z / ${f(par.h as number)}, -0.5, 0.5) + 0.5`)};\n  return mix(${colorFnName(node.children[0].node)}(p.xy), ${colorFnName(node.children[1].node)}(p.xy), t);`;
+      case "revolve": return `  return ${colorFnName(node.children[0].node)}(vec2(length(p.xy) - ${f(par.offset as number)}, p.z));`;
+      default: throw new Error(`unsupported GLSL color 3D node: ${node.kind}`);
+    }
+  }
+
+  private bendLinearBody(par: Record<string, unknown>, child: (i?: number, arg?: string) => string): string {
+    return `  vec3 p0 = ${v3(par.p0 as number[])};\n  vec3 p1 = ${v3(par.p1 as number[])};\n  vec3 ab = p1 - p0;\n  float t = ${easeCall(par.ease as EaseName, "clamp(dot(p - p0, ab) / dot(ab, ab), 0.0, 1.0)")};\n  return ${child(0, `p + ${v3(par.v as number[])} * t`)};`;
+  }
+
+  private bendRadialBody(par: Record<string, unknown>, child: (i?: number, arg?: string) => string): string {
+    return `  float r = length(p.xy);\n  float t = ${easeCall(par.ease as EaseName, `clamp((r - ${f(par.r0 as number)}) / ${f((par.r1 as number) - (par.r0 as number))}, 0.0, 1.0)`)};\n  return ${child(0, `vec3(p.xy, p.z - ${f(par.dz as number)} * t)`)};`;
+  }
+
+  private transitionLinearBody(par: Record<string, unknown>, child: (i?: number, arg?: string) => string): string {
+    return `  vec3 p0 = ${v3(par.p0 as number[])};\n  vec3 p1 = ${v3(par.p1 as number[])};\n  vec3 ab = p1 - p0;\n  float t = ${easeCall(par.ease as EaseName, "clamp(dot(p - p0, ab) / dot(ab, ab), 0.0, 1.0)")};\n  return mix(${child(0)}, ${child(1)}, t);`;
+  }
+
+  private transitionRadialBody(par: Record<string, unknown>, child: (i?: number, arg?: string) => string): string {
+    return `  float r = length(p.xy);\n  float t = ${easeCall(par.ease as EaseName, `clamp((r - ${f(par.r0 as number)}) / ${f((par.r1 as number) - (par.r0 as number))}, 0.0, 1.0)`)};\n  return mix(${child(0)}, ${child(1)}, t);`;
+  }
+}
+
 function easeCall(name: EaseName, arg: string): string {
   return `ease_${name}(${arg})`;
+}
+
+function colorFnName(node: Node): string {
+  return `sdf_color_${node.id}`;
 }

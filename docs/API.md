@@ -40,6 +40,25 @@ return union(box([3, 3, 0.5]), sphere(), { k: 0.25 });
 
 The API keeps Python-style snake_case names for familiarity. Common multiword methods also have camelCase aliases, such as `rotateTo`, `circularArray`, `bendLinear`, `transitionRadial`, and `wrapAround`.
 
+## Names And Colors
+
+Names and colors are annotations. They do not change the signed distance field, so evaluation, CSG, transforms, and STL export stay geometry-only.
+
+```js
+const body = rounded_box([2, 1, 0.4], 0.08)
+  .name("body")
+  .color("#0f766e");
+
+const badge = cylinder(0.18)
+  .translate([0.6, 0, 0.24])
+  .name("badge")
+  .color("#facc15");
+
+return union(body, badge, { k: 0.03 });
+```
+
+Use `.name(label)` for a human-readable label and `.color("#rrggbb")` or `.color([r, g, b])` for preview/export color. Numeric color arrays can use either normalized `0..1` channels or `0..255` channels. Subtractive cutters do not assign color to the cut surface by default; `base.difference(cutter.color("#ef4444"))` keeps the base color.
+
 ## Examples
 
 The app includes browser examples in [src/examples.ts](../src/examples.ts). These examples are also available from the example picker in the editor.
@@ -103,6 +122,16 @@ void generate(f, { grid: 72 }).then((mesh) => {
   console.log(mesh.bounds, mesh.dims);
 });
 return f;
+```
+
+### Colored Preview
+
+The shader and mesh previews read `.color(...)` annotations directly from the graph. STL export ignores them.
+
+```js
+const left = sphere(0.7).translate([-0.55, 0, 0]).name("left").color("#ef4444");
+const right = sphere(0.7).translate([0.55, 0, 0]).name("right").color("#22c55e");
+return union(left, right);
 ```
 
 If you already have a `MeshResult` or triangle list, `write_binary_stl` creates a `Blob` and can optionally trigger a download.

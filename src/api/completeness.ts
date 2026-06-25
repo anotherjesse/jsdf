@@ -17,6 +17,8 @@ import {
   icosahedron,
   intersection,
   line,
+  color as annotate_color,
+  name as annotate_name,
   octahedron,
   plane,
   polygon,
@@ -51,9 +53,9 @@ export const unsupportedOriginalApi = [
 ] as const;
 
 export const supportedSummary = {
-  moduleExports: 47,
-  sdf2Methods: 17,
-  sdf3Methods: 28,
+  moduleExports: 49,
+  sdf2Methods: 19,
+  sdf3Methods: 30,
 };
 
 export function buildApiCompletenessFixtures(): { two: SDF2[]; three: SDF3[] } {
@@ -71,6 +73,7 @@ export function buildApiCompletenessFixtures(): { two: SDF2[]; three: SDF3[] } {
   ];
 
   const twoOps = [
+    annotate_name(annotate_color(two[0], "#ef4444"), "fixture-circle") as SDF2,
     two[0].translate([1, 0]),
     two[1].scale([1, 2]),
     two[2].rotate(Math.PI / 4),
@@ -114,6 +117,7 @@ export function buildApiCompletenessFixtures(): { two: SDF2[]; three: SDF3[] } {
   ];
 
   const threeOps = [
+    annotate_name(annotate_color(three[0], "#0f766e"), "fixture-sphere") as SDF3,
     three[0].translate([1, 2, 3]),
     three[1].scale([1, 2, 3]),
     three[2].rotate(Math.PI / 4, X),

@@ -13,6 +13,9 @@ export function evalCommon(node: Node, p: number[], evalChild: EvalFn): number |
   const par = params<{ entries: Array<{ k: number | null }>; k?: number | null; r: number; thickness: number; spacing: number[]; count: number[] | null; padding: number[] }>(node);
 
   switch (node.kind) {
+    case "name":
+    case "color":
+      return evalChild(children[0], p);
     case "union": {
       let d1 = evalChild(children[0], p);
       for (let i = 1; i < children.length; i += 1) {

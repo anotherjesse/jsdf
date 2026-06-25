@@ -308,7 +308,8 @@ void main() {
   float diffuse = max(dot(n, light), 0.0);
   float soft = max(dot(n, fill), 0.0);
   float rim = pow(max(0.0, 1.0 - dot(n, -ray)), 2.0);
-  vec3 color = vec3(0.14, 0.70, 0.65) * (0.26 + diffuse * 0.88)
+  vec3 albedo = sceneColor(p);
+  vec3 color = albedo * (0.26 + diffuse * 0.88)
     + vec3(0.95, 0.63, 0.16) * soft * 0.16
     + vec3(0.55, 0.72, 0.85) * rim * 0.32;
   float selectedBand = 1.0 - smoothstep(eps * 3.0, eps * 14.0, abs(selectedScene(p)));

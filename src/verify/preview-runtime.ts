@@ -1,4 +1,4 @@
-import { box, intersection, sphere, type SDF3 } from "../api";
+import { box, intersection, sphere, union, type SDF3 } from "../api";
 import { generateMesh } from "../mesh/generate";
 import { HIGHLIGHT_PALETTE } from "../preview/highlight-style";
 import { OrbitCamera } from "../preview/orbit-camera";
@@ -9,12 +9,18 @@ import { WebGLRaymarchRenderer } from "../preview/webgl-raymarch-renderer";
 export interface PreviewRuntimeVerification {
   ok: boolean;
   shader: CanvasDiagnostics;
+  colorShader: ColorCanvasDiagnostics;
   highlight: HighlightDiagnostics;
   mesh: CanvasDiagnostics & {
     triangles: number;
     usedGPU: boolean;
     usedWorker: boolean;
     meshTimeMs: number;
+  };
+  colorMesh: ColorCanvasDiagnostics & {
+    triangles: number;
+    usedGPU: boolean;
+    usedWorker: boolean;
   };
   meshHighlight: {
     markNode: string;
@@ -62,6 +68,11 @@ export interface CanvasDiagnostics {
   highlightPalette: string;
 }
 
+export interface ColorCanvasDiagnostics extends CanvasDiagnostics {
+  redPixels: number;
+  greenPixels: number;
+}
+
 const bounds: [number[], number[]] = [[-1.45, -1.45, -1.45], [1.45, 1.45, 1.45]];
 
 export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): Promise<PreviewRuntimeVerification> {
@@ -77,6 +88,7 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   const shader = diagnostics(canvas);
   verifyDiagnostics("shader", shader, "glsl-raymarch", errors);
   const highlight = verifyHighlightUniforms(shaderRenderer, sdf, canvas, errors);
+  const colorShader = verifyColoredShaderPreview(shaderRenderer, canvas, errors);
 
   const meshStart = performance.now();
   const meshResult = await generateMesh(sdf, {
@@ -129,6 +141,7 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   if (meshFocus.programBuilds !== mesh.programBuilds) {
     errors.push(`mesh focus highlight rebuilt shader program: ${meshFocus.programBuilds} !== ${mesh.programBuilds}`);
   }
+  const colorMesh = await verifyColoredMeshPreview(meshRenderer, canvas, errors);
 
   const quadLabels = viewPanels("quad", 800, 600).map((panel) => panel.label);
   if (quadLabels.join(",") !== "Orbit,Top Z,Right X,Front Y") {
@@ -138,8 +151,10 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
   return {
     ok: errors.length === 0,
     shader,
+    colorShader,
     highlight,
     mesh,
+    colorMesh,
     meshHighlight: {
       markNode: mesh.highlightNode,
       focusNode: meshFocus.highlightNode,
@@ -154,6 +169,28 @@ export async function runPreviewRuntimeVerification(canvas: HTMLCanvasElement): 
     },
     quadLabels,
     errors,
+  };
+}
+
+function verifyColoredShaderPreview(
+  renderer: WebGLRaymarchRenderer,
+  canvas: HTMLCanvasElement,
+  errors: string[],
+): ColorCanvasDiagnostics {
+  const colored = union(
+    sphere(0.72).translate([-0.58, 0, 0]).name("red").color("#ef4444"),
+    sphere(0.72).translate([0.58, 0, 0]).name("green").color("#22c55e"),
+  ) as SDF3;
+  renderer.render(colored, [[-1.55, -1.2, -1.1], [1.55, 1.2, 1.1]], 176);
+  const base = diagnostics(canvas);
+  const colorSamples = colorFamilyCounts(canvas);
+  if (base.mode !== "glsl-raymarch") errors.push(`colored shader preview mode mismatch: ${base.mode}`);
+  if (colorSamples.redPixels <= 0) errors.push("colored shader preview did not expose red pixels");
+  if (colorSamples.greenPixels <= 0) errors.push("colored shader preview did not expose green pixels");
+  return {
+    ...base,
+    redPixels: colorSamples.redPixels,
+    greenPixels: colorSamples.greenPixels,
   };
 }
 
@@ -223,6 +260,39 @@ function verifyHighlightUniforms(
   };
 }
 
+async function verifyColoredMeshPreview(
+  renderer: WebGLMeshRenderer,
+  canvas: HTMLCanvasElement,
+  errors: string[],
+): Promise<ColorCanvasDiagnostics & { triangles: number; usedGPU: boolean; usedWorker: boolean }> {
+  const colored = union(
+    sphere(0.72).translate([-0.58, 0, 0]).name("red").color("#ef4444"),
+    sphere(0.72).translate([0.58, 0, 0]).name("green").color("#22c55e"),
+  ) as SDF3;
+  const meshResult = await generateMesh(colored, {
+    algorithm: "surface-net",
+    bounds: [[-1.55, -1.2, -1.1], [1.55, 1.2, 1.1]],
+    grid: 32,
+    preferGPU: true,
+    preferWorker: true,
+  });
+  renderer.render(meshResult.triangles, meshResult.bounds, colored);
+  const base = diagnostics(canvas);
+  const colorSamples = colorFamilyCounts(canvas);
+  if (base.mode !== "mesh") errors.push(`colored mesh preview mode mismatch: ${base.mode}`);
+  if (meshResult.triangles.length <= 0) errors.push("colored mesh preview generated no triangles");
+  if (colorSamples.redPixels <= 0) errors.push("colored mesh preview did not expose red pixels");
+  if (colorSamples.greenPixels <= 0) errors.push("colored mesh preview did not expose green pixels");
+  return {
+    ...base,
+    redPixels: colorSamples.redPixels,
+    greenPixels: colorSamples.greenPixels,
+    triangles: meshResult.triangles.length,
+    usedGPU: meshResult.usedGPU,
+    usedWorker: meshResult.usedWorker,
+  };
+}
+
 function diagnostics(canvas: HTMLCanvasElement): CanvasDiagnostics {
   return {
     mode: canvas.dataset.previewMode ?? "",
@@ -247,4 +317,22 @@ function verifyDiagnostics(label: string, result: CanvasDiagnostics, expectedMod
   if (result.sum <= 0) errors.push(`${label} preview has empty pixel sum`);
   if (result.max <= result.min) errors.push(`${label} preview has no sampled luminance range`);
   if (result.distinct < 2) errors.push(`${label} preview sampled too few distinct colors: ${result.distinct}`);
+}
+
+function colorFamilyCounts(canvas: HTMLCanvasElement): { redPixels: number; greenPixels: number } {
+  const gl = canvas.getContext("webgl2");
+  if (!gl) return { redPixels: 0, greenPixels: 0 };
+  const pixel = new Uint8Array(4);
+  let redPixels = 0;
+  let greenPixels = 0;
+  for (let y = 0.25; y <= 0.75; y += 0.1) {
+    for (let x = 0.2; x <= 0.8; x += 0.075) {
+      const px = Math.max(0, Math.min(canvas.width - 1, Math.floor(x * canvas.width)));
+      const py = Math.max(0, Math.min(canvas.height - 1, Math.floor(y * canvas.height)));
+      gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      if (pixel[0] > pixel[1] * 1.15 && pixel[0] > pixel[2] * 1.25) redPixels += 1;
+      if (pixel[1] > pixel[0] * 1.1 && pixel[1] > pixel[2] * 1.1) greenPixels += 1;
+    }
+  }
+  return { redPixels, greenPixels };
 }

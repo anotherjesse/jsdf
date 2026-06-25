@@ -55,6 +55,8 @@ class Compiler {
     const call = (child: Node, arg = "p") => `${fnName(child)}(${arg})`;
     const par = p<{ entries: Array<{ k: number | null }>; k?: number | null; r: number; thickness: number; spacing: number[]; count: number[] | null; padding: number[] }>(node);
 
+    if (node.kind === "name" || node.kind === "color") return `  return ${call(children[0])};`;
+
     if (node.kind === "union" || node.kind === "difference" || node.kind === "intersection" || node.kind === "blend") {
       const lines = [`  var d = ${call(children[0])};`];
       for (let i = 1; i < children.length; i += 1) {

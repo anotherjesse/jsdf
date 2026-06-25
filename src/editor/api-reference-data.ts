@@ -58,6 +58,8 @@ export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
   vesica: fn("2D Primitives", "vesica(radius, distance): SDF2", "Creates a vesica shape from two overlapping circles."),
 
   union: fn("CSG", "union(first, ...rest, { k? }): SDF", "Combines SDFs, optionally using smooth blending with k.", "function", GLOBAL_AND_METHOD, "shape.union(...others, { k? }): SDF"),
+  name: fn("Annotations", "name(shape, label): SDF", "Adds a human-readable label to a shape without changing its distance field.", "function", GLOBAL_AND_METHOD, "shape.name(label): SDF"),
+  color: fn("Annotations", "color(shape, hexOrRgb): SDF", "Adds a preview/export color to a shape without changing its distance field.", "function", GLOBAL_AND_METHOD, "shape.color(hexOrRgb): SDF"),
   difference: fn("CSG", "difference(first, ...rest, { k? }): SDF", "Subtracts later SDFs from the first, optionally smoothing with k.", "function", GLOBAL_AND_METHOD, "shape.difference(...others, { k? }): SDF"),
   subtract: fn("CSG", "shape.subtract(...others, { k? }): SDF", "Method alias for difference.", "method"),
   intersection: fn("CSG", "intersection(first, ...rest, { k? }): SDF", "Keeps the overlapping region of the inputs.", "function", GLOBAL_AND_METHOD, "shape.intersection(...others, { k? }): SDF"),
