@@ -2,6 +2,7 @@ import type { Node, SDF3 } from "../core/nodes";
 import { findGraphSourceLinks, patchGraphEditSource } from "../editor/clean-source-patch";
 import { evaluateSource } from "../editor/evaluate-source";
 import type { GraphParamEdit } from "../editor/graph-edit-model";
+import { findNodeByKind } from "./graph-node-runtime";
 
 export function verifySourcePatch(
   source: string,
@@ -214,15 +215,4 @@ function graphEdit(
     previousValue,
     nextValue,
   };
-}
-
-function findNodeByKind(root: Node, kind: string, visited = new Set<number>()): Node | null {
-  if (root.kind === kind) return root;
-  if (visited.has(root.id)) return null;
-  visited.add(root.id);
-  for (const child of root.children) {
-    const found = findNodeByKind(child.node, kind, visited);
-    if (found) return found;
-  }
-  return null;
 }
