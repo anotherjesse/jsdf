@@ -53,9 +53,9 @@ export const unsupportedOriginalApi = [
 ] as const;
 
 export const supportedSummary = {
-  moduleExports: 49,
+  moduleExports: 50,
   sdf2Methods: 19,
-  sdf3Methods: 30,
+  sdf3Methods: 31,
 };
 
 export function buildApiCompletenessFixtures(): { two: SDF2[]; three: SDF3[] } {

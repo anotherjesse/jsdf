@@ -7,6 +7,7 @@ import { exampleSources, sourceForExample } from "../editor/example-source";
 import { evaluate2, evaluate3 } from "../evaluate";
 import { examples } from "../examples";
 import { compileGLSLScene } from "../glsl/compiler";
+import { resolveAnnotation3 } from "../annotations/resolver";
 import { compileScene } from "../wgsl/compiler";
 
 export interface ApiRuntimeVerification {
@@ -31,6 +32,12 @@ export interface ApiRuntimeVerification {
     generatedTriangles: number;
     generatedDims: [number, number, number];
     saveBytes: number;
+    save3mfBytes: number;
+    methodSave3mfBytes: number;
+    save3mfColors: number;
+    save3mfWarnings: number;
+    save3mfVertices: number;
+    save3mfSharedEdges: number;
     methodSaveBytes: number;
     sliceDistinct: number;
     methodSampleWidth: number;
@@ -65,7 +72,7 @@ const expectedExports = [
   "name", "color",
   "union", "difference", "intersection", "blend", "negate", "dilate", "erode", "shell", "repeat",
   "transition_linear", "transition_radial", "extrude_to", "ease",
-  "generate", "save", "sample_slice", "show_slice", "write_binary_stl",
+  "generate", "save", "save3mf", "sample_slice", "show_slice", "write_binary_stl",
 ];
 
 const expected2Methods = [
@@ -80,6 +87,7 @@ const expected3Methods = [
   "translate", "scale", "rotate", "rotate_to", "orient", "circular_array", "elongate", "twist", "bend",
   "bend_linear", "bend_radial", "transition_linear", "transition_radial", "wrap_around", "slice",
   "generate", "save", "sample_slice", "show_slice",
+  "save3mf",
 ];
 
 const expectedNodeKinds = [
@@ -106,6 +114,7 @@ export async function runApiRuntimeVerification(): Promise<ApiRuntimeVerificatio
 
   const evalStart = performance.now();
   verifyFiniteEvaluation(fixtures.two, fixtures.three, errors);
+  verifyAnnotationResolution(errors);
   const evaluateMs = performance.now() - evalStart;
 
   const glslStart = performance.now();
@@ -165,6 +174,20 @@ function verifyFiniteEvaluation(two: SDF2[], three: SDF3[], errors: string[]): v
       const value = evaluate3(fixture, point);
       if (!Number.isFinite(value)) errors.push(`non-finite SDF3 fixture ${index} at ${point.join(",")}: ${value}`);
     }
+  }
+}
+
+function verifyAnnotationResolution(errors: string[]): void {
+  const named = api.sphere(1).name("shell");
+  const recolored = resolveAnnotation3(named, [1, 0, 0], { colorsByName: { shell: "#facc15" } });
+  if (recolored.colorHex !== "#facc15") errors.push(`colorsByName did not recolor annotation: ${recolored.colorHex}`);
+
+  const base = api.box(2).name("base").color("#0f766e");
+  const cutter = api.sphere(0.65).name("cutter").color("#ef4444");
+  const cut = base.difference(cutter);
+  const resolved = resolveAnnotation3(cut, [1, 0, 0]);
+  if (resolved.name !== "base" || resolved.colorHex !== "#0f766e") {
+    errors.push(`difference cutter annotation leaked into base: ${resolved.name ?? "none"} ${resolved.colorHex}`);
   }
 }
 
@@ -397,16 +420,73 @@ async function verifyWorkflow(errors: string[]): Promise<ApiRuntimeVerification[
     download: false,
   });
   const writeBlob = api.write_binary_stl("api-write.stl", mesh, { download: false });
+  const colored = api.union(
+    api.sphere(0.75).translate([-0.45, 0, 0]).name("left").color("#ef4444"),
+    api.sphere(0.75).translate([0.45, 0, 0]).name("right").color("#22c55e"),
+  ) as SDF3;
+  const save3mf = await api.save3mf("api-check.3mf", colored, {
+    bounds,
+    grid: 18,
+    preferGPU: false,
+    preferWorker: false,
+    download: false,
+  });
+  const methodSave3mf = await colored.save3mf("api-method.3mf", {
+    bounds,
+    grid: 14,
+    preferGPU: false,
+    preferWorker: false,
+    download: false,
+  });
   if (saveBlob.size <= 84) errors.push(`save workflow Blob too small: ${saveBlob.size}`);
   if (methodSaveBlob.size <= 84) errors.push(`SDF3.save Blob too small: ${methodSaveBlob.size}`);
   if (writeBlob.size !== 84 + mesh.triangles.length * 50) {
     errors.push(`write_binary_stl size mismatch: ${writeBlob.size}`);
   }
+  if (save3mf.blob.size <= 512) errors.push(`save3mf Blob too small: ${save3mf.blob.size}`);
+  if (methodSave3mf.blob.size <= 512) errors.push(`SDF3.save3mf Blob too small: ${methodSave3mf.blob.size}`);
+  if (save3mf.report.colors.length < 2) errors.push(`save3mf resolved too few colors: ${save3mf.report.colors.length}`);
+  const threeMfEntries = await zipEntries(save3mf.blob);
+  const model = threeMfEntries.get("3D/3dmodel.model") ?? "";
+  if (!threeMfEntries.has("[Content_Types].xml") || !threeMfEntries.has("_rels/.rels") || !model.includes("<m:colorgroup id=\"1\">")) {
+    errors.push("save3mf package is missing expected 3MF entries");
+  }
+  if (!model.includes("p1=\"0\"") || !model.includes("pid=\"1\"")) {
+    errors.push("save3mf package is missing triangle color properties");
+  }
+  const topology = threeMfTopology(model);
+  if (topology.vertices >= topology.triangles * 3) {
+    errors.push(`save3mf did not share vertex indices: ${topology.vertices} vertices for ${topology.triangles} triangles`);
+  }
+  if (topology.sharedEdges <= 0) errors.push("save3mf did not produce any shared triangle edges");
+  await expectRejects(() => api.save3mf("bad-unit.3mf", colored, {
+    bounds,
+    grid: 8,
+    preferGPU: false,
+    preferWorker: false,
+    download: false,
+    unit: "banana" as never,
+  }), "invalid 3MF unit", errors);
+  await expectRejects(() => api.save3mf("strict.3mf", colored, {
+    bounds,
+    grid: 8,
+    preferGPU: false,
+    preferWorker: false,
+    download: false,
+    colorsByName: { missing: "#ffffff" },
+    strict: true,
+  }), "strict mode", errors);
 
   return {
     generatedTriangles: mesh.triangles.length,
     generatedDims: mesh.dims,
     saveBytes: saveBlob.size,
+    save3mfBytes: save3mf.blob.size,
+    methodSave3mfBytes: methodSave3mf.blob.size,
+    save3mfColors: save3mf.report.colors.length,
+    save3mfWarnings: save3mf.report.warnings.length,
+    save3mfVertices: topology.vertices,
+    save3mfSharedEdges: topology.sharedEdges,
     methodSaveBytes: methodSaveBlob.size,
     sliceDistinct,
     methodSampleWidth: methodSample.width,
@@ -415,6 +495,63 @@ async function verifyWorkflow(errors: string[]): Promise<ApiRuntimeVerification[
     sliceAxes: slice.axes,
     methodSampleAxes: methodSample.axes,
   };
+}
+
+async function expectRejects(action: () => Promise<unknown>, message: string, errors: string[]): Promise<void> {
+  try {
+    await action();
+    errors.push(`expected rejection containing "${message}"`);
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error);
+    if (!text.includes(message)) errors.push(`expected rejection containing "${message}", got "${text}"`);
+  }
+}
+
+async function zipEntries(blob: Blob): Promise<Map<string, string>> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const decoder = new TextDecoder();
+  const entries = new Map<string, string>();
+  let offset = 0;
+  while (offset + 30 <= bytes.length) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset + offset);
+    const signature = view.getUint32(0, true);
+    if (signature !== 0x04034b50) break;
+    const compression = view.getUint16(8, true);
+    const compressedSize = view.getUint32(18, true);
+    const uncompressedSize = view.getUint32(22, true);
+    const nameLength = view.getUint16(26, true);
+    const extraLength = view.getUint16(28, true);
+    if (compression !== 0) throw new Error(`unexpected ZIP compression method ${compression}`);
+    if (compressedSize !== uncompressedSize) throw new Error(`unexpected ZIP size mismatch ${compressedSize} !== ${uncompressedSize}`);
+    const nameStart = offset + 30;
+    const nameEnd = nameStart + nameLength;
+    const dataStart = nameEnd + extraLength;
+    const dataEnd = dataStart + compressedSize;
+    const name = decoder.decode(bytes.slice(nameStart, nameEnd));
+    entries.set(name, decoder.decode(bytes.slice(dataStart, dataEnd)));
+    offset = dataEnd;
+  }
+  if (!entries.has("3D/3dmodel.model")) throw new Error("ZIP package did not contain 3D/3dmodel.model");
+  return entries;
+}
+
+function threeMfTopology(model: string): { vertices: number; triangles: number; sharedEdges: number } {
+  const vertices = [...model.matchAll(/<vertex\b/g)].length;
+  const edgeCounts = new Map<string, number>();
+  let triangles = 0;
+  for (const match of model.matchAll(/<triangle\b[^>]*\bv1="(\d+)"[^>]*\bv2="(\d+)"[^>]*\bv3="(\d+)"/g)) {
+    triangles += 1;
+    const indices = [Number(match[1]), Number(match[2]), Number(match[3])];
+    for (const [a, b] of [[indices[0], indices[1]], [indices[1], indices[2]], [indices[2], indices[0]]]) {
+      const key = a < b ? `${a}/${b}` : `${b}/${a}`;
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    }
+  }
+  let sharedEdges = 0;
+  for (const count of edgeCounts.values()) {
+    if (count > 1) sharedEdges += 1;
+  }
+  return { vertices, triangles, sharedEdges };
 }
 
 function verifyFiniteSlice(values: Float32Array, errors: string[]): void {

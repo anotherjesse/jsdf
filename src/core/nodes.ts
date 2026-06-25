@@ -13,13 +13,15 @@ import {
   rotationMatrix3,
 } from "./math";
 import type { MeshOptions, MeshResult } from "../mesh/generate";
-import type { SaveOptions, ShowSliceOptions, SliceOptions, SliceSample } from "../workflow";
+import type { Save3MFOptions, SaveOptions, ShowSliceOptions, SliceOptions, SliceSample } from "../workflow";
 import {
   generate as generateWorkflow,
   sample_slice as sampleSliceWorkflow,
   save as saveWorkflow,
+  save3mf as save3mfWorkflow,
   show_slice as showSliceWorkflow,
 } from "../workflow";
+import type { ThreeMfExportResult } from "../mesh/three-mf";
 
 export type Dim = 2 | 3;
 
@@ -141,6 +143,9 @@ export class SDF3 {
   }
   async save(filename: string, options: SaveOptions = {}): Promise<Blob> {
     return saveWorkflow(filename, this, options);
+  }
+  async save3mf(filename: string, options: Save3MFOptions = {}): Promise<ThreeMfExportResult> {
+    return save3mfWorkflow(filename, this, options);
   }
   sample_slice(options: SliceOptions = {}): SliceSample {
     return sampleSliceWorkflow(this, options);

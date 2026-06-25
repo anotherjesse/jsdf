@@ -111,6 +111,28 @@ return f;
 
 Use lower resolution while modeling, then increase it for final STL export.
 
+### 3MF Color Export
+
+Use `save3mf` when you want the generated mesh packaged as a `.3mf` with resolved per-triangle colors. The export uses `.color(...)` annotations, or `colorsByName` when you want to keep the model source color-neutral.
+
+```js
+const left = sphere(0.7).translate([-0.55, 0, 0]).name("left");
+const right = sphere(0.7).translate([0.55, 0, 0]).name("right");
+const shape = union(left, right);
+
+void save3mf("two-color.3mf", shape, {
+  grid: 96,
+  colorsByName: {
+    left: "#ef4444",
+    right: "#22c55e",
+  },
+}).then(({ report }) => console.log(report.colors));
+
+return shape;
+```
+
+`save3mf` returns a `{ blob, report }` object. The report includes triangle counts, resolved colors, labels, ambiguous boundary counts, and warnings. Smooth blends may preview as blended colors, but 3MF export assigns one resolved color per triangle.
+
 ### Without Saving
 
 Generate a mesh directly when you want to inspect triangles, write your own exporter, or delay STL creation.

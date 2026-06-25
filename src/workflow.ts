@@ -3,11 +3,14 @@ import { evaluate3 } from "./evaluate";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./mesh/bounds";
 import { generateMesh, type MeshOptions, type MeshResult } from "./mesh/generate";
 import { write_binary_stl } from "./mesh/stl";
+import { write_3mf, type ThreeMfExportOptions, type ThreeMfExportResult } from "./mesh/three-mf";
 
 export interface SaveOptions extends MeshOptions {
   download?: boolean;
   name?: string;
 }
+
+export interface Save3MFOptions extends MeshOptions, ThreeMfExportOptions {}
 
 export interface SliceOptions {
   w?: number;
@@ -47,6 +50,14 @@ export async function save(filename: string, sdf: SDF3, options: SaveOptions = {
     download: options.download,
     name: options.name ?? filename,
   });
+}
+
+export async function save3mf(filename: string, sdf: SDF3, options: Save3MFOptions = {}): Promise<ThreeMfExportResult> {
+  if (!filename.toLowerCase().endsWith(".3mf")) {
+    throw new Error("save3mf expects a .3mf filename");
+  }
+  const mesh = await generateMesh(sdf, options);
+  return write_3mf(filename, mesh, sdf, options);
 }
 
 export function sample_slice(sdf: SDF3, options: SliceOptions = {}): SliceSample {

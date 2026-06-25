@@ -101,6 +101,7 @@ export const API_REFERENCE_SEEDS: Record<string, ApiReferenceSeed> = {
 
   generate: fn("Workflow", "generate(sdf, options = {}): Promise<MeshResult>", "Builds a triangle mesh from a 3D SDF.", "function", GLOBAL_AND_METHOD, "shape.generate(options = {}): Promise<MeshResult>"),
   save: fn("Workflow", "save(filename, sdf, options = {}): Promise<Blob>", "Generates and optionally downloads an STL blob.", "function", GLOBAL_AND_METHOD, "shape.save(filename, options = {}): Promise<Blob>"),
+  save3mf: fn("Workflow", "save3mf(filename, sdf, options = {}): Promise<{ blob, report }>", "Generates and optionally downloads a colored 3MF package.", "function", GLOBAL_AND_METHOD, "shape.save3mf(filename, options = {}): Promise<{ blob, report }>"),
   sample_slice: fn("Workflow", "sample_slice(sdf, options = {}): SliceSample", "Samples a signed-distance slice into a numeric grid.", "function", GLOBAL_AND_METHOD, "shape.sample_slice(options = {}): SliceSample"),
   show_slice: fn("Workflow", "show_slice(sdf, options = {}): HTMLCanvasElement", "Renders a signed-distance slice to a canvas.", "function", GLOBAL_AND_METHOD, "shape.show_slice(options = {}): HTMLCanvasElement"),
 
