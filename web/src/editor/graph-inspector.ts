@@ -163,6 +163,13 @@ export class GraphInspector {
     );
     this.map.className = "graph-map";
     this.tree.className = "graph-tree";
+    this.tree.tabIndex = 0;
+    this.tree.setAttribute("role", "tree");
+    this.tree.setAttribute("aria-label", "SDF graph nodes");
+    this.tree.addEventListener("keydown", (event) => {
+      if (event.target !== this.tree || !this.selected) return;
+      this.handleNodeKeyDown(event, this.selected);
+    });
     this.params.className = "param-editor";
     root.append(this.toolbar, this.map, this.tree, this.params);
   }
@@ -311,9 +318,10 @@ export class GraphInspector {
       empty.textContent = "No matching nodes";
       this.tree.append(empty);
     } else {
-      this.tree.append(this.renderTreeHeader(), this.renderNode(this.sdf.node, 0, model, [this.sdf.node]));
+      this.tree.append(this.renderTreeHeader(), this.renderNode(this.sdf.node, 0, model, [this.sdf.node], String(this.sdf.node.id)));
     }
     this.renderParams();
+    this.syncTreeActiveDescendant();
     this.revealSelectedNode();
   }
 
@@ -356,7 +364,7 @@ export class GraphInspector {
     return header;
   }
 
-  private renderNode(node: Node, depth: number, model: GraphModel, path: Node[]): HTMLElement {
+  private renderNode(node: Node, depth: number, model: GraphModel, path: Node[], instanceKey: string): HTMLElement {
     const group = document.createElement("div");
     group.className = "graph-node-group";
     const view = model.nodeById.get(node.id);
@@ -414,7 +422,10 @@ export class GraphInspector {
     if (this.lockedSoloNodeId === node.id) button.classList.add("isolated");
     if (this.dirtyNodeIds.has(node.id)) button.classList.add("edited");
     button.setAttribute("aria-pressed", String(this.selected?.id === node.id));
+    button.setAttribute("aria-selected", String(this.selected?.id === node.id));
     button.setAttribute("aria-keyshortcuts", this.nodeKeyboardShortcuts(node));
+    button.id = graphNodeElementId(instanceKey);
+    button.setAttribute("role", "treeitem");
     button.dataset.nodeId = String(node.id);
     const label = document.createElement("span");
     label.textContent = node.kind;
@@ -428,9 +439,15 @@ export class GraphInspector {
     row.append(visibility, button, isolate);
     group.append(row);
 
-    node.children.forEach((child) => {
+    node.children.forEach((child, childIndex) => {
       if (childMatchesFilter(child.node, model.visibleNodeIds)) {
-        group.append(this.renderNode(child.node, depth + 1, model, [...path, child.node]));
+        group.append(this.renderNode(
+          child.node,
+          depth + 1,
+          model,
+          [...path, child.node],
+          `${instanceKey}-${childIndex}-${child.node.id}`,
+        ));
       }
     });
     return group;
@@ -742,7 +759,11 @@ export class GraphInspector {
     this.focusSelectedAfterRender = false;
     const selectedId = this.selected.id;
     const selectedTarget = () => this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${selectedId}"]`);
-    const focusTarget = () => selectedTarget()?.focus({ preventScroll: true });
+    const focusTarget = () => {
+      const target = selectedTarget();
+      if (!target) return;
+      this.focusGraphNodeTarget(target);
+    };
     if (focus) focusTarget();
     window.requestAnimationFrame(() => {
       const target = selectedTarget();
@@ -754,6 +775,26 @@ export class GraphInspector {
       window.setTimeout(focusTarget, 40);
       window.setTimeout(focusTarget, 100);
     });
+  }
+
+  private focusGraphNodeTarget(target: HTMLElement): void {
+    target.focus({ preventScroll: true });
+    if (document.activeElement === target) return;
+    this.tree.setAttribute("aria-activedescendant", target.id);
+    this.tree.focus({ preventScroll: true });
+  }
+
+  private syncTreeActiveDescendant(): void {
+    if (!this.selected) {
+      this.tree.removeAttribute("aria-activedescendant");
+      return;
+    }
+    const target = this.tree.querySelector<HTMLElement>(`.graph-node[data-node-id="${this.selected.id}"]`);
+    if (!target) {
+      this.tree.removeAttribute("aria-activedescendant");
+      return;
+    }
+    this.tree.setAttribute("aria-activedescendant", target.id);
   }
 
   private handleNodeKeyDown(event: KeyboardEvent, node: Node): void {
@@ -1775,6 +1816,10 @@ function setsEqual(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 
 function visibilityShortcutTitle(title: string): string {
   return title === "Full shape stays visible" ? title : `${title} (V; Alt-click isolates branch)`;
+}
+
+function graphNodeElementId(instanceKey: string): string {
+  return `graph-node-${instanceKey}`;
 }
 
 function breadcrumbRelation(path: readonly Node[], index: number): string {

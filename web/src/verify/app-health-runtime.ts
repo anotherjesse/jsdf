@@ -708,13 +708,7 @@ async function verifySelectionFocusButton(
   const graphView = graphHealth?.editorView ?? "";
   const graphVisible = !graphPanel.classList.contains("hidden");
   const labelAfterGraph = button.textContent?.trim() ?? "";
-  const active = frameDocument.activeElement;
-  const graphFocusedSelectedNode = Boolean(
-    active
-      && "classList" in active
-      && active.classList.contains("graph-node")
-      && active.getAttribute("aria-pressed") === "true",
-  );
+  const graphFocusedSelectedNode = selectedGraphNodeHasFocus(frameDocument);
 
   button.click();
   await settleFrame(frameWindow);
@@ -1092,13 +1086,7 @@ async function verifyCodeGraphReveal(
   const editorView = afterHealth?.editorView ?? "";
   const graphVisible = !graphPanel.classList.contains("hidden");
   const activeElement = activeElementToken(frameDocument);
-  const active = frameDocument.activeElement;
-  const focusedSelectedNode = Boolean(
-    active
-      && "classList" in active
-      && active.classList.contains("graph-node")
-      && active.getAttribute("aria-pressed") === "true",
-  );
+  const focusedSelectedNode = selectedGraphNodeHasFocus(frameDocument);
 
   if (editorView !== "graph") errors.push(`code-to-graph reveal left editor in ${editorView || "unknown"} view`);
   if (!graphVisible) errors.push("code-to-graph reveal left graph panel hidden");
@@ -1117,6 +1105,23 @@ function activeElementToken(document: Document): string {
   if (!active) return "";
   const candidate = active as Element & { id?: string; className?: unknown };
   return candidate.id || String(candidate.className ?? "") || active.tagName;
+}
+
+function selectedGraphNodeHasFocus(document: Document): boolean {
+  const active = document.activeElement;
+  if (!active || !("classList" in active)) return false;
+  if (active.classList.contains("graph-node")) {
+    return active.getAttribute("aria-pressed") === "true";
+  }
+  if (!active.classList.contains("graph-tree")) return false;
+  const activeId = active.getAttribute("aria-activedescendant");
+  if (!activeId) return false;
+  const selected = document.getElementById(activeId);
+  return Boolean(
+    selected
+      && selected.classList.contains("graph-node")
+      && selected.getAttribute("aria-pressed") === "true",
+  );
 }
 
 function dispatchPointer(target: HTMLElement, type: string): void {

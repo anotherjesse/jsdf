@@ -155,6 +155,7 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
   const scrubValues = verifyScrubValues(errors);
   const sourceDialog = verifySourceDialog(errors);
   const workspaceStorage = verifyWorkspaceStorage(errors);
+  verifySharedGraphNodeElementIds(errors);
 
   return {
     ok: errors.length === 0,
@@ -669,6 +670,44 @@ export async function runGraphRuntimeVerification(root: HTMLElement): Promise<Gr
 
     nodeButton.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
     if (revealedSource !== "sphere:call") verifyErrors.push(`keyboard code reveal emitted ${revealedSource || "nothing"}`);
+  }
+}
+
+function verifySharedGraphNodeElementIds(errors: string[]): void {
+  const root = document.createElement("div");
+  document.body.append(root);
+  try {
+    const { sdf } = evaluateSource(`
+const shared = sphere(0.4)
+return union(shared, shared)
+`);
+    const inspector = new GraphInspector(root, {
+      onSelect() {},
+      onHover() {},
+      onEdit() {},
+      onSolo() {},
+      onRevealSource() {},
+      onSourceHover() {},
+      onVisibilityChange() {},
+    });
+    inspector.setSdf(sdf);
+
+    const ids = [...root.querySelectorAll<HTMLElement>(".graph-node[id]")]
+      .map((node) => node.id)
+      .filter(Boolean);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (duplicateIds.length > 0) {
+      errors.push(`shared graph nodes rendered duplicate element ids: ${[...new Set(duplicateIds)].join(", ")}`);
+    }
+
+    const nodeIds = [...root.querySelectorAll<HTMLElement>(".graph-node[data-node-id]")]
+      .map((node) => node.dataset.nodeId ?? "");
+    const repeatedNodeIds = nodeIds.filter((id, index) => id && nodeIds.indexOf(id) !== index);
+    if (repeatedNodeIds.length === 0) {
+      errors.push("shared graph node fixture did not render a repeated data-node-id");
+    }
+  } finally {
+    root.remove();
   }
 }
 
