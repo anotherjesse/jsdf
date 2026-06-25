@@ -15,6 +15,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: true,
     fs: {
       allow: [appRoot],
       deny: fsDeny,

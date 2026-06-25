@@ -28,6 +28,7 @@ export async function createStaticAppServer({ repoRoot, httpServer }) {
       },
     },
     server: {
+      allowedHosts: true,
       middlewareMode: true,
       hmr: { server: httpServer },
       fs: {
