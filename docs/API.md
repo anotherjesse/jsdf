@@ -5,8 +5,8 @@ This is the browser-native JavaScript API for `sdf browser`. It is inspired by M
 Editor snippets run as plain JavaScript with the SDF API and `Math` already in scope. Do not import anything. Return an `SDF3`, or leave a final expression that evaluates to an `SDF3`.
 
 ```js
-const f = intersection(sphere(1), box(1.5));
-const c = cylinder(0.5);
+const f = intersection(sphere(10), box(15));
+const c = cylinder(5);
 
 return f.difference(
   union(c.orient(X), c.orient(Y), c.orient(Z)),
@@ -24,8 +24,8 @@ The editor exposes the modeling API as globals, along with `Math`. You do not ne
 Most operations are available in both named and method form:
 
 ```js
-const a = box([3, 3, 0.5]);
-const b = sphere();
+const a = box([30, 30, 5]);
+const b = sphere(10);
 
 const byFunction = difference(a, b);
 const byMethod = a.difference(b);
@@ -35,33 +35,41 @@ return byFunction;
 When the Python API used keyword arguments, the JavaScript API usually uses an options object. For example, smooth CSG uses a trailing `{ k }` object:
 
 ```js
-return union(box([3, 3, 0.5]), sphere(), { k: 0.25 });
+return union(box([30, 30, 5]), sphere(10), { k: 2.5 });
 ```
 
 The API keeps Python-style snake_case names for familiarity. Common multiword methods also have camelCase aliases, such as `rotateTo`, `circularArray`, `bendLinear`, `transitionRadial`, and `wrapAround`.
+
+## Units And Scale
+
+Distance and coordinate numbers are millimeters by convention. `sphere(10)` is a 10 mm radius sphere, `box([30, 20, 4])` is a 30 mm by 20 mm by 4 mm box, and `translate([0, 0, 5])` moves a shape 5 mm upward.
+
+Mesh vertices are emitted in the same coordinates as the SDF model. 3MF export declares millimeters by default. STL has no unit metadata, so exported STL files should be treated as millimeters in slicers and CAD tools.
+
+The same scale applies to bounds, shell thickness, fillets, smooth CSG `k`, and mesh `step` values. `scale(factor)` is unitless; angles are radians.
 
 ## Names And Colors
 
 Names and colors are annotations. They do not change the signed distance field, so evaluation, CSG, transforms, and STL export stay geometry-only.
 
 ```js
-const body = rounded_box([2, 1, 0.4], 0.08)
+const body = rounded_box([20, 10, 4], 0.8)
   .name("body")
   .color("#0f766e");
 
-const badge = cylinder(0.18)
-  .translate([0.6, 0, 0.24])
+const badge = cylinder(1.8)
+  .translate([6, 0, 2.4])
   .name("badge")
   .color("#facc15");
 
-return union(body, badge, { k: 0.03 });
+return union(body, badge, { k: 0.3 });
 ```
 
 Use `.name(label)` for a human-readable label and `.color("#rrggbb")` or `.color([r, g, b])` for preview/export color. Numeric color arrays can use either normalized `0..1` channels or `0..255` channels. Subtractive cutters do not assign color to the cut surface by default; `base.difference(cutter.color("#ef4444"))` keeps the base color.
 
 ## Examples
 
-The app includes browser examples in [src/examples.ts](../src/examples.ts). These examples are also available from the example picker in the editor.
+The app includes browser examples in [src/examples.ts](../src/examples.ts). These examples are also available from the example picker in the editor, scaled to printable millimeter sizes.
 
 | Gearlike | Knurling | Smooth blobby | Weave |
 | --- | --- | --- | --- |
@@ -75,7 +83,7 @@ The default preview raymarches the SDF graph directly in WebGL, so you can work 
 Once Mesh view has generated triangles, the viewport download controls offer both STL and 3MF exports.
 
 ```js
-const shape = rounded_box([1.8, 0.8, 0.35], 0.12);
+const shape = rounded_box([36, 16, 7], 2.4);
 void generate(shape, { grid: 80, algorithm: "surface-net" })
   .then((mesh) => console.log(mesh.triangles.length));
 void save("bracket.stl", shape, { grid: 96, download: true });
@@ -89,9 +97,9 @@ Editor snippets are evaluated synchronously, so return the `SDF3` immediately. U
 Bounds are estimated automatically and padded before sampling. Infinite primitives such as `plane`, `slab`, and `cylinder` need to be combined with finite shapes, or supplied explicit bounds for mesh generation.
 
 ```js
-const f = intersection(sphere(), slab({ z0: -0.5, z1: 0.5 }));
+const f = intersection(sphere(10), slab({ z0: -5, z1: 5 }));
 void save("slice.stl", f, {
-  bounds: [[-1.2, -1.2, -0.6], [1.2, 1.2, 0.6]],
+  bounds: [[-12, -12, -6], [12, 12, 6]],
   grid: 96,
   download: true,
 });
@@ -103,10 +111,10 @@ return f;
 There are four ways to control sampling resolution. `grid` is the simplest, `dims` is explicit per axis, `step` follows physical spacing, and `samples` asks for an approximate total sample count.
 
 ```js
-const f = rounded_box([1.8, 0.8, 0.35], 0.12);
+const f = rounded_box([36, 16, 7], 2.4);
 void generate(f, { grid: 80 });
 void generate(f, { dims: [96, 48, 32] });
-void generate(f, { step: [0.025, 0.025, 0.02] });
+void generate(f, { step: [0.25, 0.25, 0.2] });
 void generate(f, { samples: 250000 });
 return f;
 ```
@@ -118,8 +126,8 @@ Use lower resolution while modeling, then increase it for final STL export.
 Use `save3mf` when you want the generated mesh packaged as a `.3mf` with resolved per-triangle colors. The export uses `.color(...)` annotations, or `colorsByName` when you want to keep the model source color-neutral.
 
 ```js
-const left = sphere(0.7).translate([-0.55, 0, 0]).name("left");
-const right = sphere(0.7).translate([0.55, 0, 0]).name("right");
+const left = sphere(7).translate([-5.5, 0, 0]).name("left");
+const right = sphere(7).translate([5.5, 0, 0]).name("right");
 const shape = union(left, right);
 
 void save3mf("two-color.3mf", shape, {
@@ -140,7 +148,7 @@ return shape;
 Generate a mesh directly when you want to inspect triangles, write your own exporter, or delay STL creation.
 
 ```js
-const f = sphere();
+const f = sphere(10);
 void generate(f, { grid: 72 }).then((mesh) => {
   console.log(mesh.triangles.length);
   console.log(mesh.bounds, mesh.dims);
@@ -153,15 +161,15 @@ return f;
 The shader and mesh previews read `.color(...)` annotations directly from the graph. STL export ignores them.
 
 ```js
-const left = sphere(0.7).translate([-0.55, 0, 0]).name("left").color("#ef4444");
-const right = sphere(0.7).translate([0.55, 0, 0]).name("right").color("#22c55e");
+const left = sphere(7).translate([-5.5, 0, 0]).name("left").color("#ef4444");
+const right = sphere(7).translate([5.5, 0, 0]).name("right").color("#22c55e");
 return union(left, right);
 ```
 
 If you already have a `MeshResult` or triangle list, `write_binary_stl` creates a `Blob` and can optionally trigger a download.
 
 ```js
-const f = sphere();
+const f = sphere(10);
 void generate(f, { grid: 72 }).then((mesh) => {
   const blob = write_binary_stl("sphere.stl", mesh, { download: false });
   console.log(blob.size);
@@ -173,9 +181,9 @@ Mesh options include:
 
 - `grid`: uniform grid resolution, defaulting to the app's mesh setting
 - `dims`: explicit `[nx, ny, nz]` grid dimensions
-- `step`: scalar or vector sample spacing
+- `step`: scalar or vector sample spacing in millimeters
 - `samples`: approximate total sample count
-- `bounds`: explicit `[[xmin, ymin, zmin], [xmax, ymax, zmax]]`
+- `bounds`: explicit millimeter extents, `[[xmin, ymin, zmin], [xmax, ymax, zmax]]`
 - `algorithm`: `"surface-net"` or `"tetra"`
 - `preferGPU`: use WebGPU sampling when available
 - `preferWorker`: polygonize in a Web Worker when available
@@ -190,7 +198,7 @@ Use `sample_slice` or `show_slice` for debugging signed distances on a plane.
 <img width=350 align="right" src="images/show_slice.png">
 
 ```js
-const f = sphere().difference(cylinder(0.45));
+const f = sphere(10).difference(cylinder(4.5));
 const sample = sample_slice(f, { z: 0, w: 256, h: 256 });
 const canvas = show_slice(f, { z: 0, abs: false });
 return f;
@@ -208,13 +216,13 @@ This is still JavaScript. Split models into functions, use loops and conditional
 
 ```js
 function peg(x, y) {
-  return cylinder(0.12).translate([x, y, 0]);
+  return cylinder(1.2).translate([x, y, 0]);
 }
 
-let lid = rounded_box([3, 2, 0.18], 0.08);
-for (const x of [-1, 1]) {
-  for (const y of [-0.55, 0.55]) {
-    lid = lid.union(peg(x, y), { k: 0.03 });
+let lid = rounded_box([30, 20, 1.8], 0.8);
+for (const x of [-10, 10]) {
+  for (const y of [-5.5, 5.5]) {
+    lid = lid.union(peg(x, y), { k: 0.3 });
   }
 }
 return lid;

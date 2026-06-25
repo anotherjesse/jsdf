@@ -385,7 +385,7 @@ const body = rounded_box([2, 1, 0.4], 0.08)
 
 await export3mf(shape, {
   compatibility: "bambu",
-  units: "mm",
+  unit: "millimeter",
   materials: { "red-pla": redPla },
   strict: true,
 });
@@ -406,7 +406,7 @@ Future controls:
 Possible advanced export options:
 
 - `compatibility`: `"generic" | "prusa" | "bambu" | "orca"`
-- `units`: `"mm" | "inch" | "meter" | ...`
+- `unit`: `"millimeter" | "inch" | "meter" | ...`
 - `strict`: fail instead of warning.
 - `materialBoundary`: `"centroid" | "subdivide"`
 - `ownership`: `"distance" | "priority"`

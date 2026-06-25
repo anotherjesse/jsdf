@@ -29,7 +29,7 @@ curl -sS -X PUT "$BASE/code" \\
 # update.json:
 # {
 #   "comment": "Tightening the silhouette so the lid clears the printer envelope.",
-#   "code": "const shape = box([1, 1, 1]);\\nreturn shape;"
+#   "code": "const shape = rounded_box([24, 16, 4], 1);\\nreturn shape;"
 # }
 
 # Capture the current shader canvas as PNG and create a snapshot.
@@ -66,17 +66,19 @@ The session id is the local capability for this workspace. There is no separate 
 Editor source is JavaScript executed with the SDF API globals already in scope, plus \`Math\`. Do not import anything. The code must produce an \`SDF3\`: either use an explicit top-level \`return\`, or leave a final expression that evaluates to an \`SDF3\`.
 
 \`\`\`js
-const trunk = capped_cylinder([0, 0, -0.9], [0, 0, -0.35], 0.12);
+const trunk = capped_cylinder([0, 0, -18], [0, 0, -7], 2.4);
 const boughs = union(
-  capped_cone([0, 0, -0.55], [0, 0, 0.05], 0.7, 0.12),
-  capped_cone([0, 0, -0.1], [0, 0, 0.55], 0.5, 0.08),
-  capped_cone([0, 0, 0.3], [0, 0, 0.9], 0.32, 0.03),
-  { k: 0.04 },
+  capped_cone([0, 0, -11], [0, 0, 1], 14, 2.4),
+  capped_cone([0, 0, -2], [0, 0, 11], 10, 1.6),
+  capped_cone([0, 0, 6], [0, 0, 18], 6.4, 0.6),
+  { k: 0.8 },
 );
 return union(trunk, boughs);
 \`\`\`
 
-Use arrays for vectors, for example \`[x, y, z]\`. Scalar sizes expand to all axes where the function accepts either a number or vector. Angles are radians; use \`radians(degrees)\` when that is clearer. Prefer the JavaScript API below, not the older Python operator style.
+Use arrays for vectors, for example \`[x, y, z]\`. Scalar sizes expand to all axes where the function accepts either a number or vector.
+
+Distance and coordinate numbers are millimeters by convention. \`sphere(10)\` is a 10 mm radius sphere, \`box([30, 20, 4])\` is a 30 mm by 20 mm by 4 mm box, and \`translate([0, 0, 5])\` moves a shape 5 mm upward. Mesh vertices are emitted in the same coordinates. 3MF export declares millimeters, while STL has no unit metadata and should be treated as millimeters in slicers. Bounds, shell thickness, fillets, smooth CSG \`k\`, and mesh \`step\` values use the same millimeter scale. \`scale(factor)\` is a unitless multiplier; angles are radians, with \`radians(degrees)\` available when that is clearer. Prefer the JavaScript API below, not the older Python operator style.
 
 ### 3D Primitives
 
@@ -123,16 +125,16 @@ Names and colors are annotations. They do not change the signed distance field, 
 - \`color(shape, "#rrggbb" | [r, g, b]): SDF\`, or \`shape.color(...): SDF\`
 
 \`\`\`js
-const body = rounded_box([2, 1, 0.4], 0.08)
+const body = rounded_box([20, 10, 4], 0.8)
   .name("body")
   .color("#0f766e");
 
-const badge = cylinder(0.18)
-  .translate([0.6, 0, 0.24])
+const badge = cylinder(1.8)
+  .translate([6, 0, 2.4])
   .name("badge")
   .color("#facc15");
 
-return union(body, badge, { k: 0.03 });
+return union(body, badge, { k: 0.3 });
 \`\`\`
 
 \`.name(...)\` is useful for readable source, graph labels, and \`colorsByName\` maps during 3MF export. \`.color(...)\` drives shader/mesh preview colors and 3MF triangle colors. Numeric color arrays can use normalized \`0..1\` channels or \`0..255\` channels. Subtractive cutters do not assign color to the cut surface by default; \`base.difference(cutter.color("#ef4444"))\` keeps the base color.
@@ -194,8 +196,8 @@ Most operations are available as globals and as methods. For example, \`union(a,
 \`save3mf\` packages the generated mesh as a colored 3MF. It uses \`.color(...)\` annotations by default, or \`colorsByName\` when you want source names to pick export colors.
 
 \`\`\`js
-const left = sphere(0.7).translate([-0.55, 0, 0]).name("left");
-const right = sphere(0.7).translate([0.55, 0, 0]).name("right");
+const left = sphere(7).translate([-5.5, 0, 0]).name("left");
+const right = sphere(7).translate([5.5, 0, 0]).name("right");
 const shape = union(left, right);
 
 void save3mf("two-color.3mf", shape, {
@@ -246,7 +248,7 @@ JSON body:
 \`\`\`json
 {
   "comment": "Explaining why this code change is useful to check.",
-  "code": "return sphere(1);"
+  "code": "return sphere(10);"
 }
 \`\`\`
 

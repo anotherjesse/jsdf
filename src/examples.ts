@@ -36,6 +36,19 @@ export interface Example {
   grid?: number;
 }
 
+const PRINTABLE_EXAMPLE_SCALE = 10;
+
+function printable(sdf: SDF3): SDF3 {
+  return sdf.scale(PRINTABLE_EXAMPLE_SCALE);
+}
+
+function printableBounds(bounds: [number[], number[]]): [number[], number[]] {
+  return [
+    bounds[0].map((value) => value * PRINTABLE_EXAMPLE_SCALE),
+    bounds[1].map((value) => value * PRINTABLE_EXAMPLE_SCALE),
+  ];
+}
+
 function canonical(): SDF3 {
   let f = intersection(sphere(1), box(1.5)) as SDF3;
   const c = cylinder(0.5);
@@ -231,24 +244,24 @@ function starPoints(outer: number, inner: number, count: number): number[][] {
 }
 
 export const examples: Example[] = [
-  { id: "canonical", name: "CSG example", build: canonical, bounds: [[-1.4, -1.4, -1.4], [1.4, 1.4, 1.4]], grid: 56 },
-  { id: "gearlike", name: "Gearlike", build: gearlike, bounds: [[-2.2, -2.2, -0.7], [2.2, 2.2, 0.7]], grid: 60 },
-  { id: "blobby", name: "Smooth blobby", build: blobby, bounds: [[-2.3, -2.3, -2.3], [2.3, 2.3, 2.3]], grid: 56 },
-  { id: "knurling", name: "Knurling", build: knurling, bounds: [[-1.7, -1.7, -2.8], [1.7, 1.7, 2.8]], grid: 64 },
-  { id: "pawn", name: "Pawn", build: pawn, bounds: [[-0.9, -0.9, -1.3], [0.9, 0.9, 1.3]], grid: 60 },
-  { id: "weave", name: "Weave", build: weave, bounds: [[-4, -4, -0.8], [4, 4, 0.8]], grid: 56 },
-  { id: "extrude", name: "Extrude/Revolve", build: extrudeRevolve, bounds: [[-3.2, -2.7, -1.1], [3.2, 2.7, 1.1]], grid: 56 },
-  { id: "deform", name: "Deformations", build: deformationSet, bounds: [[-2.5, -1.7, -1.8], [2.8, 1.7, 1.8]], grid: 56 },
-  { id: "primitives", name: "Primitive tray", build: primitiveTray, bounds: [[-3.2, -0.8, -0.8], [3.2, 0.8, 0.8]], grid: 52 },
-  { id: "pagoda", name: "Pagoda gate", build: pagodaGate, bounds: [[-1.8, -0.9, -1.15], [1.8, 0.9, 1.65]], grid: 72 },
-  { id: "coral", name: "Coral bloom", build: coralBloom, bounds: [[-1.35, -1.35, -1.25], [1.35, 1.35, 1.25]], grid: 72 },
-  { id: "crystals", name: "Crystal cluster", build: crystalCluster, bounds: [[-1.65, -1.65, -1.25], [1.65, 1.65, 1.65]], grid: 72 },
-  { id: "halo", name: "Segmented halo", build: segmentedHalo, bounds: [[-1.6, -1.6, -0.55], [1.6, 1.6, 0.65]], grid: 72 },
-  { id: "vessel", name: "Hollow vessel", build: hollowVessel, bounds: [[-1.05, -1.05, -1.15], [1.05, 1.05, 1.15]], grid: 72 },
-  { id: "medal", name: "Star medal", build: starMedal, bounds: [[-1.2, -1.2, -0.2], [1.2, 1.2, 0.35]], grid: 64 },
-  { id: "chain", name: "Chain links", build: chainLinks, bounds: [[-1.75, -0.9, -0.8], [1.75, 0.9, 0.8]], grid: 68 },
-  { id: "bracket", name: "Mechanical bracket", build: mechanicalBracket, bounds: [[-1.35, -0.78, -0.28], [1.35, 0.78, 0.9]], grid: 72 },
-  { id: "turbine", name: "Turbine bloom", build: turbineBloom, bounds: [[-1.55, -1.55, -0.55], [1.55, 1.55, 0.55]], grid: 72 },
+  { id: "canonical", name: "CSG example", build: () => printable(canonical()), bounds: printableBounds([[-1.4, -1.4, -1.4], [1.4, 1.4, 1.4]]), grid: 56 },
+  { id: "gearlike", name: "Gearlike", build: () => printable(gearlike()), bounds: printableBounds([[-2.2, -2.2, -0.7], [2.2, 2.2, 0.7]]), grid: 60 },
+  { id: "blobby", name: "Smooth blobby", build: () => printable(blobby()), bounds: printableBounds([[-2.3, -2.3, -2.3], [2.3, 2.3, 2.3]]), grid: 56 },
+  { id: "knurling", name: "Knurling", build: () => printable(knurling()), bounds: printableBounds([[-1.7, -1.7, -2.8], [1.7, 1.7, 2.8]]), grid: 64 },
+  { id: "pawn", name: "Pawn", build: () => printable(pawn()), bounds: printableBounds([[-0.9, -0.9, -1.3], [0.9, 0.9, 1.3]]), grid: 60 },
+  { id: "weave", name: "Weave", build: () => printable(weave()), bounds: printableBounds([[-4, -4, -0.8], [4, 4, 0.8]]), grid: 56 },
+  { id: "extrude", name: "Extrude/Revolve", build: () => printable(extrudeRevolve()), bounds: printableBounds([[-3.2, -2.7, -1.1], [3.2, 2.7, 1.1]]), grid: 56 },
+  { id: "deform", name: "Deformations", build: () => printable(deformationSet()), bounds: printableBounds([[-2.5, -1.7, -1.8], [2.8, 1.7, 1.8]]), grid: 56 },
+  { id: "primitives", name: "Primitive tray", build: () => printable(primitiveTray()), bounds: printableBounds([[-3.2, -0.8, -0.8], [3.2, 0.8, 0.8]]), grid: 52 },
+  { id: "pagoda", name: "Pagoda gate", build: () => printable(pagodaGate()), bounds: printableBounds([[-1.8, -0.9, -1.15], [1.8, 0.9, 1.65]]), grid: 72 },
+  { id: "coral", name: "Coral bloom", build: () => printable(coralBloom()), bounds: printableBounds([[-1.35, -1.35, -1.25], [1.35, 1.35, 1.25]]), grid: 72 },
+  { id: "crystals", name: "Crystal cluster", build: () => printable(crystalCluster()), bounds: printableBounds([[-1.65, -1.65, -1.25], [1.65, 1.65, 1.65]]), grid: 72 },
+  { id: "halo", name: "Segmented halo", build: () => printable(segmentedHalo()), bounds: printableBounds([[-1.6, -1.6, -0.55], [1.6, 1.6, 0.65]]), grid: 72 },
+  { id: "vessel", name: "Hollow vessel", build: () => printable(hollowVessel()), bounds: printableBounds([[-1.05, -1.05, -1.15], [1.05, 1.05, 1.15]]), grid: 72 },
+  { id: "medal", name: "Star medal", build: () => printable(starMedal()), bounds: printableBounds([[-1.2, -1.2, -0.2], [1.2, 1.2, 0.35]]), grid: 64 },
+  { id: "chain", name: "Chain links", build: () => printable(chainLinks()), bounds: printableBounds([[-1.75, -0.9, -0.8], [1.75, 0.9, 0.8]]), grid: 68 },
+  { id: "bracket", name: "Mechanical bracket", build: () => printable(mechanicalBracket()), bounds: printableBounds([[-1.35, -0.78, -0.28], [1.35, 0.78, 0.9]]), grid: 72 },
+  { id: "turbine", name: "Turbine bloom", build: () => printable(turbineBloom()), bounds: printableBounds([[-1.55, -1.55, -0.55], [1.55, 1.55, 0.55]]), grid: 72 },
 ];
 
 export function currentExample(id: string): Example {

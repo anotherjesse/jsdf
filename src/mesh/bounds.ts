@@ -5,7 +5,7 @@ import { length } from "../core/math";
 export type Bounds3 = [number[], number[]];
 
 export function estimateBounds(sdf: SDF3, options: { initial?: number; samples?: number; iterations?: number } = {}): Bounds3 {
-  const initial = options.initial ?? 6;
+  const initial = options.initial ?? 32;
   const samples = options.samples ?? 12;
   const iterations = options.iterations ?? 10;
   let lo = [-initial, -initial, -initial];
@@ -55,4 +55,3 @@ export function paddedBounds(bounds: Bounds3, ratio = 0.08): Bounds3 {
   }
   return [lo, hi];
 }
-

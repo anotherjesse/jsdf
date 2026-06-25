@@ -30,14 +30,14 @@ HOST=0.0.0.0 PORT=4173 npm run dev
 
 ## Writing SDFs
 
-Editor code is plain JavaScript with the SDF API already in scope. Return an `SDF3`, or leave a final expression that evaluates to one.
+Editor code is plain JavaScript with the SDF API already in scope. Return an `SDF3`, or leave a final expression that evaluates to one. Distance and coordinate numbers are millimeters by convention, and mesh export preserves those coordinates.
 
 ```js
-const ring = torus(0.72, 0.08);
-const post = capped_cylinder([0, 0, -0.7], [0, 0, 0.7], 0.16);
-const cap = sphere(0.32).translate([0, 0, 0.82]);
+const ring = torus(7.2, 0.8);
+const post = capped_cylinder([0, 0, -7], [0, 0, 7], 1.6);
+const cap = sphere(3.2).translate([0, 0, 8.2]);
 
-return union(ring, post, cap, { k: 0.05 });
+return union(ring, post, cap, { k: 0.5 });
 ```
 
 Useful globals include:
@@ -79,7 +79,7 @@ Update the live editor and capture a snapshot:
 cat > update.json <<'JSON'
 {
   "comment": "Trying a rounded bracket profile.",
-  "code": "return rounded_box([1.8, 0.8, 0.35], 0.12);"
+  "code": "return rounded_box([36, 16, 7], 2.4);"
 }
 JSON
 
