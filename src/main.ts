@@ -5,6 +5,7 @@ import {
   installAppHealthMonitor,
   type AppHealthDiagnosticsState,
 } from "./editor/app-health";
+import { afterBrowserFrame } from "./editor/app-frame";
 import {
   configureGraphHistoryShortcutButtons,
   GRAPH_FILTER_SHORTCUTS,
@@ -12,11 +13,7 @@ import {
   SOURCE_PRETTIFY_SHORTCUT,
 } from "./editor/app-shortcuts";
 import { queryAppElements } from "./editor/app-elements";
-import {
-  sessionIdFromLocation,
-  type BrowserSessionCommandResult,
-} from "./editor/browser-session";
-import { createBrowserSessionController } from "./editor/browser-session-controller";
+import { createBrowserSessionBridge } from "./editor/browser-session-bridge";
 import { loadEditorPreferences, saveEditorPreferences } from "./editor/editor-preferences";
 import {
   createEditorViewController,
@@ -59,7 +56,6 @@ let graphInteractionController: GraphInteractionController | null = null;
 let activeExampleId = examples[0]?.id ?? "canonical";
 const appHealthMonitor = installAppHealthMonitor();
 const healthCheckMode = new URLSearchParams(window.location.search).has("app-health-check");
-const activeBrowserSessionId = sessionIdFromLocation();
 const editorPreferences = loadEditorPreferences();
 const previewViewport = createPreviewViewportController({
   elements: elements.previewViewport,
@@ -114,14 +110,20 @@ const appHealthDiagnostics = createAppHealthDiagnosticsReader({
   },
   readState: readAppHealthDiagnosticsState,
 });
-const browserSessionController = createBrowserSessionController({
-  sessionId: activeBrowserSessionId,
+const browserSessionController = createBrowserSessionBridge({
   elements: elements.browserSession,
-  readStatus: readBrowserSessionStatus,
-  readCode: currentSourceValue,
-  setCode: applyBrowserSessionCode,
-  captureScreenshot: captureBrowserSessionState,
-  captureSnapshotState: captureBrowserSessionState,
+  canvas: elements.canvas,
+  editorStatus: elements.editorStatus,
+  previewViewport,
+  codeEditor: () => codeEditor,
+  readDiagnostics: appHealthDiagnostics,
+  currentDocumentName,
+  currentSource: currentSourceValue,
+  sourceValid: () => sourceCompileController.sourceValid,
+  clearPendingCompile: sourceEditorController.clearPendingCompile,
+  preserveHiddenNodeKeys: () => graphInteractionController?.preserveHiddenNodeKeys(),
+  updateSaveState,
+  compileAgentUpdate: () => sourceCompileController.compile({ status: "Agent update" }),
 });
 const graphHistoryController = createGraphHistoryController({
   elements: elements.graphHistory,
@@ -272,43 +274,6 @@ async function boot(): Promise<void> {
   }
 }
 
-function readBrowserSessionStatus(): BrowserSessionCommandResult {
-  return {
-    ...appHealthDiagnostics(),
-    sessionId: activeBrowserSessionId,
-    documentName: currentDocumentName(),
-  };
-}
-
-async function applyBrowserSessionCode(code: string, comment: string): Promise<BrowserSessionCommandResult> {
-  sourceEditorController.clearPendingCompile();
-  graphInteractionController?.preserveHiddenNodeKeys();
-  codeEditor?.setValue(code);
-  updateSaveState();
-  sourceCompileController.compile({ status: comment ? "Agent update" : "Agent update" });
-  return captureBrowserSessionState();
-}
-
-async function captureBrowserSessionState(): Promise<BrowserSessionCommandResult> {
-  await renderShaderPreviewForSession();
-  return {
-    code: currentSourceValue(),
-    sourceValid: sourceCompileController.sourceValid,
-    status: elements.editorStatus.textContent ?? "",
-    viewMode: previewViewport.viewMode,
-    previewLayout: previewViewport.previewLayout,
-    screenshotDataUrl: elements.canvas.toDataURL("image/png"),
-  };
-}
-
-async function renderShaderPreviewForSession(): Promise<void> {
-  await previewViewport.renderShaderPreviewForSession(sourceCompileController.sourceValid, waitForBrowserFrame);
-}
-
-function waitForBrowserFrame(): Promise<void> {
-  return new Promise((resolve) => afterBrowserFrame(resolve));
-}
-
 function handleBeforeUnload(event: BeforeUnloadEvent): void {
   if (!sourceWorkspace.hasUnsavedChanges) return;
   event.preventDefault();
@@ -320,18 +285,6 @@ function setEditorStatus(message: string, state: EditorStatusState): void {
   if (state === "idle") elements.editorStatus.removeAttribute("data-state");
   else elements.editorStatus.dataset.state = state;
   elements.editorStatus.title = message;
-}
-
-function afterBrowserFrame(callback: () => void): void {
-  let settled = false;
-  const timeout = window.setTimeout(run, 50);
-  function run(): void {
-    if (settled) return;
-    settled = true;
-    window.clearTimeout(timeout);
-    callback();
-  }
-  window.requestAnimationFrame(run);
 }
 
 function readAppHealthDiagnosticsState(): AppHealthDiagnosticsState {

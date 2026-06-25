@@ -61,8 +61,10 @@ The app is intentionally client-heavy: after the page loads, source evaluation, 
 Common editor interaction policy lives outside the coordinator where possible:
 
 - `src/editor/app-elements.ts` owns required DOM selector lookup and groups elements by the controller that consumes them.
+- `src/editor/app-frame.ts` owns browser-frame deferral helpers shared by app wiring, source dialog focus restoration, and session screenshot capture.
 - `src/editor/app-health.ts` owns health diagnostics exposure, monitor state, diagnostic assembly, and DOM control summaries; `main.ts` supplies the live app state snapshot.
 - `src/editor/app-shortcuts.ts` owns global keyboard shortcut matching, shortcut metadata, and dispatch to app-provided actions.
+- `src/editor/browser-session-bridge.ts` owns app-specific browser-session command handlers for status reads, agent code updates, screenshot capture, and manual snapshot state.
 - `src/editor/browser-session-controller.ts` owns browser-session strip interactions and status labels.
 - `src/editor/editor-view-controller.ts` owns code/graph view switching, mode button state, panel visibility, and selected-target reveal button behavior.
 - `src/editor/graph-edit-model.ts` owns shared graph param paths, edit payloads, dirty-param payloads, and path mutation helpers used by the inspector, source patcher, and graph history.
@@ -182,11 +184,12 @@ Server-side responsibilities in `session-server.mjs`:
 
 The route host delegates static app concerns to `server/static-app.mjs`, which owns the Vite middleware-mode server, known static HTML shells, `/src` alias, and private-path guard for `.sessions/`. The generated connection guide lives in `server/connect-markdown.mjs`, keeping the long agent-facing Markdown reference out of the route and snapshot code.
 
-Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, and `main.ts`:
+Browser-side responsibilities are split between `src/editor/browser-session.ts`, `src/editor/browser-session-controller.ts`, `src/editor/browser-session-bridge.ts`, and `main.ts`:
 
 - `browser-session.ts` derives the session id from the current `/s/<session-id>` route, connects to the server with `EventSource`, executes `get-status`, `get-code`, `set-code`, and `capture-screenshot`, and posts command results back to the server.
 - `browser-session-controller.ts` owns the session strip, copied agent prompt, snapshot count refresh, connection status labels, and manual snapshot POSTs.
-- `main.ts` supplies app-specific handlers that read health/source state, apply agent source updates, render the current shader preview, and return screenshot data.
+- `browser-session-bridge.ts` adapts those generic session commands to the live browser app by reading health/source state, applying agent code updates, rendering shader screenshots, and returning snapshot payloads.
+- `main.ts` wires the bridge to the app controllers without owning the session command protocol.
 
 The active browser tab is the source of truth for rendered state. The server only persists what the tab reports.
 
