@@ -53,8 +53,8 @@ export interface PreviewViewportOptions {
   onPreviewSettingsChange(): void;
 }
 
-const MAX_INTERACTIVE_MESH_TRIANGLES = 750_000;
-const MESH_UPLOAD_CHUNK_TRIANGLES = 4096;
+const MAX_INTERACTIVE_MESH_TRIANGLES = 300_000;
+const MESH_UPLOAD_CHUNK_TRIANGLES = 2048;
 
 export interface PreviewViewportController {
   readonly ready: boolean;
@@ -98,6 +98,7 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
   private meshJob = 0;
   private previewTimer = 0;
   private meshTimer = 0;
+  private meshAbortController: AbortController | null = null;
   private viewModeValue: RenderView = "shader";
   private desiredViewMode: RenderView = "shader";
   private previewLayoutValue: PreviewLayout = "single";
@@ -349,6 +350,8 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
   private clearMesh(options: { keepView?: boolean; meshStatText?: string } = {}): void {
     window.clearTimeout(this.meshTimer);
     this.meshJob += 1;
+    this.meshAbortController?.abort();
+    this.meshAbortController = null;
     this.meshBuildPromise = null;
     this.mesh = null;
     this.options.elements.downloadButton.disabled = true;
@@ -414,6 +417,9 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
 
     const job = this.meshJob + 1;
     this.meshJob = job;
+    const abortController = new AbortController();
+    this.meshAbortController?.abort();
+    this.meshAbortController = abortController;
     this.options.elements.meshViewButton.disabled = true;
     this.options.elements.meshViewButton.setAttribute("aria-busy", "true");
     this.options.elements.downloadButton.disabled = true;
@@ -429,6 +435,8 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
           preferGPU: true,
           algorithm: this.meshAlgorithmValue,
           maxTriangles: MAX_INTERACTIVE_MESH_TRIANGLES,
+          signal: abortController.signal,
+          allowMainThreadFallback: false,
         });
         if (job !== this.meshJob) return;
         this.mesh = result;
@@ -460,12 +468,18 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
         this.options.elements.overlay.textContent = "";
       } catch (error) {
         if (job !== this.meshJob) return;
+        if (isAbortError(error)) {
+          this.options.elements.overlay.textContent = "";
+          this.options.elements.meshStat.textContent = "canceled";
+          return;
+        }
         this.options.elements.overlay.textContent = error instanceof Error ? error.message : String(error);
         this.options.elements.meshStat.textContent = isTriangleLimitError(error) ? "too large" : "failed";
       } finally {
         if (job === this.meshJob) {
           this.options.elements.meshViewButton.disabled = false;
           this.options.elements.meshViewButton.removeAttribute("aria-busy");
+          if (this.meshAbortController === abortController) this.meshAbortController = null;
         }
       }
     })();
@@ -543,4 +557,8 @@ function yieldToBrowser(): Promise<void> {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
   if (scheduler?.yield) return scheduler.yield();
   return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }

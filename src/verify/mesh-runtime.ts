@@ -86,6 +86,24 @@ export async function runMeshRuntimeVerification(): Promise<MeshRuntimeVerificat
     }
   }
 
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    await generateMesh(sdf, {
+      algorithm: "surface-net",
+      bounds,
+      grid: 18,
+      preferGPU: false,
+      preferWorker: true,
+      signal: controller.signal,
+    });
+    errors.push("aborted mesh generation did not stop");
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== "AbortError") {
+      errors.push(`aborted mesh generation failed with unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   const surface = results.find((result) => result.algorithm === "surface-net");
   const tetra = results.find((result) => result.algorithm === "tetra");
   if (surface && tetra && surface.triangles >= tetra.triangles) {

@@ -34,6 +34,8 @@ export interface MeshOptions {
   sparse?: boolean;
   algorithm?: MeshAlgorithm;
   maxTriangles?: number;
+  signal?: AbortSignal;
+  allowMainThreadFallback?: boolean;
 }
 
 export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promise<MeshResult> {
@@ -41,35 +43,42 @@ export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promis
   const bounds = options.bounds ?? paddedBounds(estimateBounds(sdf));
   const dims = resolveDims(options, bounds);
   const preferWorker = options.preferWorker !== false && options.workers !== 1;
+  const allowMainThreadFallback = options.allowMainThreadFallback !== false;
   let volume: VolumeSample;
   let usedGPU = false;
 
+  throwIfAborted(options.signal);
   if (options.preferGPU !== false) {
     try {
       volume = await sampleFieldWebGPU(sdf, dims, bounds);
+      throwIfAborted(options.signal);
       usedGPU = true;
     } catch (error) {
+      if (isAbortError(error)) throw error;
       if (preferWorker && typeof Worker !== "undefined") {
         try {
-          return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles });
+          return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles }, options.signal);
         } catch (workerError) {
-          if (isTriangleLimitError(workerError)) throw workerError;
+          if (isTriangleLimitError(workerError) || isAbortError(workerError) || !allowMainThreadFallback) throw workerError;
         }
       }
+      throwIfAborted(options.signal);
       volume = sampleFieldCPU(sdf, dims, bounds);
     }
   } else {
     if (preferWorker && typeof Worker !== "undefined") {
       try {
-        return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles });
+        return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles }, options.signal);
       } catch (workerError) {
-        if (isTriangleLimitError(workerError)) throw workerError;
+        if (isTriangleLimitError(workerError) || isAbortError(workerError) || !allowMainThreadFallback) throw workerError;
       }
     }
+    throwIfAborted(options.signal);
     volume = sampleFieldCPU(sdf, dims, bounds);
   }
 
-  const polygonized = await polygonize(volume, algorithm, preferWorker, options.maxTriangles);
+  throwIfAborted(options.signal);
+  const polygonized = await polygonize(volume, algorithm, preferWorker, options.maxTriangles, options.signal, allowMainThreadFallback);
   return {
     triangles: polygonized.triangles,
     bounds,
@@ -82,28 +91,55 @@ export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promis
   };
 }
 
-async function polygonize(volume: VolumeSample, algorithm: MeshAlgorithm, preferWorker: boolean, maxTriangles?: number): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+async function polygonize(
+  volume: VolumeSample,
+  algorithm: MeshAlgorithm,
+  preferWorker: boolean,
+  maxTriangles?: number,
+  signal?: AbortSignal,
+  allowMainThreadFallback = true,
+): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+  throwIfAborted(signal);
   if (preferWorker && typeof Worker !== "undefined") {
     try {
-      return await polygonizeInWorker(volume, algorithm, maxTriangles);
+      return await polygonizeInWorker(volume, algorithm, maxTriangles, signal);
     } catch (error) {
       if (isTriangleLimitError(error)) throw error;
+      if (isAbortError(error) || !allowMainThreadFallback || volume.values.byteLength === 0) throw error;
       // Fall back to the synchronous implementation if the worker cannot start.
     }
   }
 
+  throwIfAborted(signal);
   const start = performance.now();
   return {
-    triangles: polygonizeSync(volume, algorithm, maxTriangles),
+    triangles: polygonizeSync(volume, algorithm, maxTriangles, signal),
     polygonizeTimeMs: performance.now() - start,
     usedWorker: false,
   };
 }
 
-function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm, maxTriangles?: number): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+function polygonizeInWorker(
+  volume: VolumeSample,
+  algorithm: MeshAlgorithm,
+  maxTriangles?: number,
+  signal?: AbortSignal,
+): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
     const worker = new Worker(new URL("./polygonize-worker.ts", import.meta.url), { type: "module" });
-    const cleanup = () => worker.terminate();
+    const cleanup = () => {
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
+    };
+    const abort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    signal?.addEventListener("abort", abort, { once: true });
     worker.onmessage = (event: MessageEvent<{ triangles?: Triangle[]; polygonizeTimeMs?: number; error?: string }>) => {
       cleanup();
       if (event.data.error) {
@@ -136,10 +172,23 @@ function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm, maxT
 function generateInWorker(
   sdf: SDF3,
   request: { algorithm: MeshAlgorithm; bounds: Bounds3; dims: MeshDims; maxTriangles?: number },
+  signal?: AbortSignal,
 ): Promise<MeshResult> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
     const worker = new Worker(new URL("./generate-worker.ts", import.meta.url), { type: "module" });
-    const cleanup = () => worker.terminate();
+    const cleanup = () => {
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
+    };
+    const abort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    signal?.addEventListener("abort", abort, { once: true });
     worker.onmessage = (event: MessageEvent<{ result?: MeshResult; error?: string }>) => {
       cleanup();
       if (event.data.error) {
@@ -167,9 +216,24 @@ function generateInWorker(
   });
 }
 
-function polygonizeSync(volume: VolumeSample, algorithm: MeshAlgorithm, maxTriangles?: number): Triangle[] {
+function polygonizeSync(volume: VolumeSample, algorithm: MeshAlgorithm, maxTriangles?: number, signal?: AbortSignal): Triangle[] {
+  throwIfAborted(signal);
   const options = { maxTriangles };
   return algorithm === "surface-net" ? surfaceNetVolume(volume, options) : polygonizeVolume(volume, options);
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+function abortError(): Error {
+  const error = new Error("Mesh build canceled.");
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function transferableBuffer(values: Float32Array): ArrayBuffer {
