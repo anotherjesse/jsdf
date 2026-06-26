@@ -185,8 +185,9 @@ Mesh options include:
 - `samples`: approximate total sample count
 - `bounds`: explicit millimeter extents, `[[xmin, ymin, zmin], [xmax, ymax, zmax]]`
 - `algorithm`: `"surface-net"` or `"tetra"`
+- `maxTriangles`: stop generation once polygonization exceeds this triangle count
 - `preferGPU`: use WebGPU sampling when available
-- `preferWorker`: polygonize in a Web Worker when available
+- `preferWorker`: use Web Workers for CPU sampling fallbacks and polygonization when available
 - `workers`: set to `1` to force main-thread polygonization
 
 The browser mesh path accepts `batch_size`, `batchSize`, `sparse`, and `verbose` for Python-option compatibility, but they do not currently change browser sampling behavior.

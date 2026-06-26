@@ -2,7 +2,7 @@ import type { SDF3 } from "../core/nodes";
 import { evaluate3 } from "../evaluate";
 import { sampleFieldWebGPU, type VolumeSample } from "../gpu/sampler";
 import { estimateBounds, paddedBounds, type Bounds3 } from "./bounds";
-import { polygonizeVolume, type Triangle } from "./polygonize";
+import { isTriangleLimitError, polygonizeVolume, type Triangle } from "./polygonize";
 import { surfaceNetVolume } from "./surface-net";
 
 export type MeshAlgorithm = "surface-net" | "tetra";
@@ -33,12 +33,14 @@ export interface MeshOptions {
   verbose?: boolean;
   sparse?: boolean;
   algorithm?: MeshAlgorithm;
+  maxTriangles?: number;
 }
 
 export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promise<MeshResult> {
   const algorithm = options.algorithm ?? "surface-net";
   const bounds = options.bounds ?? paddedBounds(estimateBounds(sdf));
   const dims = resolveDims(options, bounds);
+  const preferWorker = options.preferWorker !== false && options.workers !== 1;
   let volume: VolumeSample;
   let usedGPU = false;
 
@@ -46,14 +48,28 @@ export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promis
     try {
       volume = await sampleFieldWebGPU(sdf, dims, bounds);
       usedGPU = true;
-    } catch {
+    } catch (error) {
+      if (preferWorker && typeof Worker !== "undefined") {
+        try {
+          return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles });
+        } catch (workerError) {
+          if (isTriangleLimitError(workerError)) throw workerError;
+        }
+      }
       volume = sampleFieldCPU(sdf, dims, bounds);
     }
   } else {
+    if (preferWorker && typeof Worker !== "undefined") {
+      try {
+        return await generateInWorker(sdf, { algorithm, bounds, dims, maxTriangles: options.maxTriangles });
+      } catch (workerError) {
+        if (isTriangleLimitError(workerError)) throw workerError;
+      }
+    }
     volume = sampleFieldCPU(sdf, dims, bounds);
   }
 
-  const polygonized = await polygonize(volume, algorithm, options.preferWorker !== false && options.workers !== 1);
+  const polygonized = await polygonize(volume, algorithm, preferWorker, options.maxTriangles);
   return {
     triangles: polygonized.triangles,
     bounds,
@@ -66,24 +82,25 @@ export async function generateMesh(sdf: SDF3, options: MeshOptions = {}): Promis
   };
 }
 
-async function polygonize(volume: VolumeSample, algorithm: MeshAlgorithm, preferWorker: boolean): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+async function polygonize(volume: VolumeSample, algorithm: MeshAlgorithm, preferWorker: boolean, maxTriangles?: number): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
   if (preferWorker && typeof Worker !== "undefined") {
     try {
-      return await polygonizeInWorker(volume, algorithm);
-    } catch {
+      return await polygonizeInWorker(volume, algorithm, maxTriangles);
+    } catch (error) {
+      if (isTriangleLimitError(error)) throw error;
       // Fall back to the synchronous implementation if the worker cannot start.
     }
   }
 
   const start = performance.now();
   return {
-    triangles: polygonizeSync(volume, algorithm),
+    triangles: polygonizeSync(volume, algorithm, maxTriangles),
     polygonizeTimeMs: performance.now() - start,
     usedWorker: false,
   };
 }
 
-function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
+function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm, maxTriangles?: number): Promise<{ triangles: Triangle[]; polygonizeTimeMs: number; usedWorker: boolean }> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./polygonize-worker.ts", import.meta.url), { type: "module" });
     const cleanup = () => worker.terminate();
@@ -111,12 +128,48 @@ function polygonizeInWorker(volume: VolumeSample, algorithm: MeshAlgorithm): Pro
       dims: volume.dims,
       bounds: volume.bounds,
       step: volume.step,
+      maxTriangles,
     }, [values]);
   });
 }
 
-function polygonizeSync(volume: VolumeSample, algorithm: MeshAlgorithm): Triangle[] {
-  return algorithm === "surface-net" ? surfaceNetVolume(volume) : polygonizeVolume(volume);
+function generateInWorker(
+  sdf: SDF3,
+  request: { algorithm: MeshAlgorithm; bounds: Bounds3; dims: MeshDims; maxTriangles?: number },
+): Promise<MeshResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./generate-worker.ts", import.meta.url), { type: "module" });
+    const cleanup = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<{ result?: MeshResult; error?: string }>) => {
+      cleanup();
+      if (event.data.error) {
+        reject(new Error(event.data.error));
+        return;
+      }
+      if (!event.data.result) {
+        reject(new Error("Mesh worker returned no result."));
+        return;
+      }
+      resolve(event.data.result);
+    };
+    worker.onerror = (event) => {
+      cleanup();
+      reject(new Error(event.message || "Mesh worker failed."));
+    };
+
+    worker.postMessage({
+      sdf,
+      algorithm: request.algorithm,
+      bounds: request.bounds,
+      dims: request.dims,
+      maxTriangles: request.maxTriangles,
+    });
+  });
+}
+
+function polygonizeSync(volume: VolumeSample, algorithm: MeshAlgorithm, maxTriangles?: number): Triangle[] {
+  const options = { maxTriangles };
+  return algorithm === "surface-net" ? surfaceNetVolume(volume, options) : polygonizeVolume(volume, options);
 }
 
 function transferableBuffer(values: Float32Array): ArrayBuffer {

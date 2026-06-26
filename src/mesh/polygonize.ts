@@ -1,6 +1,21 @@
 import type { VolumeSample } from "../gpu/sampler";
 
 export type Triangle = [number[], number[], number[]];
+export interface PolygonizeOptions {
+  maxTriangles?: number;
+}
+
+export const TRIANGLE_LIMIT_ERROR_PREFIX = "Mesh generated more than";
+
+export function enforceTriangleLimit(triangles: Triangle[], maxTriangles?: number): void {
+  if (maxTriangles == null || maxTriangles <= 0 || triangles.length <= maxTriangles) return;
+  throw new Error(`${TRIANGLE_LIMIT_ERROR_PREFIX} ${maxTriangles.toLocaleString()} triangles. Lower the mesh grid, reduce repeated detail, or switch mesh style.`);
+}
+
+export function isTriangleLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.startsWith(TRIANGLE_LIMIT_ERROR_PREFIX);
+}
 
 const cornerOffsets = [
   [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
@@ -16,7 +31,7 @@ const tetrahedra = [
   [0, 4, 5, 6],
 ];
 
-export function polygonizeVolume(volume: VolumeSample): Triangle[] {
+export function polygonizeVolume(volume: VolumeSample, options: PolygonizeOptions = {}): Triangle[] {
   const { values, dims, bounds, step } = volume;
   const [nx, ny, nz] = dims;
   const triangles: Triangle[] = [];
@@ -42,6 +57,7 @@ export function polygonizeVolume(volume: VolumeSample): Triangle[] {
             tet.map((i) => cubePoints[i]),
             tet.map((i) => cubeValues[i]),
             triangles,
+            options.maxTriangles,
           );
         }
       }
@@ -51,7 +67,7 @@ export function polygonizeVolume(volume: VolumeSample): Triangle[] {
   return triangles;
 }
 
-function polygonizeTet(points: number[][], values: number[], triangles: Triangle[]): void {
+function polygonizeTet(points: number[][], values: number[], triangles: Triangle[], maxTriangles?: number): void {
   const inside: number[] = [];
   const outside: number[] = [];
   for (let i = 0; i < 4; i += 1) {
@@ -71,6 +87,7 @@ function polygonizeTet(points: number[][], values: number[], triangles: Triangle
       interpolate(points, values, i, outside[2]),
     ] as Triangle;
     triangles.push(orientTriangle(tri, gradient));
+    enforceTriangleLimit(triangles, maxTriangles);
   } else if (inside.length === 3) {
     const o = outside[0];
     const tri = [
@@ -79,6 +96,7 @@ function polygonizeTet(points: number[][], values: number[], triangles: Triangle
       interpolate(points, values, o, inside[1]),
     ] as Triangle;
     triangles.push(orientTriangle(tri, gradient));
+    enforceTriangleLimit(triangles, maxTriangles);
   } else {
     const [i0, i1] = inside;
     const [o0, o1] = outside;
@@ -88,6 +106,7 @@ function polygonizeTet(points: number[][], values: number[], triangles: Triangle
     const d = interpolate(points, values, i1, o1);
     triangles.push(orientTriangle([a, c, d], gradient));
     triangles.push(orientTriangle([a, d, b], gradient));
+    enforceTriangleLimit(triangles, maxTriangles);
   }
 }
 

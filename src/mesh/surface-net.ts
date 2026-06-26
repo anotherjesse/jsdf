@@ -1,5 +1,5 @@
 import type { VolumeSample } from "../gpu/sampler";
-import type { Triangle } from "./polygonize";
+import { enforceTriangleLimit, type PolygonizeOptions, type Triangle } from "./polygonize";
 
 const cornerOffsets = [
   [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
@@ -12,7 +12,7 @@ const cubeEdges = [
   [0, 4], [1, 5], [2, 6], [3, 7],
 ];
 
-export function surfaceNetVolume(volume: VolumeSample): Triangle[] {
+export function surfaceNetVolume(volume: VolumeSample, options: PolygonizeOptions = {}): Triangle[] {
   const { values, dims, bounds, step } = volume;
   const [nx, ny, nz] = dims;
   const cx = nx - 1;
@@ -74,6 +74,7 @@ export function surfaceNetVolume(volume: VolumeSample): Triangle[] {
           vertex(x, y - 1, z),
           edgeGradient(volume, x, y, z),
           triangles,
+          options.maxTriangles,
         );
       }
     }
@@ -90,6 +91,7 @@ export function surfaceNetVolume(volume: VolumeSample): Triangle[] {
           vertex(x - 1, y, z),
           edgeGradient(volume, x, y, z),
           triangles,
+          options.maxTriangles,
         );
       }
     }
@@ -106,6 +108,7 @@ export function surfaceNetVolume(volume: VolumeSample): Triangle[] {
           vertex(x - 1, y, z),
           edgeGradient(volume, x, y, z),
           triangles,
+          options.maxTriangles,
         );
       }
     }
@@ -125,10 +128,12 @@ function addQuad(
   d: number[] | null,
   gradient: number[],
   triangles: Triangle[],
+  maxTriangles?: number,
 ): void {
   if (!a || !b || !c || !d) return;
   triangles.push(orientTriangle([a, b, c], gradient));
   triangles.push(orientTriangle([a, c, d], gradient));
+  enforceTriangleLimit(triangles, maxTriangles);
 }
 
 function edgeGradient(volume: VolumeSample, x: number, y: number, z: number): number[] {

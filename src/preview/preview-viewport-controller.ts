@@ -1,7 +1,7 @@
 import type { Node, SDF3 } from "../core/nodes";
-import { binarySTL, downloadBlob, generateMesh, type MeshAlgorithm, type MeshResult } from "../mesh/generate";
+import { binarySTL, downloadBlob, generateMesh, isTriangleLimitError, type MeshAlgorithm, type MeshResult } from "../mesh/generate";
 import type { Bounds3 } from "../mesh/bounds";
-import { write_3mf, type ThreeMfExportReport } from "../mesh/three-mf";
+import { write_3mf } from "../mesh/three-mf";
 import { OrbitCamera } from "./orbit-camera";
 import { viewPanels, type PreviewLayout } from "./view-layout";
 import { WebGLMeshRenderer } from "./webgl-mesh-renderer";
@@ -53,6 +53,9 @@ export interface PreviewViewportOptions {
   onPreviewSettingsChange(): void;
 }
 
+const MAX_INTERACTIVE_MESH_TRIANGLES = 750_000;
+const MESH_UPLOAD_CHUNK_TRIANGLES = 4096;
+
 export interface PreviewViewportController {
   readonly ready: boolean;
   readonly viewMode: RenderView;
@@ -90,8 +93,7 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
   private meshRenderer: WebGLMeshRenderer | null = null;
   private mesh: MeshResult | null = null;
   private meshBuildPromise: Promise<void> | null = null;
-  private lastBlob: Blob | null = null;
-  private last3mfReport: ThreeMfExportReport | null = null;
+  private exportBusy = false;
   private renderJob = 0;
   private meshJob = 0;
   private previewTimer = 0;
@@ -130,22 +132,8 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     });
     elements.surfaceNetButton.addEventListener("click", () => this.setMeshAlgorithm("surface-net"));
     elements.tetraMeshButton.addEventListener("click", () => this.setMeshAlgorithm("tetra"));
-    elements.downloadButton.addEventListener("click", () => {
-      if (this.lastBlob) downloadBlob(this.lastBlob, `${slugify(options.readState().documentName)}.stl`);
-    });
-    elements.download3mfButton.addEventListener("click", () => {
-      if (!this.mesh) return;
-      const state = options.readState();
-      if (!state.visibleSdf) return;
-      const export3mf = write_3mf(`${slugify(state.documentName)}.3mf`, this.mesh, state.visibleSdf, {
-        download: false,
-        name: state.documentName,
-      });
-      downloadBlob(export3mf.blob, `${slugify(state.documentName)}.3mf`);
-      if (export3mf.report.warnings.length > 0) {
-        console.warn("3MF export warnings", export3mf.report);
-      }
-    });
+    elements.downloadButton.addEventListener("click", () => void this.downloadStl());
+    elements.download3mfButton.addEventListener("click", () => void this.download3mf());
   }
 
   get ready(): boolean {
@@ -363,8 +351,6 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     this.meshJob += 1;
     this.meshBuildPromise = null;
     this.mesh = null;
-    this.lastBlob = null;
-    this.last3mfReport = null;
     this.options.elements.downloadButton.disabled = true;
     this.options.elements.download3mfButton.disabled = true;
     this.options.elements.meshViewButton.disabled = false;
@@ -442,36 +428,40 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
           bounds: state.bounds,
           preferGPU: true,
           algorithm: this.meshAlgorithmValue,
+          maxTriangles: MAX_INTERACTIVE_MESH_TRIANGLES,
         });
         if (job !== this.meshJob) return;
         this.mesh = result;
         const nextState = this.options.readState();
         const visibleSdf = nextState.visibleSdf ?? state.visibleSdf!;
-        this.meshRenderer?.render(this.mesh.triangles, this.mesh.bounds, visibleSdf, nextState.meshHighlight.node, nextState.meshHighlight.mode);
-        this.lastBlob = binarySTL(this.mesh.triangles, `sdf-browser ${nextState.documentName}`);
-        this.last3mfReport = write_3mf(`${slugify(nextState.documentName)}.3mf`, this.mesh, visibleSdf, {
-          download: false,
-          name: nextState.documentName,
-        }).report;
         const total = this.mesh.sampleTimeMs + this.mesh.polygonizeTimeMs;
         this.options.elements.meshStat.textContent = `${total.toFixed(0)} ms ${this.mesh.usedGPU ? "GPU" : "CPU"}${this.mesh.usedWorker ? " worker" : ""} ${algorithmLabel(this.mesh.algorithm)}`;
         this.options.elements.triangleStat.textContent = this.mesh.triangles.length.toLocaleString();
-        this.options.elements.downloadButton.disabled = this.mesh.triangles.length === 0;
-        this.options.elements.download3mfButton.disabled = this.mesh.triangles.length === 0;
         if (this.mesh.triangles.length === 0) {
           this.mesh = null;
-          this.lastBlob = null;
-          this.last3mfReport = null;
           this.options.elements.overlay.textContent = "Generated no triangles. Try wider bounds or a lower-level example.";
           return;
         }
-        this.options.elements.overlay.textContent = this.last3mfReport.warnings.length > 0
-          ? `3MF warning: ${this.last3mfReport.warnings[0]}`
-          : "";
+        this.options.elements.overlay.textContent = `Uploading ${this.mesh.triangles.length.toLocaleString()} triangles...`;
+        const rendered = await this.meshRenderer?.renderAsync(
+          this.mesh.triangles,
+          this.mesh.bounds,
+          visibleSdf,
+          nextState.meshHighlight.node,
+          nextState.meshHighlight.mode,
+          {
+            shouldContinue: () => job === this.meshJob,
+            uploadChunkTriangles: MESH_UPLOAD_CHUNK_TRIANGLES,
+          },
+        );
+        if (job !== this.meshJob || rendered === false) return;
+        this.options.elements.downloadButton.disabled = false;
+        this.options.elements.download3mfButton.disabled = false;
+        this.options.elements.overlay.textContent = "";
       } catch (error) {
         if (job !== this.meshJob) return;
         this.options.elements.overlay.textContent = error instanceof Error ? error.message : String(error);
-        this.options.elements.meshStat.textContent = "failed";
+        this.options.elements.meshStat.textContent = isTriangleLimitError(error) ? "too large" : "failed";
       } finally {
         if (job === this.meshJob) {
           this.options.elements.meshViewButton.disabled = false;
@@ -492,6 +482,52 @@ class PreviewViewportControllerImpl implements PreviewViewportController {
     const grid = this.meshGrid;
     return `${grid}^3 (${(grid ** 3).toLocaleString()} samples)`;
   }
+
+  private async downloadStl(): Promise<void> {
+    if (!this.mesh || this.exportBusy) return;
+    const state = this.options.readState();
+    await this.withExportBusy("Preparing STL...", () => {
+      const blob = binarySTL(this.mesh!.triangles, `sdf-browser ${state.documentName}`);
+      downloadBlob(blob, `${slugify(state.documentName)}.stl`);
+    });
+  }
+
+  private async download3mf(): Promise<void> {
+    if (!this.mesh || this.exportBusy) return;
+    const state = this.options.readState();
+    if (!state.visibleSdf) return;
+    await this.withExportBusy("Preparing 3MF...", () => {
+      const filename = `${slugify(state.documentName)}.3mf`;
+      const export3mf = write_3mf(filename, this.mesh!, state.visibleSdf!, {
+        download: false,
+        name: state.documentName,
+      });
+      downloadBlob(export3mf.blob, filename);
+      if (export3mf.report.warnings.length > 0) {
+        console.warn("3MF export warnings", export3mf.report);
+        this.options.elements.overlay.textContent = `3MF warning: ${export3mf.report.warnings[0]}`;
+      }
+    });
+  }
+
+  private async withExportBusy(label: string, task: () => void): Promise<void> {
+    this.exportBusy = true;
+    this.options.elements.downloadButton.disabled = true;
+    this.options.elements.download3mfButton.disabled = true;
+    this.options.elements.overlay.textContent = label;
+    await yieldToBrowser();
+    try {
+      task();
+      if (this.options.elements.overlay.textContent === label) this.options.elements.overlay.textContent = "";
+    } catch (error) {
+      this.options.elements.overlay.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.exportBusy = false;
+      const canDownload = Boolean(this.mesh && this.mesh.triangles.length > 0);
+      this.options.elements.downloadButton.disabled = !canDownload;
+      this.options.elements.download3mfButton.disabled = !canDownload;
+    }
+  }
 }
 
 function algorithmLabel(algorithm: MeshAlgorithm): string {
@@ -501,4 +537,10 @@ function algorithmLabel(algorithm: MeshAlgorithm): string {
 function slugify(value: string): string {
   const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug || "sdf";
+}
+
+function yieldToBrowser(): Promise<void> {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (scheduler?.yield) return scheduler.yield();
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
 }

@@ -1,10 +1,11 @@
 import { sphere } from "../api";
-import { binarySTL, generateMesh, type MeshAlgorithm } from "../mesh/generate";
+import { binarySTL, generateMesh, isTriangleLimitError, type MeshAlgorithm } from "../mesh/generate";
 
 export interface MeshRuntimeVerification {
   ok: boolean;
   grid: number;
   results: MeshAlgorithmResult[];
+  cpuWorker: MeshAlgorithmResult;
   fallback: MeshAlgorithmResult;
   errors: string[];
 }
@@ -42,6 +43,19 @@ export async function runMeshRuntimeVerification(): Promise<MeshRuntimeVerificat
     verifyFiniteTriangles(mesh.triangles, algorithm, errors);
   }
 
+  const cpuWorkerStart = performance.now();
+  const cpuWorkerMesh = await generateMesh(sdf, {
+    algorithm: "surface-net",
+    bounds,
+    grid: 18,
+    preferGPU: false,
+    preferWorker: true,
+  });
+  const cpuWorker = await summarizeMesh("surface-net", cpuWorkerMesh, performance.now() - cpuWorkerStart);
+  verifyMeshResult(cpuWorker, errors, { requireWorker: true });
+  if (cpuWorker.usedGPU) errors.push("CPU worker fallback unexpectedly used WebGPU");
+  verifyFiniteTriangles(cpuWorkerMesh.triangles, "surface-net CPU worker", errors);
+
   const fallbackStart = performance.now();
   const fallbackMesh = await generateMesh(sdf, {
     algorithm: "surface-net",
@@ -56,6 +70,22 @@ export async function runMeshRuntimeVerification(): Promise<MeshRuntimeVerificat
   if (fallback.usedWorker) errors.push("synchronous fallback unexpectedly used worker");
   verifyFiniteTriangles(fallbackMesh.triangles, "surface-net fallback", errors);
 
+  try {
+    await generateMesh(sdf, {
+      algorithm: "surface-net",
+      bounds,
+      grid: 24,
+      maxTriangles: 1,
+      preferGPU: true,
+      preferWorker: true,
+    });
+    errors.push("maxTriangles did not stop oversized mesh generation");
+  } catch (error) {
+    if (!isTriangleLimitError(error)) {
+      errors.push(`maxTriangles failed with unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   const surface = results.find((result) => result.algorithm === "surface-net");
   const tetra = results.find((result) => result.algorithm === "tetra");
   if (surface && tetra && surface.triangles >= tetra.triangles) {
@@ -66,6 +96,7 @@ export async function runMeshRuntimeVerification(): Promise<MeshRuntimeVerificat
     ok: errors.length === 0,
     grid,
     results,
+    cpuWorker,
     fallback,
     errors,
   };

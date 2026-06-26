@@ -7,6 +7,11 @@ import type { OrbitCamera } from "./orbit-camera";
 import { selectedSceneFunction } from "./selected-scene";
 import { viewPanels, type PreviewLayout, type ViewPanel } from "./view-layout";
 
+interface MeshRenderOptions {
+  shouldContinue?: () => boolean;
+  uploadChunkTriangles?: number;
+}
+
 export class WebGLMeshRenderer {
   private readonly gl: WebGL2RenderingContext;
   private readonly vao: WebGLVertexArrayObject;
@@ -62,9 +67,21 @@ export class WebGLMeshRenderer {
     highlightMode: HighlightMode = "mark",
   ): void {
     this.upload(triangles);
-    this.setBounds(bounds);
-    this.setHighlight(sdf, highlightNode, highlightMode, { redraw: false });
-    if (this.active) this.redraw();
+    this.finishRender(bounds, sdf, highlightNode, highlightMode);
+  }
+
+  async renderAsync(
+    triangles: Triangle[],
+    bounds: Bounds3,
+    sdf: SDF3 | null = null,
+    highlightNode: Node | null = null,
+    highlightMode: HighlightMode = "mark",
+    options: MeshRenderOptions = {},
+  ): Promise<boolean> {
+    const uploaded = await this.uploadAsync(triangles, options);
+    if (!uploaded) return false;
+    this.finishRender(bounds, sdf, highlightNode, highlightMode);
+    return true;
   }
 
   setHighlight(
@@ -173,6 +190,41 @@ export class WebGLMeshRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.STATIC_DRAW);
   }
 
+  private async uploadAsync(triangles: Triangle[], options: MeshRenderOptions): Promise<boolean> {
+    const data = new Float32Array(triangles.length * 18);
+    const chunkSize = Math.max(128, Math.floor(options.uploadChunkTriangles ?? 4096));
+    let offset = 0;
+    for (let i = 0; i < triangles.length; i += 1) {
+      const tri = triangles[i];
+      const n = normal(tri);
+      for (const p of tri) {
+        data.set(p, offset);
+        data.set(n, offset + 3);
+        offset += 6;
+      }
+      if ((i + 1) % chunkSize === 0) {
+        if (options.shouldContinue?.() === false) return false;
+        await yieldToBrowser();
+      }
+    }
+    if (options.shouldContinue?.() === false) return false;
+    this.vertexCount = triangles.length * 3;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.STATIC_DRAW);
+    return true;
+  }
+
+  private finishRender(
+    bounds: Bounds3,
+    sdf: SDF3 | null,
+    highlightNode: Node | null,
+    highlightMode: HighlightMode,
+  ): void {
+    this.setBounds(bounds);
+    this.setHighlight(sdf, highlightNode, highlightMode, { redraw: false });
+    if (this.active) this.redraw();
+  }
+
   private recordPixelDiagnostics(): void {
     const pixel = new Uint8Array(4);
     const points = [
@@ -220,6 +272,12 @@ function normal(triangle: Triangle): number[] {
   const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
   const l = Math.hypot(n[0], n[1], n[2]) || 1;
   return [n[0] / l, n[1] / l, n[2] / l];
+}
+
+function yieldToBrowser(): Promise<void> {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (scheduler?.yield) return scheduler.yield();
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string): WebGLProgram {
@@ -348,7 +406,10 @@ void main() {
   vec3 base = sceneColor(v_position);
   vec3 warm = vec3(0.95, 0.64, 0.16);
   vec3 color = base * (0.34 + diffuse * 0.75) + warm * fill * 0.16 + vec3(rim);
-  float selectedBand = 1.0 - smoothstep(0.006, 0.055, abs(selectedScene(v_position)));
+  float selectedBand = 0.0;
+  if (u_highlightNode >= 0) {
+    selectedBand = 1.0 - smoothstep(0.006, 0.055, abs(selectedScene(v_position)));
+  }
   if (u_focusHighlight == 1) {
     vec3 faded = mix(vec3(0.11, 0.125, 0.145), color, 0.26);
     color = mix(faded, color, selectedBand);

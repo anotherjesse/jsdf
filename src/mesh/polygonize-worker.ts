@@ -9,6 +9,7 @@ interface PolygonizeRequest {
   dims: [number, number, number];
   bounds: [number[], number[]];
   step: [number, number, number];
+  maxTriangles?: number;
 }
 
 interface PolygonizeResponse {
@@ -27,7 +28,8 @@ self.onmessage = (event: MessageEvent<PolygonizeRequest>) => {
       step: event.data.step,
       gpuTimeMs: 0,
     };
-    const triangles = event.data.algorithm === "surface-net" ? surfaceNetVolume(volume) : polygonizeVolume(volume);
+    const options = { maxTriangles: event.data.maxTriangles };
+    const triangles = event.data.algorithm === "surface-net" ? surfaceNetVolume(volume, options) : polygonizeVolume(volume, options);
     postMessage({ triangles, polygonizeTimeMs: performance.now() - start } satisfies PolygonizeResponse);
   } catch (error) {
     postMessage({ error: error instanceof Error ? error.message : String(error) } satisfies PolygonizeResponse);
